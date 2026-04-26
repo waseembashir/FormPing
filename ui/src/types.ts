@@ -1,0 +1,101 @@
+export type SubmitMode = 'live' | 'safe' | 'detect-only';
+export type FinalStatus = 'pass' | 'fail' | 'warn' | 'error';
+
+export interface FormIdentifier {
+  id: string | null;
+  name: string | null;
+  action: string | null;
+  method: string | null;
+}
+
+export interface SiteResult {
+  inputUrl: string;
+  normalizedUrl: string;
+  mode: SubmitMode;
+  resolvedContactPage: string | null;
+  contactPageFound: boolean;
+  contactPageConfidence: number;
+  formFound: boolean;
+  formConfidence: number;
+  formIdentifier: FormIdentifier | null;
+  submissionAttempted: boolean;
+  submissionResult: string;
+  redirectUrl: string | null;
+  finalUrl: string | null;
+  thankYouDetected: boolean;
+  inlineSuccessDetected: boolean;
+  captchaDetected: boolean;
+  antiBotDetected: boolean;
+  finalStatus: FinalStatus;
+  reasonCode: string;
+  notes: string[];
+  errors: string[];
+  durationMs: number;
+  error?: string;
+}
+
+export interface RunConfig {
+  mode: SubmitMode;
+  email: string;
+  timeout: number;
+  headed: boolean;
+  ai: boolean;
+  concurrency: number;
+}
+
+export type SSEEvent =
+  | { type: 'progress'; url: string; index: number; total: number }
+  | { type: 'result'; result: SiteResult }
+  | { type: 'log'; message: string }
+  | { type: 'done'; exitCode: number | null }
+  | { type: 'error'; message: string };
+
+export interface RunProgress {
+  current: number;
+  total: number;
+  currentUrl: string;
+}
+
+// ─── Monitor types ──────────────────────────────────────────────────────────
+
+export type MonitorMode = 'snapshot' | 'compare' | 'watch';
+export type ChangeSeverity = 'low' | 'medium' | 'high';
+
+export interface PageChange {
+  url: string;
+  changes: string[];
+  severity: ChangeSeverity;
+}
+
+export interface ChangeReport {
+  site: string;
+  rootUrl: string;
+  checkedAt: string;
+  previousSnapshot: string | null;
+  pagesScanned: number;
+  pagesChanged: number;
+  changesFound: number;
+  summary: string;
+  details: PageChange[];
+}
+
+export interface SnapshotResult {
+  snapshotPath: string;
+  site: string;
+  pagesScanned: number;
+}
+
+export interface MonitorConfig {
+  monitorMode: MonitorMode;
+  maxPages: number;
+  takeScreenshots: boolean;
+  aiSummary: boolean;
+  watchIntervalMs: number;
+}
+
+export type MonitorSSEEvent =
+  | { type: 'log'; message: string }
+  | { type: 'snapshot'; result: SnapshotResult }
+  | { type: 'report'; report: ChangeReport }
+  | { type: 'done'; exitCode: number | null }
+  | { type: 'error'; message: string };
