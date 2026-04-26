@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { href: '/', label: 'Form Tester' },
   { href: '/monitor', label: 'Change Monitor' },
+  { href: '/docs', label: 'Docs' },
 ];
 
 export function Header() {
