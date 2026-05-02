@@ -51,40 +51,72 @@ function dedupeStrings(arr: string[]): string[] {
   return out;
 }
 
+/** Get direct text content of an element (text nodes only, not children). */
+function directText(el: { children?: { type?: string; data?: string }[] }): string {
+  let text = '';
+  for (const child of el.children ?? []) {
+    if (child.type === 'text' && child.data) text += child.data;
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 /** Extract structured visible text blocks for granular diffing. */
 function extractTextBlocks($: ReturnType<typeof loadHtml>): TextBlocks {
   // Strip noise — script/style/nav/footer content shouldn't pollute text diffs
   $('script, style, noscript').remove();
 
+  // ── Headings (h1–h6) ──
   const headings: { tag: HeadingTag; text: string }[] = [];
-  $('h1, h2, h3').each((_, el) => {
+  $('h1, h2, h3, h4, h5, h6').each((_, el) => {
     const tag = ((el as { tagName?: string }).tagName ?? 'h2').toLowerCase() as HeadingTag;
     const text = $(el).text().replace(/\s+/g, ' ').trim();
     if (text && text.length <= 200) headings.push({ tag, text });
   });
 
+  // ── Paragraphs ──
   const paragraphs: string[] = [];
   $('p').each((_, el) => {
     const text = $(el).text().replace(/\s+/g, ' ').trim();
     if (text && text.length >= 15) paragraphs.push(text.slice(0, 300));
   });
 
+  // ── List items ──
   const listItems: string[] = [];
   $('li').each((_, el) => {
-    // Skip nav/footer list items by checking ancestor
     if ($(el).closest('nav, footer, header').length > 0) return;
     const text = $(el).text().replace(/\s+/g, ' ').trim();
     if (text && text.length >= 4 && text.length <= 200) listItems.push(text);
   });
 
+  // ── "Other" — direct text inside divs/spans/sections etc.
+  // This catches modern WP/Elementor/Gutenberg markup that doesn't use <p> tags.
+  // We extract DIRECT text only (not children's text) to avoid duplication.
+  const seen = new Set<string>([
+    ...headings.map((h) => h.text),
+    ...paragraphs,
+    ...listItems,
+  ]);
+  const other: string[] = [];
+  $('div, span, section, article, aside, blockquote, td, th, dt, dd, label, summary, figcaption').each(
+    (_, el) => {
+      if ($(el).closest('nav, footer, header').length > 0) return;
+      const text = directText(el);
+      if (text.length < 15 || text.length > 500) return;
+      if (seen.has(text)) return;
+      seen.add(text);
+      other.push(text);
+    },
+  );
+
   return {
     headings: headings.slice(0, 50),
     paragraphs: dedupeStrings(paragraphs).slice(0, 80),
     listItems: dedupeStrings(listItems).slice(0, 80),
+    other: other.slice(0, 150),
   };
 }
 
-const EMPTY_TEXT_BLOCKS: TextBlocks = { headings: [], paragraphs: [], listItems: [] };
+const EMPTY_TEXT_BLOCKS: TextBlocks = { headings: [], paragraphs: [], listItems: [], other: [] };
 
 /** Parse already-fetched HTML into a PageSnapshot. */
 function parseHtmlToSnapshot(

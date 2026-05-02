@@ -62,7 +62,7 @@ export type MonitorMode = 'snapshot' | 'compare' | 'watch';
 export type ChangeSeverity = 'low' | 'medium' | 'high';
 
 export type TextChangeType = 'added' | 'removed' | 'edited';
-export type TextChangeKind = 'heading' | 'paragraph' | 'listItem';
+export type TextChangeKind = 'heading' | 'paragraph' | 'listItem' | 'other';
 
 export interface TextChange {
   type: TextChangeType;
@@ -79,6 +79,13 @@ export interface PageChange {
   severity: ChangeSeverity;
 }
 
+export interface PageHashStatus {
+  url: string;
+  hashChanged: boolean;
+  oldLength: number;
+  newLength: number;
+}
+
 export interface ChangeReport {
   site: string;
   rootUrl: string;
@@ -89,6 +96,7 @@ export interface ChangeReport {
   changesFound: number;
   summary: string;
   details: PageChange[];
+  hashStatus?: PageHashStatus[];
 }
 
 export interface SnapshotResult {

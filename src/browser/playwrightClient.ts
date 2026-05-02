@@ -63,7 +63,11 @@ export async function fetchHtml(url: string, timeoutMs = 10000): Promise<string 
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         Accept: 'text/html,application/xhtml+xml',
+        // Bust intermediate caches so monitor sees fresh content
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
       },
+      cache: 'no-store',
     });
     clearTimeout(timer);
     if (!res.ok) return null;

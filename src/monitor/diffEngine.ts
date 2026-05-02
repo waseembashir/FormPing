@@ -195,11 +195,23 @@ export function diffPage(oldPage: PageSnapshot, newPage: PageSnapshot): PageChan
       newPage.textBlocks?.listItems ?? [],
       'listItem',
     ),
+    ...diffTextArrays(
+      oldPage.textBlocks?.other ?? [],
+      newPage.textBlocks?.other ?? [],
+      'other',
+    ),
   ];
 
   // Bubble structured text changes up to high-level changes too
   for (const tc of textChanges) {
-    const label = tc.kind === 'heading' ? (tc.meta ?? 'Heading') : tc.kind === 'paragraph' ? 'Paragraph' : 'List item';
+    const label =
+      tc.kind === 'heading'
+        ? (tc.meta ?? 'Heading')
+        : tc.kind === 'paragraph'
+          ? 'Paragraph'
+          : tc.kind === 'listItem'
+            ? 'List item'
+            : 'Text';
     if (tc.type === 'edited') {
       bump(`${label} edited: "${truncate(tc.before!, 60)}" → "${truncate(tc.after!, 60)}"`, tc.kind === 'heading' ? 'medium' : 'low');
     } else if (tc.type === 'added') {

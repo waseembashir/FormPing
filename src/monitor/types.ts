@@ -8,16 +8,18 @@ export interface FormFieldSnapshot {
   label: string;
 }
 
-export type HeadingTag = 'h1' | 'h2' | 'h3';
+export type HeadingTag = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
 
 export interface TextBlocks {
   headings: { tag: HeadingTag; text: string }[];
   paragraphs: string[];
   listItems: string[];
+  /** Direct text inside divs, spans, sections, etc — catches non-semantic markup */
+  other: string[];
 }
 
 export type TextChangeType = 'added' | 'removed' | 'edited';
-export type TextChangeKind = 'heading' | 'paragraph' | 'listItem';
+export type TextChangeKind = 'heading' | 'paragraph' | 'listItem' | 'other';
 
 export interface TextChange {
   type: TextChangeType;
@@ -63,6 +65,16 @@ export interface PageChange {
   severity: ChangeSeverity;
 }
 
+export interface PageHashStatus {
+  url: string;
+  /** True if the body text hash differs vs previous snapshot (regardless of whether we surfaced specific changes) */
+  hashChanged: boolean;
+  /** Old body text length */
+  oldLength: number;
+  /** New body text length */
+  newLength: number;
+}
+
 export interface ChangeReport {
   site: string;
   rootUrl: string;
@@ -73,6 +85,8 @@ export interface ChangeReport {
   changesFound: number;
   summary: string;
   details: PageChange[];
+  /** Diagnostic — per-page hash comparison even when no specific changes were detected */
+  hashStatus?: PageHashStatus[];
 }
 
 export interface MonitorOptions {

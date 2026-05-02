@@ -95,6 +95,20 @@ export async function runCompare(
 
   const summary = await summarizeChanges(details, site, options.aiSummary);
 
+  // Diagnostic: per-page raw text hash comparison — useful when changesFound === 0
+  // but the user expected changes (helps distinguish "page is identical" from
+  // "page changed but our extractor missed it")
+  const oldByUrl = new Map(previous.data.pages.map((p) => [p.url, p]));
+  const hashStatus = current.pages.map((newPage) => {
+    const oldPage = oldByUrl.get(newPage.url);
+    return {
+      url: newPage.url,
+      hashChanged: oldPage ? oldPage.textContentHash !== newPage.textContentHash : true,
+      oldLength: oldPage?.textContentLength ?? 0,
+      newLength: newPage.textContentLength,
+    };
+  });
+
   return {
     site,
     rootUrl: normalized,
@@ -105,6 +119,7 @@ export async function runCompare(
     changesFound,
     summary,
     details,
+    hashStatus,
   };
 }
 

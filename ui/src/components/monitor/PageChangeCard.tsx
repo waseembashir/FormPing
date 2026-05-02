@@ -21,7 +21,7 @@ function shortPath(url: string): string {
 
 /** Hide the high-level lines that are already shown via TextDiffBlock to avoid duplication. */
 function isStructuralLine(line: string): boolean {
-  return /^(Heading|H1|H2|H3|Paragraph|List item)\s+(edited|added|removed):/.test(line);
+  return /^(Heading|H1|H2|H3|H4|H5|H6|Paragraph|List item|Text)\s+(edited|added|removed):/.test(line);
 }
 
 const PREVIEW_TEXT_DIFFS = 3;

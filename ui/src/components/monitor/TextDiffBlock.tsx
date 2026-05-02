@@ -4,6 +4,7 @@ const KIND_LABEL: Record<string, string> = {
   heading: 'Heading',
   paragraph: 'Paragraph',
   listItem: 'List item',
+  other: 'Text',
 };
 
 const TYPE_STYLE = {

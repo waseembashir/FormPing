@@ -16,7 +16,7 @@ function basePage(overrides: Partial<PageSnapshot> = {}): PageSnapshot {
     buttons: [],
     links: [],
     scripts: [],
-    textBlocks: { headings: [], paragraphs: [], listItems: [] },
+    textBlocks: { headings: [], paragraphs: [], listItems: [], other: [] },
     loadTime: 500,
     screenshotPath: null,
     timestamp: '2026-04-26T18:00:00Z',
@@ -225,6 +225,7 @@ describe('diffPage with text blocks', () => {
         headings: [{ tag: 'h1', text: 'Welcome' }],
         paragraphs: ['We provide excellent service to all clients.'],
         listItems: [],
+        other: [],
       },
     });
     const fresh = basePage({
@@ -234,6 +235,7 @@ describe('diffPage with text blocks', () => {
         headings: [{ tag: 'h1', text: 'Welcome' }],
         paragraphs: ['We provide excellent and timely service to all clients.'],
         listItems: [],
+        other: [],
       },
     });
     const diff = diffPage(old, fresh);
@@ -247,7 +249,7 @@ describe('diffPage with text blocks', () => {
 
   it('detects new heading with medium severity', () => {
     const old = basePage({
-      textBlocks: { headings: [{ tag: 'h1', text: 'Hi' }], paragraphs: [], listItems: [] },
+      textBlocks: { headings: [{ tag: 'h1', text: 'Hi' }], paragraphs: [], listItems: [], other: [] },
     });
     const fresh = basePage({
       textContentHash: 'different',
@@ -258,6 +260,7 @@ describe('diffPage with text blocks', () => {
         ],
         paragraphs: [],
         listItems: [],
+        other: [],
       },
     });
     const diff = diffPage(old, fresh);
@@ -270,5 +273,30 @@ describe('diffPage with text blocks', () => {
     const fresh = basePage({ textContentHash: 'b', textContentLength: 200 });
     const diff = diffPage(old, fresh);
     expect(diff!.changes.some((c) => c.includes('non-semantic markup'))).toBe(true);
+  });
+
+  it('detects edits inside "other" text blocks (divs/spans)', () => {
+    const old = basePage({
+      textBlocks: {
+        headings: [],
+        paragraphs: [],
+        listItems: [],
+        other: ['Built with care for modern teams.'],
+      },
+    });
+    const fresh = basePage({
+      textContentHash: 'different',
+      textBlocks: {
+        headings: [],
+        paragraphs: [],
+        listItems: [],
+        other: ['Built with care for ambitious modern teams.'],
+      },
+    });
+    const diff = diffPage(old, fresh);
+    expect(diff!.textChanges).toBeDefined();
+    expect(diff!.textChanges![0]!.kind).toBe('other');
+    expect(diff!.textChanges![0]!.type).toBe('edited');
+    expect(diff!.textChanges![0]!.after).toContain('ambitious');
   });
 });

@@ -61,10 +61,53 @@ export function CompareReportCard({ report }: { report: ChangeReport }) {
             <p className="text-xs text-slate-400 mt-1">Run compare again later to see what changed.</p>
           </div>
         ) : report.changesFound === 0 ? (
-          <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5">
-            <p className="text-sm text-emerald-300 font-semibold">✓ No changes since last snapshot</p>
-            <p className="text-xs text-slate-400 mt-1">Site is identical to the previous baseline.</p>
-          </div>
+          (() => {
+            const changedPages = report.hashStatus?.filter((h) => h.hashChanged) ?? [];
+            if (changedPages.length === 0) {
+              return (
+                <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5">
+                  <p className="text-sm text-emerald-300 font-semibold">
+                    ✓ No changes since last snapshot
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Site is byte-identical to the previous baseline (text-content hashes match).
+                  </p>
+                </div>
+              );
+            }
+            // Hash differs but our extractor didn't pinpoint specific changes
+            return (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
+                <p className="text-sm text-amber-300 font-semibold">
+                  ⚠ Page changed, but specific text could not be pinpointed
+                </p>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  The body text hash differs vs the previous snapshot on{' '}
+                  <strong className="text-slate-200">
+                    {changedPages.length} page{changedPages.length !== 1 ? 's' : ''}
+                  </strong>
+                  , but the change is inside markup we don&apos;t extract semantically (deep
+                  custom widgets, JS-rendered content, etc.). Try{' '}
+                  <strong className="text-slate-200">--screenshots</strong> mode for full
+                  JS-rendered comparison.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {changedPages.slice(0, 5).map((h) => (
+                    <li
+                      key={h.url}
+                      className="text-xs font-mono text-amber-200/80 flex items-center gap-2"
+                    >
+                      <span className="text-amber-400/60">·</span>
+                      <span className="truncate">{new URL(h.url).pathname}</span>
+                      <span className="text-slate-500 text-[10px]">
+                        {h.oldLength}b → {h.newLength}b
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()
         ) : (
           <div className="rounded-lg bg-slate-800/60 border border-slate-700 px-3 py-2.5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Summary</p>
