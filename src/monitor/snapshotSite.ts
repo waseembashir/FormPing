@@ -1,6 +1,13 @@
 import type { Browser } from 'playwright';
 import type { AppConfig } from '../types.js';
-import type { PageSnapshot, SiteSnapshot, MonitorOptions, FormFieldSnapshot } from './types.js';
+import type {
+  PageSnapshot,
+  SiteSnapshot,
+  MonitorOptions,
+  FormFieldSnapshot,
+  TextBlocks,
+  HeadingTag,
+} from './types.js';
 import { fetchHtml, newPage, closePage } from '../browser/playwrightClient.js';
 import { loadHtml } from '../utils/dom.js';
 import { normalizeUrl } from '../utils/url.js';
@@ -31,6 +38,53 @@ function safeFilename(url: string): string {
     return 'page';
   }
 }
+
+function dedupeStrings(arr: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of arr) {
+    if (!seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+/** Extract structured visible text blocks for granular diffing. */
+function extractTextBlocks($: ReturnType<typeof loadHtml>): TextBlocks {
+  // Strip noise — script/style/nav/footer content shouldn't pollute text diffs
+  $('script, style, noscript').remove();
+
+  const headings: { tag: HeadingTag; text: string }[] = [];
+  $('h1, h2, h3').each((_, el) => {
+    const tag = ((el as { tagName?: string }).tagName ?? 'h2').toLowerCase() as HeadingTag;
+    const text = $(el).text().replace(/\s+/g, ' ').trim();
+    if (text && text.length <= 200) headings.push({ tag, text });
+  });
+
+  const paragraphs: string[] = [];
+  $('p').each((_, el) => {
+    const text = $(el).text().replace(/\s+/g, ' ').trim();
+    if (text && text.length >= 15) paragraphs.push(text.slice(0, 300));
+  });
+
+  const listItems: string[] = [];
+  $('li').each((_, el) => {
+    // Skip nav/footer list items by checking ancestor
+    if ($(el).closest('nav, footer, header').length > 0) return;
+    const text = $(el).text().replace(/\s+/g, ' ').trim();
+    if (text && text.length >= 4 && text.length <= 200) listItems.push(text);
+  });
+
+  return {
+    headings: headings.slice(0, 50),
+    paragraphs: dedupeStrings(paragraphs).slice(0, 80),
+    listItems: dedupeStrings(listItems).slice(0, 80),
+  };
+}
+
+const EMPTY_TEXT_BLOCKS: TextBlocks = { headings: [], paragraphs: [], listItems: [] };
 
 /** Parse already-fetched HTML into a PageSnapshot. */
 function parseHtmlToSnapshot(
@@ -85,6 +139,8 @@ function parseHtmlToSnapshot(
     .get()
     .filter(Boolean);
 
+  const textBlocks = extractTextBlocks($);
+
   return {
     url,
     title,
@@ -98,6 +154,7 @@ function parseHtmlToSnapshot(
     buttons,
     links,
     scripts,
+    textBlocks,
     loadTime,
     screenshotPath,
     timestamp: new Date().toISOString(),
@@ -125,6 +182,7 @@ async function snapshotPageWithFetch(url: string, config: AppConfig): Promise<Pa
       buttons: [],
       links: [],
       scripts: [],
+      textBlocks: EMPTY_TEXT_BLOCKS,
       loadTime,
       screenshotPath: null,
       timestamp: new Date().toISOString(),
@@ -176,6 +234,7 @@ async function snapshotPageWithPlaywright(
       buttons: [],
       links: [],
       scripts: [],
+      textBlocks: EMPTY_TEXT_BLOCKS,
       loadTime: Date.now() - start,
       screenshotPath,
       timestamp: new Date().toISOString(),

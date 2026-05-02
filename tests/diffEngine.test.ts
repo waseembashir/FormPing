@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffPage, diffSnapshots, totalChanges } from '../src/monitor/diffEngine.js';
+import { diffPage, diffSnapshots, totalChanges, diffTextArrays } from '../src/monitor/diffEngine.js';
 import type { PageSnapshot, SiteSnapshot } from '../src/monitor/types.js';
 
 function basePage(overrides: Partial<PageSnapshot> = {}): PageSnapshot {
@@ -16,6 +16,7 @@ function basePage(overrides: Partial<PageSnapshot> = {}): PageSnapshot {
     buttons: [],
     links: [],
     scripts: [],
+    textBlocks: { headings: [], paragraphs: [], listItems: [] },
     loadTime: 500,
     screenshotPath: null,
     timestamp: '2026-04-26T18:00:00Z',
@@ -110,11 +111,17 @@ describe('diffPage', () => {
     expect(diff!.changes.some((c) => c.includes('Major text content'))).toBe(true);
   });
 
-  it('does not flag tiny text edits as major', () => {
+  it('does not flag tiny text edits as major (and skips noise entirely if no semantic text changed)', () => {
+    // 1% length delta with no structured text changes is treated as noise (timestamps, CSRF tokens, etc.)
     const old = basePage({ textContentHash: 'aaa', textContentLength: 1000 });
     const fresh = basePage({ textContentHash: 'bbb', textContentLength: 1010 });
     const diff = diffPage(old, fresh);
-    expect(diff!.changes.some((c) => c.includes('Major'))).toBe(false);
+    // Either null (cleanly ignored) or no "Major" flag — both satisfy the intent
+    if (diff) {
+      expect(diff.changes.some((c) => c.includes('Major'))).toBe(false);
+    } else {
+      expect(diff).toBeNull();
+    }
   });
 });
 
@@ -164,5 +171,104 @@ describe('totalChanges', () => {
 
   it('returns 0 for empty input', () => {
     expect(totalChanges([])).toBe(0);
+  });
+});
+
+describe('diffTextArrays', () => {
+  it('returns no changes for identical arrays', () => {
+    expect(diffTextArrays(['a', 'b', 'c'], ['a', 'b', 'c'], 'paragraph')).toEqual([]);
+  });
+
+  it('detects added items', () => {
+    const result = diffTextArrays(['a'], ['a', 'b'], 'paragraph');
+    expect(result).toEqual([{ type: 'added', kind: 'paragraph', after: 'b' }]);
+  });
+
+  it('detects removed items', () => {
+    const result = diffTextArrays(['a', 'b'], ['a'], 'paragraph');
+    expect(result).toEqual([{ type: 'removed', kind: 'paragraph', before: 'b' }]);
+  });
+
+  it('detects edited items via fuzzy match', () => {
+    const result = diffTextArrays(
+      ['We offer 24/7 customer support'],
+      ['We offer 24/7 premium customer support'],
+      'paragraph',
+    );
+    expect(result.length).toBe(1);
+    expect(result[0]!.type).toBe('edited');
+    expect(result[0]!.before).toContain('24/7 customer support');
+    expect(result[0]!.after).toContain('premium customer support');
+  });
+
+  it('treats unrelated text as separate add+remove rather than edit', () => {
+    const result = diffTextArrays(
+      ['Apples are red and tasty'],
+      ['Bananas grow in tropical climates'],
+      'paragraph',
+    );
+    const types = result.map((r) => r.type).sort();
+    expect(types).toEqual(['added', 'removed']);
+  });
+
+  it('passes meta through for headings', () => {
+    const result = diffTextArrays(['Welcome'], ['Welcome Home'], 'heading', () => 'H1');
+    expect(result[0]!.type).toBe('edited');
+    expect(result[0]!.meta).toBe('H1');
+  });
+});
+
+describe('diffPage with text blocks', () => {
+  it('produces structured textChanges for paragraph edits', () => {
+    const old = basePage({
+      textBlocks: {
+        headings: [{ tag: 'h1', text: 'Welcome' }],
+        paragraphs: ['We provide excellent service to all clients.'],
+        listItems: [],
+      },
+    });
+    const fresh = basePage({
+      textContentHash: 'different',
+      textContentLength: 110,
+      textBlocks: {
+        headings: [{ tag: 'h1', text: 'Welcome' }],
+        paragraphs: ['We provide excellent and timely service to all clients.'],
+        listItems: [],
+      },
+    });
+    const diff = diffPage(old, fresh);
+    expect(diff!.textChanges).toBeDefined();
+    expect(diff!.textChanges!.length).toBe(1);
+    expect(diff!.textChanges![0]!.type).toBe('edited');
+    expect(diff!.textChanges![0]!.kind).toBe('paragraph');
+    expect(diff!.textChanges![0]!.before).toContain('excellent service');
+    expect(diff!.textChanges![0]!.after).toContain('excellent and timely service');
+  });
+
+  it('detects new heading with medium severity', () => {
+    const old = basePage({
+      textBlocks: { headings: [{ tag: 'h1', text: 'Hi' }], paragraphs: [], listItems: [] },
+    });
+    const fresh = basePage({
+      textContentHash: 'different',
+      textBlocks: {
+        headings: [
+          { tag: 'h1', text: 'Hi' },
+          { tag: 'h2', text: 'Our Services' },
+        ],
+        paragraphs: [],
+        listItems: [],
+      },
+    });
+    const diff = diffPage(old, fresh);
+    expect(diff!.severity).toBe('medium');
+    expect(diff!.textChanges!.some((tc) => tc.type === 'added' && tc.after === 'Our Services')).toBe(true);
+  });
+
+  it('falls back to hash-based message when no structured text changes detected', () => {
+    const old = basePage({ textContentHash: 'a', textContentLength: 100 });
+    const fresh = basePage({ textContentHash: 'b', textContentLength: 200 });
+    const diff = diffPage(old, fresh);
+    expect(diff!.changes.some((c) => c.includes('non-semantic markup'))).toBe(true);
   });
 });

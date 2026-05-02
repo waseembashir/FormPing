@@ -228,17 +228,22 @@ export default function DocsPage() {
   "buttons": ["Send Message"],
   "links": [...],          ← capped at 60
   "scripts": [...],        ← only src= scripts, never inline
+  "textBlocks": {          ← structured text for granular diffs
+    "headings":  [{ "tag": "h1", "text": "Talk to us" }, ...],
+    "paragraphs": ["We respond within 24 hours...", ...],
+    "listItems": ["Email support", "Phone support", ...]
+  },
   "loadTime": 842,
   "screenshotPath": null,
   "timestamp": "2026-04-26T18:00:00Z",
   "fetchedVia": "fetch"
 }`}</CodeBlock>
             <Note>
-              <strong>The clever bit:</strong> we store a <Code>textContentHash</Code> instead of
-              raw text. A page can have 100 KB of visible text. Across 100 snapshots, that&apos;s
-              10 MB just for text. The hash gives binary change detection, the{' '}
-              <Code>length</Code> gives % delta granularity. Total cost: <strong>24 bytes</strong>{' '}
-              instead of 100 KB.
+              <strong>The text-storage strategy:</strong> we keep two layers. (1)
+              <Code>textBlocks</Code> stores semantic content — headings, paragraphs, list items —
+              capped and deduped, ~10–20 KB per page. This powers the per-line before/after diffs
+              you see in the UI. (2) <Code>textContentHash</Code> + length is a 24-byte fallback
+              that catches changes inside non-semantic markup.
             </Note>
 
             {/* ── Comparison ──────────────────────────────────── */}
@@ -403,10 +408,11 @@ export default function DocsPage() {
               rows={[
                 [
                   <span key="0">
-                    Tell you <strong>what</strong> text changed
+                    Show prose changes inside <Code>{'<div>'}</Code>/<Code>{'<span>'}</Code>{' '}
+                    soup
                   </span>,
-                  'Storing all text = 100× disk cost.',
-                  'Re-crawl manually; or extend snapshot to store text.',
+                  'We extract semantic blocks (h1–h3, p, li). Text inside non-semantic markup falls back to the hash-based "size delta" indicator.',
+                  'Re-crawl manually, or add custom selectors to extractTextBlocks().',
                 ],
                 [
                   'Pixel-perfect visual diffs',

@@ -61,9 +61,21 @@ export interface RunProgress {
 export type MonitorMode = 'snapshot' | 'compare' | 'watch';
 export type ChangeSeverity = 'low' | 'medium' | 'high';
 
+export type TextChangeType = 'added' | 'removed' | 'edited';
+export type TextChangeKind = 'heading' | 'paragraph' | 'listItem';
+
+export interface TextChange {
+  type: TextChangeType;
+  kind: TextChangeKind;
+  before?: string;
+  after?: string;
+  meta?: string;
+}
+
 export interface PageChange {
   url: string;
   changes: string[];
+  textChanges?: TextChange[];
   severity: ChangeSeverity;
 }
 

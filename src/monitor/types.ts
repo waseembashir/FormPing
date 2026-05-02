@@ -8,6 +8,25 @@ export interface FormFieldSnapshot {
   label: string;
 }
 
+export type HeadingTag = 'h1' | 'h2' | 'h3';
+
+export interface TextBlocks {
+  headings: { tag: HeadingTag; text: string }[];
+  paragraphs: string[];
+  listItems: string[];
+}
+
+export type TextChangeType = 'added' | 'removed' | 'edited';
+export type TextChangeKind = 'heading' | 'paragraph' | 'listItem';
+
+export interface TextChange {
+  type: TextChangeType;
+  kind: TextChangeKind;
+  before?: string;   // present for 'edited' and 'removed'
+  after?: string;    // present for 'edited' and 'added'
+  meta?: string;     // e.g. heading tag like "H1", "H2"
+}
+
 export interface PageSnapshot {
   url: string;
   title: string;
@@ -21,6 +40,7 @@ export interface PageSnapshot {
   buttons: string[];
   links: string[];
   scripts: string[];
+  textBlocks: TextBlocks;
   loadTime: number;
   screenshotPath: string | null;
   timestamp: string;
@@ -38,7 +58,8 @@ export interface SiteSnapshot {
 
 export interface PageChange {
   url: string;
-  changes: string[];
+  changes: string[];           // high-level human-readable change list
+  textChanges?: TextChange[];  // structured text diffs (heading/paragraph/listItem)
   severity: ChangeSeverity;
 }
 

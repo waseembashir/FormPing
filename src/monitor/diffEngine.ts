@@ -4,7 +4,88 @@ import type {
   PageSnapshot,
   SiteSnapshot,
   FormFieldSnapshot,
+  TextChange,
+  TextChangeKind,
 } from './types.js';
+
+/** Word-set similarity (Jaccard on lowercase words). 0–1. */
+function similarity(a: string, b: string): number {
+  const aWords = new Set(a.toLowerCase().split(/\s+/).filter(Boolean));
+  const bWords = new Set(b.toLowerCase().split(/\s+/).filter(Boolean));
+  if (aWords.size === 0 && bWords.size === 0) return 1;
+  let intersect = 0;
+  for (const w of aWords) if (bWords.has(w)) intersect++;
+  const union = aWords.size + bWords.size - intersect;
+  return union === 0 ? 0 : intersect / union;
+}
+
+/**
+ * Diff two arrays of text strings. Items that exact-match are unchanged.
+ * Unmatched items are paired by best-similarity (>= 0.55) → 'edited',
+ * remaining unpaired old → 'removed', unpaired new → 'added'.
+ */
+export function diffTextArrays(
+  oldArr: string[],
+  newArr: string[],
+  kind: TextChangeKind,
+  meta?: (text: string, isNew: boolean) => string,
+): TextChange[] {
+  const result: TextChange[] = [];
+  const oldSet = new Set(oldArr);
+  const newSet = new Set(newArr);
+
+  // 1) Unmatched (need fuzzy pairing)
+  const oldUnmatched = oldArr.filter((s) => !newSet.has(s));
+  const newUnmatched = newArr.filter((s) => !oldSet.has(s));
+  const usedNew = new Set<number>();
+
+  for (const oldItem of oldUnmatched) {
+    let bestIdx = -1;
+    // Lower threshold for short strings (≤3 words) since "Welcome" → "Welcome Home"
+    // would have similarity 0.5 but is clearly an edit, not a separate item.
+    const wordCount = oldItem.split(/\s+/).filter(Boolean).length;
+    let bestSim = wordCount <= 3 ? 0.34 : 0.5;
+    for (let i = 0; i < newUnmatched.length; i++) {
+      if (usedNew.has(i)) continue;
+      const sim = similarity(oldItem, newUnmatched[i]!);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0) {
+      const newItem = newUnmatched[bestIdx]!;
+      usedNew.add(bestIdx);
+      result.push({
+        type: 'edited',
+        kind,
+        before: oldItem,
+        after: newItem,
+        ...(meta ? { meta: meta(newItem, true) } : {}),
+      });
+    } else {
+      result.push({
+        type: 'removed',
+        kind,
+        before: oldItem,
+        ...(meta ? { meta: meta(oldItem, false) } : {}),
+      });
+    }
+  }
+
+  for (let i = 0; i < newUnmatched.length; i++) {
+    if (usedNew.has(i)) continue;
+    const item = newUnmatched[i]!;
+    result.push({
+      type: 'added',
+      kind,
+      after: item,
+      ...(meta ? { meta: meta(item, true) } : {}),
+    });
+  }
+
+  return result;
+}
 
 const SEVERITY_RANK: Record<ChangeSeverity, number> = { low: 1, medium: 2, high: 3 };
 
@@ -94,16 +175,53 @@ export function diffPage(oldPage: PageSnapshot, newPage: PageSnapshot): PageChan
     if (!newScripts.has(s)) bump(`Script removed: ${truncate(s, 80)}`, 'low');
   }
 
-  // ── Bulk text content ─────────────────────────────────────────────────────
-  if (oldPage.textContentHash && oldPage.textContentHash !== newPage.textContentHash) {
+  // ── Structured text-block diff (headings / paragraphs / list items) ──────
+  const oldHeadings = (oldPage.textBlocks?.headings ?? []).map((h) => h.text);
+  const newHeadings = (newPage.textBlocks?.headings ?? []).map((h) => h.text);
+  const headingTagOf = (page: typeof newPage, text: string) =>
+    page.textBlocks?.headings.find((h) => h.text === text)?.tag.toUpperCase() ?? 'H?';
+
+  const textChanges: TextChange[] = [
+    ...diffTextArrays(oldHeadings, newHeadings, 'heading', (text, isNew) =>
+      headingTagOf(isNew ? newPage : oldPage, text),
+    ),
+    ...diffTextArrays(
+      oldPage.textBlocks?.paragraphs ?? [],
+      newPage.textBlocks?.paragraphs ?? [],
+      'paragraph',
+    ),
+    ...diffTextArrays(
+      oldPage.textBlocks?.listItems ?? [],
+      newPage.textBlocks?.listItems ?? [],
+      'listItem',
+    ),
+  ];
+
+  // Bubble structured text changes up to high-level changes too
+  for (const tc of textChanges) {
+    const label = tc.kind === 'heading' ? (tc.meta ?? 'Heading') : tc.kind === 'paragraph' ? 'Paragraph' : 'List item';
+    if (tc.type === 'edited') {
+      bump(`${label} edited: "${truncate(tc.before!, 60)}" → "${truncate(tc.after!, 60)}"`, tc.kind === 'heading' ? 'medium' : 'low');
+    } else if (tc.type === 'added') {
+      bump(`${label} added: "${truncate(tc.after!, 80)}"`, tc.kind === 'heading' ? 'medium' : 'low');
+    } else {
+      bump(`${label} removed: "${truncate(tc.before!, 80)}"`, tc.kind === 'heading' ? 'medium' : 'low');
+    }
+  }
+
+  // Fallback: text-content hash for cases where structured diff missed something
+  // (e.g. divs / spans / non-semantic text). Keep it as a lower-priority signal.
+  if (
+    textChanges.length === 0 &&
+    oldPage.textContentHash &&
+    oldPage.textContentHash !== newPage.textContentHash
+  ) {
     const lenDiff = Math.abs(newPage.textContentLength - oldPage.textContentLength);
     const pct = lenDiff / Math.max(oldPage.textContentLength, 1);
     if (pct >= 0.2) {
-      bump(`Major text content change (${Math.round(pct * 100)}% size delta)`, 'medium');
+      bump(`Major text content change (${Math.round(pct * 100)}% size delta — non-semantic markup)`, 'medium');
     } else if (pct >= 0.05) {
-      bump(`Text content edited (${Math.round(pct * 100)}% size delta)`, 'low');
-    } else {
-      bump('Minor text edits detected', 'low');
+      bump(`Text content edited (${Math.round(pct * 100)}% size delta — non-semantic markup)`, 'low');
     }
   }
 
@@ -118,7 +236,12 @@ export function diffPage(oldPage: PageSnapshot, newPage: PageSnapshot): PageChan
   }
 
   if (changes.length === 0) return null;
-  return { url: newPage.url, changes, severity };
+  return {
+    url: newPage.url,
+    changes,
+    ...(textChanges.length > 0 ? { textChanges } : {}),
+    severity,
+  };
 }
 
 /** Diff two site snapshots. Returns one PageChange entry per page that changed. */
