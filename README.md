@@ -279,6 +279,7 @@ Tests cover:
 - Slack/webhook notifications for batch results
 - Visual diffs from monitor screenshots (pixel-by-pixel)
 - Accessibility / Lighthouse score tracking in monitor
+- Per-change location context in monitor diffs (e.g. "Edited in About section › `<p>`") — capture nearest section + heading + short selector for each text block during snapshot, surface as a breadcrumb above each TextDiffBlock
 
 ---
 
