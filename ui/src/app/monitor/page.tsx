@@ -5,6 +5,7 @@ import { Header } from '@/components/Header';
 import { MonitorInputPanel } from '@/components/monitor/MonitorInputPanel';
 import { MonitorConfigPanel } from '@/components/monitor/MonitorConfigPanel';
 import { MonitorResultsPanel } from '@/components/monitor/MonitorResultsPanel';
+import { SnapshotsManager } from '@/components/monitor/SnapshotsManager';
 import type { ChangeReport, MonitorConfig, MonitorSSEEvent, SnapshotResult } from '@/types';
 
 const DEFAULT_CONFIG: MonitorConfig = {
@@ -22,9 +23,17 @@ export default function MonitorPage() {
   const [snapshot, setSnapshot] = useState<SnapshotResult | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [snapshotsRefreshKey, setSnapshotsRefreshKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   const watchActive = running && config.monitorMode === 'watch';
+
+  const handleCleared = useCallback(() => {
+    setReports([]);
+    setSnapshot(null);
+    setLogs((prev) => [...prev, 'Cleared all stored snapshots.']);
+    setSnapshotsRefreshKey((k) => k + 1);
+  }, []);
 
   const handleRun = useCallback(async () => {
     if (!url.trim()) return;
@@ -69,8 +78,10 @@ export default function MonitorPage() {
 
             if (event.type === 'snapshot') {
               setSnapshot(event.result);
+              setSnapshotsRefreshKey((k) => k + 1);
             } else if (event.type === 'report') {
               setReports((prev) => [...prev, event.report]);
+              setSnapshotsRefreshKey((k) => k + 1);
             } else if (event.type === 'log') {
               setLogs((prev) => [...prev.slice(-99), event.message]);
             } else if (event.type === 'done' || event.type === 'error') {
@@ -120,6 +131,12 @@ export default function MonitorPage() {
               onStop={handleStop}
               running={running}
               watchActive={watchActive}
+            />
+            <SnapshotsManager
+              url={url}
+              disabled={running}
+              refreshKey={snapshotsRefreshKey}
+              onCleared={handleCleared}
             />
             <MonitorConfigPanel config={config} onChange={setConfig} disabled={running} />
           </div>
