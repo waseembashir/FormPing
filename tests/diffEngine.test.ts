@@ -299,6 +299,30 @@ describe('diffPage with text blocks', () => {
     expect(edited!.kind).toBe('other');
   });
 
+  it('ignores moderate load-time jitter (1050ms → 1935ms is just network noise)', () => {
+    const old = basePage({ loadTime: 1050 });
+    const fresh = basePage({ loadTime: 1935 });
+    const diff = diffPage(old, fresh);
+    // ~1.84× slower with +885ms is within typical single-shot variance
+    expect(diff).toBeNull();
+  });
+
+  it('still flags dramatic load-time regressions (1000ms → 4000ms)', () => {
+    const old = basePage({ loadTime: 1000 });
+    const fresh = basePage({ loadTime: 4000 });
+    const diff = diffPage(old, fresh);
+    expect(diff).not.toBeNull();
+    expect(diff!.changes.some((c) => c.includes('Load time spike'))).toBe(true);
+  });
+
+  it('does not flag perf changes for sub-200ms baselines (too noisy to be meaningful)', () => {
+    const old = basePage({ loadTime: 50 });
+    const fresh = basePage({ loadTime: 5000 });
+    const diff = diffPage(old, fresh);
+    // Even 100× slower from a 50ms baseline could be valid jitter on tiny resources
+    expect(diff).toBeNull();
+  });
+
   it('detects edits inside "other" text blocks (divs/spans)', () => {
     const old = basePage({
       textBlocks: {

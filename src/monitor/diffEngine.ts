@@ -275,13 +275,21 @@ export function diffPage(oldPage: PageSnapshot, newPage: PageSnapshot): PageChan
   }
 
   // ── Performance ──────────────────────────────────────────────────────────
+  // Single-shot HTTP load times are noisy (DNS, TLS, server cold start, jitter).
+  // We only flag dramatic changes that are unlikely to be measurement variance:
+  // both samples must be ≥ 200ms baseline, the new time must be 3× slower,
+  // AND the absolute delta must exceed 2000ms. This filters out network noise
+  // while still catching real regressions like 1s → 4s.
   if (
-    oldPage.loadTime > 0 &&
-    newPage.loadTime > 0 &&
-    newPage.loadTime > oldPage.loadTime * 1.5 &&
-    newPage.loadTime - oldPage.loadTime > 500
+    oldPage.loadTime >= 200 &&
+    newPage.loadTime >= 200 &&
+    newPage.loadTime > oldPage.loadTime * 3 &&
+    newPage.loadTime - oldPage.loadTime > 2000
   ) {
-    bump(`Load time increased: ${oldPage.loadTime}ms → ${newPage.loadTime}ms`, 'low');
+    bump(
+      `Load time spike: ${oldPage.loadTime}ms → ${newPage.loadTime}ms (${Math.round(newPage.loadTime / oldPage.loadTime)}× slower)`,
+      'low',
+    );
   }
 
   if (changes.length === 0) return null;
