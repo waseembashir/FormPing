@@ -43,6 +43,10 @@ export interface PageSnapshot {
   links: string[];
   scripts: string[];
   textBlocks: TextBlocks;
+  /** Full visible body text (nav/footer/header stripped), capped at 60 KB.
+   * Used as a sentence-level fallback diff when structured extractors miss
+   * changes inside inline tags (<a>, <strong>, custom spans, etc.). */
+  fullBodyText: string;
   loadTime: number;
   screenshotPath: string | null;
   timestamp: string;

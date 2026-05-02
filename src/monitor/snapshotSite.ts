@@ -171,6 +171,17 @@ function parseHtmlToSnapshot(
     .get()
     .filter(Boolean);
 
+  // Full body text — fallback diff source. Strip nav/footer/header to mirror
+  // what extractTextBlocks excludes, so the two stay in sync.
+  const $bodyClone = $('body').clone();
+  $bodyClone.find('script, style, noscript, nav, footer, header').remove();
+  const fullBodyText = $bodyClone
+    .text()
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim()
+    .slice(0, 60_000);
+
   const textBlocks = extractTextBlocks($);
 
   return {
@@ -187,6 +198,7 @@ function parseHtmlToSnapshot(
     links,
     scripts,
     textBlocks,
+    fullBodyText,
     loadTime,
     screenshotPath,
     timestamp: new Date().toISOString(),
@@ -215,6 +227,7 @@ async function snapshotPageWithFetch(url: string, config: AppConfig): Promise<Pa
       links: [],
       scripts: [],
       textBlocks: EMPTY_TEXT_BLOCKS,
+      fullBodyText: '',
       loadTime,
       screenshotPath: null,
       timestamp: new Date().toISOString(),
@@ -267,6 +280,7 @@ async function snapshotPageWithPlaywright(
       links: [],
       scripts: [],
       textBlocks: EMPTY_TEXT_BLOCKS,
+      fullBodyText: '',
       loadTime: Date.now() - start,
       screenshotPath,
       timestamp: new Date().toISOString(),

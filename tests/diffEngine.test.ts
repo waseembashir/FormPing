@@ -17,6 +17,7 @@ function basePage(overrides: Partial<PageSnapshot> = {}): PageSnapshot {
     links: [],
     scripts: [],
     textBlocks: { headings: [], paragraphs: [], listItems: [], other: [] },
+    fullBodyText: '',
     loadTime: 500,
     screenshotPath: null,
     timestamp: '2026-04-26T18:00:00Z',
@@ -273,6 +274,29 @@ describe('diffPage with text blocks', () => {
     const fresh = basePage({ textContentHash: 'b', textContentLength: 200 });
     const diff = diffPage(old, fresh);
     expect(diff!.changes.some((c) => c.includes('non-semantic markup'))).toBe(true);
+  });
+
+  it('falls back to sentence-level body-text diff when structured extractors miss the change', () => {
+    const oldText = 'Welcome to our company. We help businesses grow online. Contact us today.';
+    const newText = 'Welcome to our company. We help ambitious businesses grow online. Contact us today.';
+    const old = basePage({
+      textContentHash: 'a',
+      textContentLength: oldText.length,
+      fullBodyText: oldText,
+    });
+    const fresh = basePage({
+      textContentHash: 'b',
+      textContentLength: newText.length,
+      fullBodyText: newText,
+    });
+    const diff = diffPage(old, fresh);
+    expect(diff!.textChanges).toBeDefined();
+    expect(diff!.textChanges!.length).toBeGreaterThan(0);
+    // Should detect "We help businesses grow online" → "We help ambitious businesses grow online"
+    const edited = diff!.textChanges!.find((tc) => tc.type === 'edited');
+    expect(edited).toBeDefined();
+    expect(edited!.after).toContain('ambitious');
+    expect(edited!.kind).toBe('other');
   });
 
   it('detects edits inside "other" text blocks (divs/spans)', () => {

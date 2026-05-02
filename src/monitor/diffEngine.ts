@@ -8,6 +8,16 @@ import type {
   TextChangeKind,
 } from './types.js';
 
+/** Split body text into sentences/lines for fallback diffing.
+ * Splits on sentence boundaries, line breaks, and large whitespace gaps. */
+export function sentenceify(text: string): string[] {
+  if (!text) return [];
+  return text
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9])|\n+|\s{4,}/)
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter((s) => s.length >= 8 && s.length <= 500);
+}
+
 /** Word-set similarity (Jaccard on lowercase words). 0–1. */
 function similarity(a: string, b: string): number {
   const aWords = new Set(a.toLowerCase().split(/\s+/).filter(Boolean));
@@ -221,8 +231,35 @@ export function diffPage(oldPage: PageSnapshot, newPage: PageSnapshot): PageChan
     }
   }
 
-  // Fallback: text-content hash for cases where structured diff missed something
-  // (e.g. divs / spans / non-semantic text). Keep it as a lower-priority signal.
+  // Fallback: when structured extractors missed the change, do a sentence-level
+  // diff of the full body text. This catches edits inside inline tags
+  // (<a>, <strong>, <em>, custom spans) that our directText() walker skips.
+  if (
+    textChanges.length === 0 &&
+    oldPage.fullBodyText &&
+    newPage.fullBodyText &&
+    oldPage.fullBodyText !== newPage.fullBodyText
+  ) {
+    const fallback = diffTextArrays(
+      sentenceify(oldPage.fullBodyText),
+      sentenceify(newPage.fullBodyText),
+      'other',
+      () => 'Body',
+    );
+    textChanges.push(...fallback);
+    for (const tc of fallback) {
+      if (tc.type === 'edited') {
+        bump(`Body text edited: "${truncate(tc.before!, 60)}" → "${truncate(tc.after!, 60)}"`, 'low');
+      } else if (tc.type === 'added') {
+        bump(`Body text added: "${truncate(tc.after!, 80)}"`, 'low');
+      } else {
+        bump(`Body text removed: "${truncate(tc.before!, 80)}"`, 'low');
+      }
+    }
+  }
+
+  // Last-resort: hash differs but we have no body text to diff (eg. legacy
+  // snapshot from before fullBodyText existed) → at least surface size delta.
   if (
     textChanges.length === 0 &&
     oldPage.textContentHash &&
