@@ -269,9 +269,15 @@ Tests cover:
 
 ## Future improvements
 
+### 🎯 Up next (in this order)
+
+1. **Per-change location context** in monitor diffs — capture nearest section + heading + short selector for each text block during snapshot, surface as a breadcrumb above each `TextDiffBlock` (e.g. `🧭 main › About me › <p>`). Pure deterministic, no API key needed. Files to touch: `src/monitor/types.ts`, `src/monitor/snapshotSite.ts`, `src/monitor/diffEngine.ts`, `ui/src/components/monitor/TextDiffBlock.tsx`. Estimated: ~4–6 hours.
+2. **Wire the AI toggles** in `src/ai/aiClassifier.ts` and `src/monitor/summarizeChanges.ts` — implement Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) calls for the existing stubs. Requires the user to add `ANTHROPIC_API_KEY` to a `.env` file and `npm install @anthropic-ai/sdk`. Each stub returns `null` on failure so the deterministic fallback still runs. UI labels should change from "experimental / stub" to "(Claude Haiku)". Estimated: ~1–2 hours.
+
+### Backlog
+
 - Screenshot capture on failure
 - HTML snapshot on failure
-- Real AI provider integration in `src/ai/aiClassifier.ts` and `src/monitor/summarizeChanges.ts`
 - Retry logic for flaky navigations
 - Proxy/rotation support for large-scale authorized testing
 - Configurable per-site overrides (contact page URL, field mapping)
@@ -279,7 +285,6 @@ Tests cover:
 - Slack/webhook notifications for batch results
 - Visual diffs from monitor screenshots (pixel-by-pixel)
 - Accessibility / Lighthouse score tracking in monitor
-- Per-change location context in monitor diffs (e.g. "Edited in About section › `<p>`") — capture nearest section + heading + short selector for each text block during snapshot, surface as a breadcrumb above each TextDiffBlock
 
 ---
 
