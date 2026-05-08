@@ -79,40 +79,41 @@ async function aiSummary(
 ): Promise<{ text: string; provider: string } | null> {
   if (changes.length === 0) return null;
 
-  // Tightly constrained prompt to prevent the model from inventing details.
-  // Three explicit examples (single-word edit, CTA change, form field) so the
-  // model knows the EXPECTED shape: describe the literal delta, not the page.
-  const prompt = `You are a precise diff summarizer. Given a list of website changes between two snapshots, write ONE sentence (max two) describing ONLY what changed.
+  // Tightly constrained prompt with four examples covering the four common
+  // diff shapes (append, multi-change, suffix add, removal). Strict rules
+  // prevent both hallucination AND the opposite failure of "claiming nothing
+  // changed" when small diffs are dismissed as insignificant.
+  const prompt = `You are a precise diff summarizer for website changes between two snapshots.
+
+OUTPUT: ONE sentence (max two), describing ONLY what changed.
 
 STRICT RULES:
-- Describe ONLY the literal differences between old and new versions.
-- NEVER describe the unchanged content of the page.
+- Describe ONLY the literal differences shown in the diff list.
+- ALWAYS report what changed — even tiny edits like a single word, character, or punctuation.
+- FORBIDDEN: claiming "no changes", "no significant changes", "nothing changed", or "identical". The diff list is non-empty by definition; if you see no obvious change, look harder for the literal text difference.
+- NEVER describe unchanged content of the page.
 - NEVER infer reasons, intent, or impact unless explicitly stated in the diff.
-- If only a single word or phrase changed, say so explicitly.
-- If only a few characters were added, quote them.
-- Use past tense ("X was changed to Y", "field X was added").
-- Plain text — no markdown, no JSON, no bullet list, no greetings.
+- Use past tense ("X was changed to Y", "field X was added", "word X was removed").
+- Plain text — no markdown, no JSON, no greetings.
 
 EXAMPLES:
 
-Input:
-PAGE: example.com/ [low]
+Input: PAGE: example.com/ [low]
   - Body text edited: "Welcome to our company" → "Welcome to our awesome company"
-Output:
-The homepage hero text added the word "awesome" — "Welcome to our company" became "Welcome to our awesome company".
+Output: The homepage hero text added the word "awesome" — "Welcome to our company" became "Welcome to our awesome company".
 
-Input:
-PAGE: example.com/contact [high]
+Input: PAGE: example.com/contact [high]
   - New required tel field added: "phone"
   - Submit button edited: "Send" → "Get Quote"
-Output:
-The contact form added a new required phone field, and the submit button text changed from "Send" to "Get Quote".
+Output: The contact form added a new required phone field, and the submit button text changed from "Send" to "Get Quote".
 
-Input:
-PAGE: example.com/about [low]
+Input: PAGE: example.com/about [low]
   - Body text edited: "10 years of experience" → "10 years of experience helping clients."
-Output:
-The about page appended " helping clients." to the existing experience description.
+Output: The about page appended " helping clients." to the existing experience description.
+
+Input: PAGE: example.com/about [low]
+  - Body text edited: "Bio text with extras Hello" → "Bio text with extras"
+Output: The about page removed the trailing word "Hello" from the body text.
 
 NOW SUMMARIZE THESE CHANGES:
 
@@ -122,8 +123,10 @@ ${compactChanges(changes)}
 Output:`;
 
   const result = await tryAiCall(selection, prompt, {
-    maxTokens: 200,
-    temperature: 0, // deterministic — no creative interpretation
+    maxTokens: 220,
+    // 0.1 — almost deterministic, but 0 can push models toward dismissive
+    // "safest" answers like "nothing significant changed" on tiny diffs.
+    temperature: 0.1,
   });
   if (!result) return null;
 
@@ -133,6 +136,19 @@ Output:`;
     .trim();
 
   if (!cleaned) return null;
+
+  // Safety net: if the AI claims nothing changed despite a non-empty diff list,
+  // it's confused — fall back to the deterministic summary. This catches
+  // model regressions (e.g. Gemini sometimes dismisses one-word diffs).
+  const NO_CHANGE_PHRASE =
+    /\b(no|not\s+any|zero)\s+(significant|notable|major|relevant)?\s*(changes?|differences?|edits?|modifications?|updates?)\b|\bnothing\s+(changed|was\s+changed|to\s+report)\b|\b(content|page)\s+is\s+identical\b/i;
+  if (NO_CHANGE_PHRASE.test(cleaned)) {
+    logger.warn(
+      `AI summary claimed no changes despite ${changes.length} change(s) — falling back to deterministic`,
+    );
+    return null;
+  }
+
   logger.debug(`AI summary via ${result.provider.id}: ${cleaned.slice(0, 80)}…`);
   return { text: cleaned, provider: result.provider.modelLabel };
 }
