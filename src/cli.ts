@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+import 'dotenv/config'; // load .env so AI provider keys are picked up
 import { Command, InvalidArgumentError } from 'commander';
 import { DEFAULT_CONFIG, DEFAULT_MONITOR_OPTIONS } from './config.js';
 import type { AppConfig, SiteResult, SubmitMode } from './types.js';
 import type { MonitorMode, MonitorOptions } from './monitor/types.js';
+import type { AiProviderSelection } from './ai/providers.js';
 import { runSingleSite } from './runners/runSingleSite.js';
 import { runBatch } from './runners/runBatch.js';
 import { launchBrowser, closeBrowser } from './browser/playwrightClient.js';
@@ -11,6 +13,14 @@ import { logger } from './utils/logger.js';
 import { snapshotSite } from './monitor/snapshotSite.js';
 import { runCompare } from './monitor/compareSnapshots.js';
 import { watchMode } from './monitor/watchMode.js';
+
+const VALID_AI_PROVIDERS: AiProviderSelection[] = ['off', 'auto', 'anthropic', 'gemini', 'groq', 'ollama'];
+function parseAiProvider(v: string): AiProviderSelection {
+  if (!VALID_AI_PROVIDERS.includes(v as AiProviderSelection)) {
+    throw new InvalidArgumentError(`--ai-provider must be one of: ${VALID_AI_PROVIDERS.join(', ')}`);
+  }
+  return v as AiProviderSelection;
+}
 
 const program = new Command();
 
@@ -37,7 +47,8 @@ program
     if (isNaN(n) || n < 1) throw new InvalidArgumentError('Concurrency must be >= 1');
     return n;
   })
-  .option('--ai', 'Enable AI fallback classifier (disabled by default)', false)
+  .option('--ai', 'Shortcut for --ai-provider auto (form-tester AI fallback)', false)
+  .option('--ai-provider <id>', 'AI provider: off | auto | anthropic | gemini | groq | ollama', parseAiProvider)
   .option('--email <email>', 'Test email address to use in forms')
   // ─── Monitor mode options ────────────────────────────────────────────────
   .option('--monitor <mode>', 'Run change monitor: snapshot | compare | watch')
@@ -47,7 +58,7 @@ program
     return n;
   })
   .option('--screenshots', 'Capture screenshots during snapshot (uses Playwright)', false)
-  .option('--ai-summary', 'Use AI to summarize detected changes', false)
+  .option('--ai-summary', 'Shortcut for --ai-provider auto on monitor summary', false)
   .option('--watch-interval <ms>', 'Interval between watch-mode cycles (ms)', (v: string) => {
     const n = parseInt(v, 10);
     if (isNaN(n) || n < 10000) throw new InvalidArgumentError('--watch-interval must be >= 10000');
@@ -64,6 +75,7 @@ program
     timeout?: number;
     concurrency?: number;
     ai: boolean;
+    aiProvider?: AiProviderSelection;
     email?: string;
     monitor?: string;
     pages?: number;
@@ -82,11 +94,15 @@ program
       process.exit(1);
     }
 
+    // --ai-provider wins; --ai is a shortcut for "auto"; default 'off'
+    const aiProvider: AiProviderSelection =
+      opts.aiProvider ?? (opts.ai ? 'auto' : 'off');
+
     const config: AppConfig = {
       ...DEFAULT_CONFIG,
       mode: opts.mode as SubmitMode,
       headless: !opts.headed,
-      aiEnabled: opts.ai,
+      aiProvider,
       prettyJson: opts.jsonPretty,
       outputFile: opts.output,
       ...(opts.timeout ? { timeout: opts.timeout, navigationTimeout: opts.timeout * 1.5 } : {}),
@@ -108,11 +124,16 @@ program
         logger.error(`Invalid --monitor value. Must be one of: ${validMonitorModes.join(', ')}`);
         process.exit(1);
       }
+      // For monitor mode, --ai-provider applies to the summary call.
+      // --ai-summary is a backward-compat shortcut for "auto".
+      const monitorAiProvider: AiProviderSelection =
+        opts.aiProvider ?? (opts.aiSummary ? 'auto' : 'off');
+
       const monitorOptions: MonitorOptions = {
         ...DEFAULT_MONITOR_OPTIONS,
         ...(opts.pages ? { maxPages: opts.pages } : {}),
         takeScreenshots: opts.screenshots,
-        aiSummary: opts.aiSummary,
+        aiProvider: monitorAiProvider,
         ...(opts.watchInterval ? { watchIntervalMs: opts.watchInterval } : {}),
         ...(opts.output ? { outputFile: opts.output } : {}),
       };
@@ -150,7 +171,7 @@ program
     }
     // ── End monitor mode ───────────────────────────────────────────────────
 
-    logger.info(`FormPing v1.0.0 — mode=${config.mode} headless=${config.headless} ai=${config.aiEnabled}`);
+    logger.info(`FormPing v1.0.0 — mode=${config.mode} headless=${config.headless} ai=${config.aiProvider}`);
 
     if (config.mode === 'live') {
       logger.warn('⚠  LIVE MODE: Forms will actually be submitted. Use only on authorized sites.');

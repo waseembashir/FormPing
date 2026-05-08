@@ -113,7 +113,9 @@ export interface ChangeReport {
 export interface MonitorOptions {
   maxPages: number;
   takeScreenshots: boolean;
-  aiSummary: boolean;
+  /** AI provider selection: 'off' | 'auto' | 'anthropic' | 'gemini' | 'groq' | 'ollama'.
+   * Defaults to 'off' — see src/ai/providers.ts. */
+  aiProvider: 'off' | 'auto' | 'anthropic' | 'gemini' | 'groq' | 'ollama';
   outputFile?: string;
   watchIntervalMs: number;
   snapshotRoot: string;

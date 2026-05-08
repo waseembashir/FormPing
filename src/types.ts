@@ -39,7 +39,9 @@ export interface AppConfig {
   timeout: number;
   navigationTimeout: number;
   batchConcurrency: number;
-  aiEnabled: boolean;
+  /** AI provider selection for form-tester ambiguity resolution.
+   * 'off' = deterministic only; 'auto' = first configured in priority order. */
+  aiProvider: 'off' | 'auto' | 'anthropic' | 'gemini' | 'groq' | 'ollama';
   saveScreenshotOnFailure: boolean;
   saveHtmlSnapshotOnFailure: boolean;
   outputFile?: string;

@@ -1,5 +1,6 @@
 'use client';
 import type { MonitorConfig, MonitorMode } from '@/types';
+import { AiProviderSelect } from '../AiProviderSelect';
 
 interface Props {
   config: MonitorConfig;
@@ -117,14 +118,16 @@ export function MonitorConfigPanel({ config, onChange, disabled }: Props) {
             onChange={(v) => set('takeScreenshots', v)}
             disabled={disabled}
           />
-          <Toggle
-            label="AI summary (experimental)"
-            hint="Stub — needs LLM provider"
-            checked={config.aiSummary}
-            onChange={(v) => set('aiSummary', v)}
-            disabled={disabled}
-          />
         </div>
+
+        {/* AI provider for the change-summary call */}
+        <AiProviderSelect
+          label="AI summary"
+          hint="Turn the diff into a readable paragraph"
+          value={config.aiProvider}
+          onChange={(v) => set('aiProvider', v)}
+          disabled={disabled}
+        />
       </div>
     </div>
   );

@@ -15,10 +15,11 @@ export async function POST(request: NextRequest) {
     email: string;
     headed: boolean;
     ai: boolean;
+    aiProvider?: string;
     concurrency: number;
   };
 
-  const { urls, mode, timeout, email, headed, ai, concurrency } = body;
+  const { urls, mode, timeout, email, headed, ai, aiProvider, concurrency } = body;
 
   if (!urls || urls.length === 0) {
     return new Response(JSON.stringify({ error: 'No URLs provided' }), { status: 400 });
@@ -47,7 +48,9 @@ export async function POST(request: NextRequest) {
       if (timeout) args.push('--timeout', String(timeout));
       if (email) args.push('--email', email);
       if (headed) args.push('--headed');
-      if (ai) args.push('--ai');
+      // Prefer explicit --ai-provider; fall back to legacy --ai (= 'auto') for backward compat
+      if (aiProvider && aiProvider !== 'off') args.push('--ai-provider', aiProvider);
+      else if (ai) args.push('--ai');
       if (concurrency > 1) args.push('--concurrency', String(concurrency));
 
       if (urls.length === 1) {

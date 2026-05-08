@@ -144,6 +144,26 @@ Edit `src/config.ts` to customize:
 - `saveScreenshotOnFailure` — capture screenshot on failure (wiring optional)
 - `saveHtmlSnapshotOnFailure` — save HTML snapshot on failure (wiring optional)
 
+## AI providers (optional)
+
+AI is **off by default**. To enable, create a `.env` file in `formping/` with one or more of these keys:
+
+```bash
+# Pick whichever provider you want — all four are optional
+ANTHROPIC_API_KEY=sk-ant-...     # Claude Haiku 4.5 — best quality, paid
+GEMINI_API_KEY=...                # Gemini 1.5 Flash — free tier, no card needed
+GROQ_API_KEY=gsk_...              # Llama 3.1 8B — free tier, very fast
+# Ollama needs no key — install from ollama.com and run `ollama pull llama3.1:8b`
+```
+
+Setup links:
+- Anthropic: https://console.anthropic.com/settings/keys (paid, ~$0.30–$2/mo for typical use)
+- Gemini: https://aistudio.google.com/app/apikey (free tier covers FormPing easily)
+- Groq: https://console.groq.com/keys (free tier)
+- Ollama: https://ollama.com (free, local-only — needs ~5GB disk)
+
+When enabled, the UI shows a dropdown to pick which provider to use, with "Auto" selecting the first available in the priority order: Anthropic → Gemini → Groq → Ollama. CLI users can pass `--ai-provider <id>` or `--ai-provider auto`.
+
 ---
 
 ## Output schema
@@ -269,10 +289,14 @@ Tests cover:
 
 ## Future improvements
 
-### 🎯 Up next (in this order)
+### ✅ Recently shipped
 
-1. **Per-change location context** in monitor diffs — capture nearest section + heading + short selector for each text block during snapshot, surface as a breadcrumb above each `TextDiffBlock` (e.g. `🧭 main › About me › <p>`). Pure deterministic, no API key needed. Files to touch: `src/monitor/types.ts`, `src/monitor/snapshotSite.ts`, `src/monitor/diffEngine.ts`, `ui/src/components/monitor/TextDiffBlock.tsx`. Estimated: ~4–6 hours.
-2. **Wire the AI toggles** in `src/ai/aiClassifier.ts` and `src/monitor/summarizeChanges.ts` — implement Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) calls for the existing stubs. Requires the user to add `ANTHROPIC_API_KEY` to a `.env` file and `npm install @anthropic-ai/sdk`. Each stub returns `null` on failure so the deterministic fallback still runs. UI labels should change from "experimental / stub" to "(Claude Haiku)". Estimated: ~1–2 hours.
+1. ~~Per-change location context in monitor diffs~~ — done. Each diff card now shows a breadcrumb like `🧭 main › About me › <p>`.
+2. ~~Wire AI toggles~~ — done, and made provider-agnostic. Supports Anthropic Claude Haiku, Google Gemini Flash, Groq Llama, and local Ollama. Pick one in the UI dropdown or set `AI_PROVIDER=auto` to use the first configured provider.
+
+### 🎯 Up next
+
+(Add new ideas here.)
 
 ### Backlog
 

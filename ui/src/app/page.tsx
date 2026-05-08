@@ -12,7 +12,7 @@ const DEFAULT_CONFIG: RunConfig = {
   email: 'formping-test@example.com',
   timeout: 15000,
   headed: false,
-  ai: false,
+  aiProvider: 'off',
   concurrency: 2,
 };
 

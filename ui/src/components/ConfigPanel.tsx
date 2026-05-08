@@ -1,5 +1,6 @@
 'use client';
 import type { RunConfig, SubmitMode } from '@/types';
+import { AiProviderSelect } from './AiProviderSelect';
 
 interface Props {
   config: RunConfig;
@@ -115,8 +116,16 @@ export function ConfigPanel({ config, onChange, disabled }: Props) {
         {/* Toggles */}
         <div className="space-y-3 pt-1">
           <Toggle label="Show browser (headed)" checked={config.headed} onChange={v => set('headed', v)} disabled={disabled} />
-          <Toggle label="AI fallback (experimental)" checked={config.ai} onChange={v => set('ai', v)} disabled={disabled} />
         </div>
+
+        {/* AI provider — picks between Claude / Gemini / Groq / Ollama / Off */}
+        <AiProviderSelect
+          label="AI fallback"
+          hint="Used only when contact-page or form scoring is too close to call"
+          value={config.aiProvider}
+          onChange={(v) => set('aiProvider', v)}
+          disabled={disabled}
+        />
       </div>
     </div>
   );

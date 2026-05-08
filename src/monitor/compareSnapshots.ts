@@ -93,7 +93,7 @@ export async function runCompare(
   const details = diffSnapshots(previous.data, current);
   const changesFound = totalChanges(details);
 
-  const summary = await summarizeChanges(details, site, options.aiSummary);
+  const summary = await summarizeChanges(details, site, options.aiProvider);
 
   // Diagnostic: per-page raw text hash comparison — useful when changesFound === 0
   // but the user expected changes (helps distinguish "page is identical" from

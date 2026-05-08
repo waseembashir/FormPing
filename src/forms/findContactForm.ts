@@ -205,13 +205,23 @@ export async function findContactForm(
     return { form: null, allForms: scored, usedAiFallback: false };
   }
 
-  // If ambiguous (two forms within 5 points) and AI enabled, fall back to AI
+  // If ambiguous (two forms within 5 points) and AI is enabled, fall back to AI
   let usedAiFallback = false;
-  if (scored.length >= 2 && scored[1]!.score >= best.score - 5 && config.aiEnabled) {
-    usedAiFallback = true;
-    // aiClassifier.pickForm() would be called here
+  let chosen = best;
+  if (scored.length >= 2 && scored[1]!.score >= best.score - 5 && config.aiProvider !== 'off') {
+    const { pickContactForm } = await import('../ai/aiClassifier.js');
+    const pageUrl = page.url();
+    const choice = await pickContactForm(scored.slice(0, 5), pageUrl, config.aiProvider);
+    if (choice) {
+      const picked = scored.find((f) => f.index === choice.chosenIndex);
+      if (picked) {
+        usedAiFallback = true;
+        chosen = picked;
+        logger.info(`AI (${choice.provider}) picked form index=${picked.index}: ${choice.reasoning}`);
+      }
+    }
   }
 
-  logger.debug(`Best form: index=${best.index} score=${best.score} signals=[${best.signals.join(', ')}]`);
-  return { form: best, allForms: scored, usedAiFallback };
+  logger.debug(`Best form: index=${chosen.index} score=${chosen.score} signals=[${chosen.signals.join(', ')}]`);
+  return { form: chosen, allForms: scored, usedAiFallback };
 }

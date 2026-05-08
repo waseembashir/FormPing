@@ -1,4 +1,23 @@
 export type SubmitMode = 'live' | 'safe' | 'detect-only';
+
+// ─── AI provider types ──────────────────────────────────────────────────────
+
+export type AiProviderId = 'anthropic' | 'gemini' | 'groq' | 'ollama';
+export type AiProviderSelection = 'off' | 'auto' | AiProviderId;
+
+export interface AiProviderInfo {
+  id: AiProviderId;
+  label: string;
+  modelLabel: string;
+  configured: boolean;
+  available: boolean;
+  setupHint: string;
+}
+
+export interface AiProvidersResponse {
+  providers: AiProviderInfo[];
+  fallback: AiProviderId | null;
+}
 export type FinalStatus = 'pass' | 'fail' | 'warn' | 'error';
 
 export interface FormIdentifier {
@@ -39,7 +58,8 @@ export interface RunConfig {
   email: string;
   timeout: number;
   headed: boolean;
-  ai: boolean;
+  /** AI provider for ambiguity disambiguation in form-tester */
+  aiProvider: AiProviderSelection;
   concurrency: number;
 }
 
@@ -117,7 +137,8 @@ export interface MonitorConfig {
   monitorMode: MonitorMode;
   maxPages: number;
   takeScreenshots: boolean;
-  aiSummary: boolean;
+  /** AI provider for the change-summary call */
+  aiProvider: AiProviderSelection;
   watchIntervalMs: number;
 }
 

@@ -12,10 +12,11 @@ export async function POST(request: NextRequest) {
     maxPages: number;
     takeScreenshots: boolean;
     aiSummary: boolean;
+    aiProvider?: string;
     watchIntervalMs: number;
   };
 
-  const { url, monitorMode, maxPages, takeScreenshots, aiSummary, watchIntervalMs } = body;
+  const { url, monitorMode, maxPages, takeScreenshots, aiSummary, aiProvider, watchIntervalMs } = body;
 
   if (!url || !monitorMode) {
     return new Response(JSON.stringify({ error: 'url and monitorMode are required' }), { status: 400 });
@@ -41,7 +42,9 @@ export async function POST(request: NextRequest) {
         '--pages', String(maxPages),
       ];
       if (takeScreenshots) args.push('--screenshots');
-      if (aiSummary) args.push('--ai-summary');
+      // Prefer explicit --ai-provider; fall back to legacy --ai-summary (= 'auto')
+      if (aiProvider && aiProvider !== 'off') args.push('--ai-provider', aiProvider);
+      else if (aiSummary) args.push('--ai-summary');
       if (monitorMode === 'watch') args.push('--watch-interval', String(watchIntervalMs));
 
       const child = spawn(tsxBin, args, {

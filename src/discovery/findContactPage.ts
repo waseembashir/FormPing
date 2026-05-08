@@ -174,11 +174,23 @@ export async function findContactPage(
   // Step 3: Playwright verification for top candidates
   const verified = await verifyWithPlaywright(candidates, browser, config);
 
-  // Step 4: AI fallback if confidence is ambiguous
+  // Step 4: AI fallback if Playwright verification failed and AI is enabled
   let usedAiFallback = false;
-  if (!verified && config.aiEnabled) {
-    // aiClassifier would be called here — see src/ai/aiClassifier.ts
-    usedAiFallback = true;
+  if (!verified && config.aiProvider !== 'off') {
+    const { pickContactPage } = await import('../ai/aiClassifier.js');
+    const choice = await pickContactPage(candidates.slice(0, 5), normalized, config.aiProvider);
+    if (choice) {
+      usedAiFallback = true;
+      const picked = candidates.find((c) => c.url === choice.chosenUrl);
+      if (picked) {
+        logger.info(`AI (${choice.provider}) picked ${choice.chosenUrl}: ${choice.reasoning}`);
+        return {
+          candidate: { ...picked, pageScore: 0.7, totalScore: 0.7 },
+          allCandidates: candidates,
+          usedAiFallback,
+        };
+      }
+    }
   }
 
   return { candidate: verified, allCandidates: candidates, usedAiFallback };

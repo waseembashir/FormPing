@@ -12,7 +12,7 @@ const DEFAULT_CONFIG: MonitorConfig = {
   monitorMode: 'compare',
   maxPages: 10,
   takeScreenshots: false,
-  aiSummary: false,
+  aiProvider: 'off',
   watchIntervalMs: 60 * 60 * 1000, // 1 hour
 };
 

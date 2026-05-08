@@ -4,7 +4,7 @@ import type { MonitorOptions } from './monitor/types.js';
 export const DEFAULT_MONITOR_OPTIONS: MonitorOptions = {
   maxPages: 10,
   takeScreenshots: false,
-  aiSummary: false,
+  aiProvider: 'off',
   watchIntervalMs: 60 * 60 * 1000, // 1 hour
   snapshotRoot: 'data/snapshots',
 };
@@ -15,7 +15,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   timeout: 15000,
   navigationTimeout: 20000,
   batchConcurrency: 2,
-  aiEnabled: false,
+  aiProvider: 'off',
   saveScreenshotOnFailure: false,
   saveHtmlSnapshotOnFailure: false,
   prettyJson: false,
