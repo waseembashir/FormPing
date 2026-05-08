@@ -347,4 +347,75 @@ describe('diffPage with text blocks', () => {
     expect(diff!.textChanges![0]!.type).toBe('edited');
     expect(diff!.textChanges![0]!.after).toContain('ambitious');
   });
+
+  it('attaches location metadata from snapshot to TextChange', () => {
+    const old = basePage({
+      textBlocks: {
+        headings: [{ tag: 'h1', text: 'About Us' }],
+        paragraphs: ['We provide excellent service to all clients.'],
+        listItems: [],
+        other: [],
+        locations: {
+          'About Us': { tag: 'h1', section: 'main', selector: 'main > h1' },
+          'We provide excellent service to all clients.': {
+            tag: 'p',
+            section: 'main',
+            heading: 'About Us',
+            selector: 'main > div > p',
+          },
+        },
+      },
+    });
+    const fresh = basePage({
+      textContentHash: 'different',
+      textBlocks: {
+        headings: [{ tag: 'h1', text: 'About Us' }],
+        paragraphs: ['We provide excellent and timely service to all clients.'],
+        listItems: [],
+        other: [],
+        locations: {
+          'About Us': { tag: 'h1', section: 'main', selector: 'main > h1' },
+          'We provide excellent and timely service to all clients.': {
+            tag: 'p',
+            section: 'main',
+            heading: 'About Us',
+            selector: 'main > div > p',
+          },
+        },
+      },
+    });
+    const diff = diffPage(old, fresh);
+    expect(diff!.textChanges![0]!.location).toBeDefined();
+    expect(diff!.textChanges![0]!.location!.section).toBe('main');
+    expect(diff!.textChanges![0]!.location!.heading).toBe('About Us');
+    expect(diff!.textChanges![0]!.location!.tag).toBe('p');
+  });
+
+  it('gracefully falls back when old snapshots have no locations field', () => {
+    const old = basePage({
+      // No locations key at all (legacy snapshot)
+      textBlocks: {
+        headings: [],
+        paragraphs: ['Some old paragraph here.'],
+        listItems: [],
+        other: [],
+      },
+    });
+    const fresh = basePage({
+      textContentHash: 'different',
+      textBlocks: {
+        headings: [],
+        paragraphs: ['Some new paragraph here.'],
+        listItems: [],
+        other: [],
+        // Even if new has it, the change should still work
+        locations: { 'Some new paragraph here.': { tag: 'p', section: 'main' } },
+      },
+    });
+    const diff = diffPage(old, fresh);
+    expect(diff!.textChanges).toBeDefined();
+    expect(diff!.textChanges![0]!.type).toBe('edited');
+    // Edited prefers new location, so should still have one
+    expect(diff!.textChanges![0]!.location?.section).toBe('main');
+  });
 });

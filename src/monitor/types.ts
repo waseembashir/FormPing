@@ -10,12 +10,27 @@ export interface FormFieldSnapshot {
 
 export type HeadingTag = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
 
+/** Location context for a single text block — surfaces as a breadcrumb in the UI. */
+export interface TextLocation {
+  /** Closest meaningful ancestor: section name (aria-label/id/semantic class) or tag. */
+  section?: string;
+  /** Most recent heading text in document order. */
+  heading?: string;
+  /** Short CSS-ish path, capped to 3-4 levels (e.g. "main > div > p"). */
+  selector?: string;
+  /** Element tag (p, div, span, etc.) — useful when section/heading are empty. */
+  tag?: string;
+}
+
 export interface TextBlocks {
   headings: { tag: HeadingTag; text: string }[];
   paragraphs: string[];
   listItems: string[];
   /** Direct text inside divs, spans, sections, etc — catches non-semantic markup */
   other: string[];
+  /** Optional per-block location metadata, keyed by the text content.
+   * Old snapshots may not have this — new ones do. */
+  locations?: Record<string, TextLocation>;
 }
 
 export type TextChangeType = 'added' | 'removed' | 'edited';
@@ -27,6 +42,8 @@ export interface TextChange {
   before?: string;   // present for 'edited' and 'removed'
   after?: string;    // present for 'edited' and 'added'
   meta?: string;     // e.g. heading tag like "H1", "H2"
+  /** Where in the page this change occurred — used to render a breadcrumb above the diff card. */
+  location?: TextLocation;
 }
 
 export interface PageSnapshot {

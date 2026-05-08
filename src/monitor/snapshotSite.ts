@@ -7,6 +7,7 @@ import type {
   FormFieldSnapshot,
   TextBlocks,
   HeadingTag,
+  TextLocation,
 } from './types.js';
 import { fetchHtml, newPage, closePage } from '../browser/playwrightClient.js';
 import { loadHtml } from '../utils/dom.js';
@@ -60,63 +61,189 @@ function directText(el: { children?: { type?: string; data?: string }[] }): stri
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** Extract structured visible text blocks for granular diffing. */
+const SECTION_TAGS = new Set(['main', 'article', 'section', 'aside', 'header', 'footer', 'nav']);
+const SEMANTIC_CLASS_RE = /(hero|features?|pricing|about|contact|cta|testimonial|services?|faq|footer|header|banner|story|team)/i;
+
+/** Resolve a human-readable name for the closest meaningful ancestor of `el`.
+ * Tries: aria-label → id → semantic class → parent tag. */
+function getSectionName(
+  $: ReturnType<typeof loadHtml>,
+  el: unknown,
+): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let current: any = $(el as any).parent();
+  while (current.length > 0) {
+    const node = current[0] as { name?: string } | undefined;
+    const tag = node?.name;
+    if (!tag || tag === 'body' || tag === 'html') break;
+
+    if (SECTION_TAGS.has(tag)) {
+      const ariaLabel = current.attr('aria-label')?.trim();
+      if (ariaLabel) return ariaLabel;
+      const id = current.attr('id')?.trim();
+      // Skip generated/short ids like "n-2" or "x"
+      if (id && id.length > 1 && !/^[a-z]+-?\d+$/i.test(id)) return id;
+      const cls = current.attr('class') ?? '';
+      const match = cls.match(SEMANTIC_CLASS_RE);
+      if (match) return (match[1] as string).toLowerCase();
+      return tag;
+    }
+    current = current.parent();
+  }
+  return '';
+}
+
+/** Build a short CSS-ish selector for `el`, capped to 4 levels. */
+function getShortSelector(
+  $: ReturnType<typeof loadHtml>,
+  el: unknown,
+): string {
+  const parts: string[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let current: any = $(el as any);
+  let depth = 0;
+  while (current.length > 0 && depth < 4) {
+    const node = current[0] as { name?: string } | undefined;
+    const tag = node?.name;
+    if (!tag || tag === 'body' || tag === 'html') break;
+
+    let segment = tag;
+    const id = current.attr('id')?.trim();
+    if (id && id.length > 1 && !/^[a-z]+-?\d+$/i.test(id)) {
+      segment = `${tag}#${id}`;
+      parts.unshift(segment);
+      break; // id is unique enough on its own
+    }
+    parts.unshift(segment);
+    current = current.parent();
+    depth++;
+  }
+  return parts.join(' > ');
+}
+
+/** Extract structured visible text blocks (with location context) for granular diffing. */
 function extractTextBlocks($: ReturnType<typeof loadHtml>): TextBlocks {
-  // Strip noise — script/style/nav/footer content shouldn't pollute text diffs
+  // Strip noise — script/style content shouldn't pollute text diffs.
+  // (We intentionally do NOT strip nav/footer/header here — extraction below
+  // uses .closest() to skip those, and getSectionName needs to see them.)
   $('script, style, noscript').remove();
+
+  const locations: Record<string, TextLocation> = {};
+  const recordLocation = (text: string, loc: TextLocation) => {
+    if (!locations[text]) locations[text] = loc;
+  };
+
+  // First pass: walk in document order to track the running heading.
+  // We attach the most recent h1/h2/h3 to each subsequent text block.
+  let lastHeading = '';
 
   // ── Headings (h1–h6) ──
   const headings: { tag: HeadingTag; text: string }[] = [];
-  $('h1, h2, h3, h4, h5, h6').each((_, el) => {
-    const tag = ((el as { tagName?: string }).tagName ?? 'h2').toLowerCase() as HeadingTag;
-    const text = $(el).text().replace(/\s+/g, ' ').trim();
-    if (text && text.length <= 200) headings.push({ tag, text });
-  });
 
   // ── Paragraphs ──
   const paragraphs: string[] = [];
-  $('p').each((_, el) => {
-    const text = $(el).text().replace(/\s+/g, ' ').trim();
-    if (text && text.length >= 15) paragraphs.push(text.slice(0, 300));
-  });
 
   // ── List items ──
   const listItems: string[] = [];
-  $('li').each((_, el) => {
-    if ($(el).closest('nav, footer, header').length > 0) return;
-    const text = $(el).text().replace(/\s+/g, ' ').trim();
-    if (text && text.length >= 4 && text.length <= 200) listItems.push(text);
-  });
 
   // ── "Other" — direct text inside divs/spans/sections etc.
-  // This catches modern WP/Elementor/Gutenberg markup that doesn't use <p> tags.
-  // We extract DIRECT text only (not children's text) to avoid duplication.
-  const seen = new Set<string>([
+  const otherSeen = new Set<string>();
+  const other: string[] = [];
+
+  // Single document-order walk so lastHeading stays in sync with positions.
+  $('h1, h2, h3, h4, h5, h6, p, li, div, span, section, article, aside, blockquote, td, th, dt, dd, label, summary, figcaption').each(
+    (_, el) => {
+      const node = el as {
+        name?: string;
+        attribs?: Record<string, string>;
+        children?: { type?: string; data?: string }[];
+      };
+      const tag = node.name?.toLowerCase();
+      if (!tag) return;
+
+      // Headings
+      if (/^h[1-6]$/.test(tag)) {
+        const text = $(el).text().replace(/\s+/g, ' ').trim();
+        if (!text || text.length > 200) return;
+        // Skip headings inside nav/footer/header chrome
+        if ($(el).closest('nav, footer, header').length > 0) return;
+        headings.push({ tag: tag as HeadingTag, text });
+        // Track last meaningful heading (only h1/h2/h3) for context propagation
+        if (['h1', 'h2', 'h3'].includes(tag)) lastHeading = text;
+        recordLocation(text, {
+          tag,
+          section: getSectionName($, node),
+          selector: getShortSelector($, node),
+          // a heading is its own context; no parent heading
+        });
+        return;
+      }
+
+      // Paragraphs
+      if (tag === 'p') {
+        if ($(el).closest('nav, footer, header').length > 0) return;
+        const text = $(el).text().replace(/\s+/g, ' ').trim();
+        if (!text || text.length < 15) return;
+        const truncated = text.slice(0, 300);
+        paragraphs.push(truncated);
+        recordLocation(truncated, {
+          tag: 'p',
+          section: getSectionName($, node),
+          heading: lastHeading,
+          selector: getShortSelector($, node),
+        });
+        return;
+      }
+
+      // List items
+      if (tag === 'li') {
+        if ($(el).closest('nav, footer, header').length > 0) return;
+        const text = $(el).text().replace(/\s+/g, ' ').trim();
+        if (!text || text.length < 4 || text.length > 200) return;
+        listItems.push(text);
+        recordLocation(text, {
+          tag: 'li',
+          section: getSectionName($, node),
+          heading: lastHeading,
+          selector: getShortSelector($, node),
+        });
+        return;
+      }
+
+      // "Other" — direct text inside misc containers
+      if ($(el).closest('nav, footer, header').length > 0) return;
+      const text = directText(node);
+      if (text.length < 15 || text.length > 500) return;
+      if (otherSeen.has(text)) return;
+      otherSeen.add(text);
+      other.push(text);
+      recordLocation(text, {
+        tag,
+        section: getSectionName($, node),
+        heading: lastHeading,
+        selector: getShortSelector($, node),
+      });
+    },
+  );
+
+  // Avoid double-counting "other" text that's already in another bucket
+  const seenInOtherBuckets = new Set<string>([
     ...headings.map((h) => h.text),
     ...paragraphs,
     ...listItems,
   ]);
-  const other: string[] = [];
-  $('div, span, section, article, aside, blockquote, td, th, dt, dd, label, summary, figcaption').each(
-    (_, el) => {
-      if ($(el).closest('nav, footer, header').length > 0) return;
-      const text = directText(el);
-      if (text.length < 15 || text.length > 500) return;
-      if (seen.has(text)) return;
-      seen.add(text);
-      other.push(text);
-    },
-  );
+  const otherFiltered = other.filter((t) => !seenInOtherBuckets.has(t));
 
   return {
     headings: headings.slice(0, 50),
     paragraphs: dedupeStrings(paragraphs).slice(0, 80),
     listItems: dedupeStrings(listItems).slice(0, 80),
-    other: other.slice(0, 150),
+    other: otherFiltered.slice(0, 150),
+    locations,
   };
 }
 
-const EMPTY_TEXT_BLOCKS: TextBlocks = { headings: [], paragraphs: [], listItems: [], other: [] };
+const EMPTY_TEXT_BLOCKS: TextBlocks = { headings: [], paragraphs: [], listItems: [], other: [], locations: {} };
 
 /** Parse already-fetched HTML into a PageSnapshot. */
 function parseHtmlToSnapshot(

@@ -6,7 +6,36 @@ import type {
   FormFieldSnapshot,
   TextChange,
   TextChangeKind,
+  TextLocation,
 } from './types.js';
+
+/** Look up location for a text snippet in either snapshot.
+ * For 'edited' we prefer the new snapshot's location, falling back to old.
+ * For 'removed' we use old. For 'added' we use new. */
+function lookupLocation(
+  oldPage: PageSnapshot,
+  newPage: PageSnapshot,
+  before: string | undefined,
+  after: string | undefined,
+): TextLocation | undefined {
+  const newLoc = after ? newPage.textBlocks?.locations?.[after] : undefined;
+  if (newLoc) return newLoc;
+  const oldLoc = before ? oldPage.textBlocks?.locations?.[before] : undefined;
+  return oldLoc;
+}
+
+/** Mutate the TextChange list in place to attach location metadata where available. */
+function attachLocations(
+  changes: TextChange[],
+  oldPage: PageSnapshot,
+  newPage: PageSnapshot,
+): void {
+  for (const tc of changes) {
+    if (tc.location) continue;
+    const loc = lookupLocation(oldPage, newPage, tc.before, tc.after);
+    if (loc) tc.location = loc;
+  }
+}
 
 /** Split body text into sentences/lines for fallback diffing.
  * Splits on sentence boundaries, line breaks, and large whitespace gaps. */
@@ -212,6 +241,9 @@ export function diffPage(oldPage: PageSnapshot, newPage: PageSnapshot): PageChan
     ),
   ];
 
+  // Attach per-change location context for the breadcrumb in the UI.
+  attachLocations(textChanges, oldPage, newPage);
+
   // Bubble structured text changes up to high-level changes too
   for (const tc of textChanges) {
     const label =
@@ -246,6 +278,9 @@ export function diffPage(oldPage: PageSnapshot, newPage: PageSnapshot): PageChan
       'other',
       () => 'Body',
     );
+    // The fallback sentences won't have entries in textBlocks.locations, but
+    // try anyway in case a sentence happens to match a tracked block exactly.
+    attachLocations(fallback, oldPage, newPage);
     textChanges.push(...fallback);
     for (const tc of fallback) {
       if (tc.type === 'edited') {

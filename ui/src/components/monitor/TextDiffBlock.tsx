@@ -68,6 +68,40 @@ function HeadingPrefix({ meta, kind }: { meta?: string; kind: TextChange['kind']
   );
 }
 
+function LocationBreadcrumb({ location }: { location?: TextChange['location'] }) {
+  if (!location) return null;
+  const { section, heading, tag } = location;
+  // Build the trail: section › heading › tag
+  const parts: { kind: 'section' | 'heading' | 'tag'; text: string }[] = [];
+  if (section) parts.push({ kind: 'section', text: section });
+  if (heading) parts.push({ kind: 'heading', text: heading });
+  if (tag) parts.push({ kind: 'tag', text: `<${tag}>` });
+  if (parts.length === 0) return null;
+
+  return (
+    <div className="px-3 py-1.5 bg-slate-950/60 border-b border-slate-800/60 flex items-center gap-1.5 flex-wrap">
+      <span className="text-slate-600 text-xs">🧭</span>
+      {parts.map((p, i) => (
+        <span key={i} className="flex items-center gap-1.5 min-w-0">
+          {i > 0 && <span className="text-slate-700 text-xs">›</span>}
+          <span
+            className={`text-xs truncate ${
+              p.kind === 'tag'
+                ? 'font-mono text-slate-500'
+                : p.kind === 'heading'
+                  ? 'text-slate-400 italic'
+                  : 'text-slate-400 font-medium'
+            }`}
+            title={p.text}
+          >
+            {p.text}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function TextDiffBlock({ change }: { change: TextChange }) {
   const style = TYPE_STYLE[change.type];
 
@@ -140,6 +174,7 @@ export function TextDiffBlock({ change }: { change: TextChange }) {
           {style.label}
         </span>
       </div>
+      <LocationBreadcrumb location={change.location} />
       <div className="px-3 py-2.5">
         {change.type === 'edited' ? renderEdited() : renderAddedOrRemoved()}
       </div>

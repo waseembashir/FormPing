@@ -64,12 +64,20 @@ export type ChangeSeverity = 'low' | 'medium' | 'high';
 export type TextChangeType = 'added' | 'removed' | 'edited';
 export type TextChangeKind = 'heading' | 'paragraph' | 'listItem' | 'other';
 
+export interface TextLocation {
+  section?: string;
+  heading?: string;
+  selector?: string;
+  tag?: string;
+}
+
 export interface TextChange {
   type: TextChangeType;
   kind: TextChangeKind;
   before?: string;
   after?: string;
   meta?: string;
+  location?: TextLocation;
 }
 
 export interface PageChange {
