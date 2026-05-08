@@ -105,6 +105,8 @@ export interface ChangeReport {
   pagesChanged: number;
   changesFound: number;
   summary: string;
+  /** Model label that produced the summary (e.g. "Gemini 2.5 Flash") — undefined when deterministic. */
+  summaryProvider?: string;
   details: PageChange[];
   /** Diagnostic — per-page hash comparison even when no specific changes were detected */
   hashStatus?: PageHashStatus[];

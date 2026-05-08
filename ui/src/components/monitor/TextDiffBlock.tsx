@@ -60,7 +60,16 @@ function tokenDiff(a: string, b: string): { value: string; type: 'common' | 'add
 }
 
 function HeadingPrefix({ meta, kind }: { meta?: string; kind: TextChange['kind'] }) {
-  const label = kind === 'heading' && meta ? meta : KIND_LABEL[kind] ?? kind;
+  // Heading uses meta directly (H1/H2/...). 'other' kind uses meta if provided
+  // (e.g. "Body" → "Body text") to distinguish fallback diffs from generic divs.
+  let label: string;
+  if (kind === 'heading' && meta) {
+    label = meta;
+  } else if (kind === 'other' && meta === 'Body') {
+    label = 'Body text';
+  } else {
+    label = KIND_LABEL[kind] ?? kind;
+  }
   return (
     <span className="text-xs font-semibold text-slate-500 font-mono mr-2 shrink-0">
       [{label}]

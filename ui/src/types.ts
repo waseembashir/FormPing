@@ -123,6 +123,8 @@ export interface ChangeReport {
   pagesChanged: number;
   changesFound: number;
   summary: string;
+  /** Model label that produced the summary (e.g. "Gemini 2.5 Flash") */
+  summaryProvider?: string;
   details: PageChange[];
   hashStatus?: PageHashStatus[];
 }

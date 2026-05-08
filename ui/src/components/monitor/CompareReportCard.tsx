@@ -1,5 +1,6 @@
 import type { ChangeReport } from '@/types';
 import { PageChangeCard } from './PageChangeCard';
+import { formatRelativeTime } from '@/lib/time';
 
 function StatPill({ count, label, color }: { count: number; label: string; color: string }) {
   return (
@@ -47,12 +48,28 @@ export function CompareReportCard({ report }: { report: ChangeReport }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <StatPill count={report.pagesScanned} label="Scanned" color="bg-slate-800 text-slate-200" />
-          <StatPill count={report.pagesChanged} label="Changed" color="bg-indigo-500/10 text-indigo-300" />
-          <StatPill count={report.changesFound} label="Changes" color="bg-slate-800 text-slate-200" />
-          {high > 0 && <StatPill count={high} label="High" color="bg-red-500/10 text-red-400" />}
-          {medium > 0 && <StatPill count={medium} label="Medium" color="bg-amber-500/10 text-amber-400" />}
-          {low > 0 && <StatPill count={low} label="Low" color="bg-slate-500/10 text-slate-400" />}
+          <StatPill
+            count={report.pagesScanned}
+            label={report.pagesScanned === 1 ? 'page scanned' : 'pages scanned'}
+            color="bg-slate-800 text-slate-200"
+          />
+          {report.pagesChanged > 0 && (
+            <StatPill
+              count={report.pagesChanged}
+              label={report.pagesChanged === 1 ? 'page changed' : 'pages changed'}
+              color="bg-indigo-500/10 text-indigo-300"
+            />
+          )}
+          {report.changesFound > 0 && (
+            <StatPill
+              count={report.changesFound}
+              label={report.changesFound === 1 ? 'change' : 'changes'}
+              color="bg-slate-800 text-slate-200"
+            />
+          )}
+          {high > 0 && <StatPill count={high} label="high" color="bg-red-500/10 text-red-400" />}
+          {medium > 0 && <StatPill count={medium} label="medium" color="bg-amber-500/10 text-amber-400" />}
+          {low > 0 && <StatPill count={low} label="low" color="bg-slate-500/10 text-slate-400" />}
         </div>
 
         {isInitial ? (
@@ -110,16 +127,39 @@ export function CompareReportCard({ report }: { report: ChangeReport }) {
           })()
         ) : (
           <div className="rounded-lg bg-slate-800/60 border border-slate-700 px-3 py-2.5">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Summary</p>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Summary</p>
+              {report.summaryProvider && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20"
+                  title="This summary was written by the AI provider"
+                >
+                  <span aria-hidden>✨</span>
+                  {report.summaryProvider}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-200 leading-relaxed">{report.summary}</p>
           </div>
         )}
 
-        <div className="text-xs text-slate-500 flex items-center gap-3">
-          <span>Checked: {new Date(report.checkedAt).toLocaleString()}</span>
-          {report.previousSnapshot && (
-            <span className="font-mono truncate">vs {report.previousSnapshot.split('/').pop()}</span>
-          )}
+        <div className="text-xs text-slate-500 flex items-center gap-3 flex-wrap">
+          <span title={new Date(report.checkedAt).toISOString()}>
+            Checked {formatRelativeTime(report.checkedAt)}
+          </span>
+          {report.previousSnapshot && (() => {
+            const file = report.previousSnapshot.split('/').pop() ?? '';
+            // strip the .json and try to recover an ISO-like timestamp
+            const stem = file.replace(/\.json$/, '');
+            // Filenames look like "2026-05-08T16-20-51-289Z" — invert to ISO-ish
+            const iso = stem.replace(/-(\d{2})-(\d{2})-(\d{3}Z)$/, ':$1:$2.$3');
+            const t = Date.parse(iso);
+            return Number.isNaN(t) ? (
+              <span className="font-mono truncate" title={file}>vs {file}</span>
+            ) : (
+              <span title={`vs ${file}`}>vs {formatRelativeTime(new Date(t).toISOString())}</span>
+            );
+          })()}
         </div>
       </div>
 

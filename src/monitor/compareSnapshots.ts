@@ -94,6 +94,7 @@ export async function runCompare(
   const changesFound = totalChanges(details);
 
   const summary = await summarizeChanges(details, site, options.aiProvider);
+  // summary = { text, aiProvider? }
 
   // Diagnostic: per-page raw text hash comparison — useful when changesFound === 0
   // but the user expected changes (helps distinguish "page is identical" from
@@ -117,7 +118,8 @@ export async function runCompare(
     pagesScanned: current.pagesScanned,
     pagesChanged: details.length,
     changesFound,
-    summary,
+    summary: summary.text,
+    ...(summary.aiProvider ? { summaryProvider: summary.aiProvider } : {}),
     details,
     hashStatus,
   };
