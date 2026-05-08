@@ -79,12 +79,12 @@ const anthropicProvider: AiProvider = {
 const geminiProvider: AiProvider = {
   id: 'gemini',
   label: 'Google Gemini',
-  modelLabel: 'Gemini 1.5 Flash',
+  modelLabel: 'Gemini 2.5 Flash',
   isConfigured: () => Boolean(process.env['GEMINI_API_KEY']),
   isAvailable: async () => Boolean(process.env['GEMINI_API_KEY']),
   async call(prompt, opts = {}) {
     const apiKey = process.env['GEMINI_API_KEY']!;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 15000);
     try {
@@ -97,6 +97,9 @@ const geminiProvider: AiProvider = {
           generationConfig: {
             maxOutputTokens: opts.maxTokens ?? 500,
             temperature: opts.temperature ?? 0.1,
+            // Disable Gemini 2.5 "thinking mode" — it eats output tokens for
+            // internal reasoning we don't need for classification/summary tasks.
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       });
