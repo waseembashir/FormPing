@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { AiProviderSelection, AiProvidersResponse, AiProviderInfo } from '@/types';
 
 interface Props {
@@ -16,11 +17,28 @@ interface Props {
 const AUTO_LABEL = (fallbackLabel?: string) =>
   fallbackLabel ? `Auto (uses ${fallbackLabel})` : 'Auto detect';
 
+const ESTIMATED_DROPDOWN_HEIGHT = 360;
+
+interface DropdownPos {
+  top: number;
+  left: number;
+  width: number;
+  /** True when the dropdown is anchored above the trigger because there's no room below */
+  flippedUp: boolean;
+}
+
 export function AiProviderSelect({ label, hint, value, onChange, disabled }: Props) {
   const [data, setData] = useState<AiProvidersResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
+  // Hydration guard — createPortal needs `document`
+  useEffect(() => setMounted(true), []);
+
+  // Fetch provider list on mount
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -40,11 +58,39 @@ export function AiProviderSelect({ label, hint, value, onChange, disabled }: Pro
     };
   }, []);
 
+  // Position the dropdown relative to the trigger; reposition on scroll/resize.
+  // useLayoutEffect avoids a one-frame flicker between open and positioned.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    function updatePosition() {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const flippedUp = spaceBelow < ESTIMATED_DROPDOWN_HEIGHT && rect.top > spaceBelow;
+      setPos({
+        top: flippedUp ? rect.top - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        flippedUp,
+      });
+    }
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
+
   const fallbackProvider: AiProviderInfo | undefined =
     data?.providers.find((p) => p.id === data.fallback);
   const anyAvailable = data?.providers.some((p) => p.available) ?? false;
 
-  // What to display in the trigger button
   const triggerLabel = (() => {
     if (value === 'off') return 'Off';
     if (value === 'auto') {
@@ -63,6 +109,7 @@ export function AiProviderSelect({ label, hint, value, onChange, disabled }: Pro
 
       <div className="relative">
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => !disabled && setOpen((v) => !v)}
           disabled={disabled}
@@ -86,12 +133,32 @@ export function AiProviderSelect({ label, hint, value, onChange, disabled }: Pro
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
+      </div>
 
-        {open && data && (
+      {/* Portal — escapes any overflow-hidden parent. Renders above everything. */}
+      {mounted && open && data && pos && createPortal(
+        <>
+          {/* Click-outside backdrop */}
+          <button
+            type="button"
+            aria-hidden
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-[60] cursor-default"
+          />
           <div
-            className="absolute z-20 mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 shadow-2xl shadow-black/50 overflow-hidden"
+            role="listbox"
+            style={{
+              position: 'fixed',
+              top: pos.flippedUp ? undefined : pos.top,
+              bottom: pos.flippedUp ? window.innerHeight - pos.top : undefined,
+              left: pos.left,
+              width: pos.width,
+              zIndex: 70,
+              maxHeight: 360,
+            }}
+            className="rounded-lg border border-slate-700 bg-slate-900 shadow-2xl shadow-black/50 overflow-hidden flex flex-col"
           >
-            <ul className="max-h-72 overflow-y-auto py-1">
+            <ul className="overflow-y-auto py-1">
               {/* Off */}
               <Option
                 selected={value === 'off'}
@@ -146,18 +213,9 @@ export function AiProviderSelect({ label, hint, value, onChange, disabled }: Pro
               ))}
             </ul>
           </div>
-        )}
-
-        {/* Click-outside backdrop */}
-        {open && (
-          <button
-            type="button"
-            aria-hidden
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-10 cursor-default"
-          />
-        )}
-      </div>
+        </>,
+        document.body,
+      )}
     </div>
   );
 }
