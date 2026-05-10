@@ -166,6 +166,56 @@ When enabled, the UI shows a dropdown to pick which provider to use, with "Auto"
 
 ---
 
+## Public deployment via Cloudflare Quick Tunnel (free, $0/month)
+
+You can expose the local UI to the internet behind a password gate without buying a domain or server.
+
+### One-time setup
+
+1. **Add a basic-auth password** in `ui/.env.local` (this file is gitignored):
+   ```
+   BASIC_AUTH_USER=admin
+   BASIC_AUTH_PASSWORD=YourLongRandomPasswordHere
+   ```
+   Generate a strong password:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))"
+   ```
+
+2. **Install `cloudflared`**:
+   ```bash
+   brew install cloudflared
+   ```
+
+### Each time you want the tool live
+
+Open **two terminals**:
+
+```bash
+# Terminal 1 — start the UI (also starts the password gate)
+cd formping/ui
+npm run dev
+
+# Terminal 2 — start the tunnel and get a public URL
+cloudflared tunnel --url http://localhost:3000
+```
+
+The tunnel command prints something like:
+```
+| Your quick Tunnel has been created! Visit it at:    |
+| https://random-words-here.trycloudflare.com         |
+```
+
+Copy that URL. Anyone visiting it sees the basic-auth login. Only people with the password get through.
+
+### Notes
+
+- The `*.trycloudflare.com` URL **changes every time you restart `cloudflared`** — bookmark whichever is current. To get a stable URL, register a domain at Cloudflare Registrar (~$10/yr) and use a named tunnel instead.
+- When your Mac sleeps or the dev server stops, the public URL goes down. For 24/7 uptime, deploy to a small VPS (Hetzner CX22 €4/mo is the best value).
+- Watch out for **port collisions**: Next.js may pick port 3001 if 3000 is busy. Adjust the `cloudflared --url` accordingly.
+
+---
+
 ## Output schema
 
 ```json
