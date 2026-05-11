@@ -8,13 +8,20 @@
 # Volume: mount /app/data/snapshots to persist monitor snapshots across deploys.
 # Port:   listens on $PORT (Railway injects this — defaults to 3000 locally).
 
-FROM mcr.microsoft.com/playwright:v1.44.0-jammy
+# Use a recent Microsoft Playwright base for the system libraries Chromium needs.
+# We deliberately download the matching Chromium binary after `npm ci` so the
+# Chromium revision exactly matches whatever Playwright JS version the lockfile
+# pinned — avoids "browser binary not found" / revision-mismatch errors at runtime.
+FROM mcr.microsoft.com/playwright:v1.55.0-noble
 
 WORKDIR /app
 
 # Install formping (CLI) deps — include dev deps so tsx is available at runtime
 COPY package.json package-lock.json* ./
 RUN npm ci --include=dev
+
+# Download the Chromium binary that matches the installed Playwright JS version
+RUN npx playwright install chromium
 
 # Install UI deps
 COPY ui/package.json ui/package-lock.json* ./ui/
