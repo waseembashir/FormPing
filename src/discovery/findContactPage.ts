@@ -135,30 +135,56 @@ export async function findContactPage(
   const normalized = normalizeUrl(inputUrl);
   logger.info(`Discovering contact page for ${normalized}`);
 
-  // Step 1: lightweight fetch of homepage HTML
-  let html = await fetchHtml(normalized, config.timeout);
-  if (!html) {
-    logger.warn('Lightweight fetch failed, falling back to Playwright for homepage');
+  // ── Step 1: lightweight fetch of homepage HTML ────────────────────────────
+  // We try Cheerio + native fetch first because it's fast (~50ms vs ~3s for
+  // Playwright). But cloud providers like Railway sometimes get treated as
+  // bot traffic by Cloudflare / CDN-fronted sites, which return either an
+  // empty body or a JS-challenge page with no real links. We handle both
+  // cases by falling back to Playwright whenever the result looks bogus.
+  async function loadHomepageWithPlaywright(reason: string): Promise<string | null> {
+    logger.warn(`Falling back to Playwright for homepage (${reason})`);
     try {
       const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
       ctx.setDefaultNavigationTimeout(config.navigationTimeout);
       const pg = await ctx.newPage();
-      await pg.goto(normalized, { waitUntil: 'domcontentloaded' });
-      html = await pg.content();
+      await pg.goto(normalized, { waitUntil: 'load' });
+      // brief settle for JS-rendered navigation menus
+      await pg.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => { /* ignore */ });
+      const html = await pg.content();
       await ctx.close();
+      return html;
     } catch (err) {
-      logger.error(`Could not load homepage: ${err}`);
+      logger.error(`Playwright homepage fetch failed: ${err}`);
+      return null;
+    }
+  }
+
+  let html = await fetchHtml(normalized, config.timeout);
+  if (!html) {
+    html = await loadHomepageWithPlaywright('lightweight fetch failed');
+    if (!html) {
       return { candidate: null, allCandidates: [], usedAiFallback: false };
     }
   }
 
   // Step 2: extract and rank links
-  const $ = loadHtml(html);
-  const rawLinks = extractLinks($);
-  logger.debug(`Found ${rawLinks.length} links on homepage`);
+  let $ = loadHtml(html);
+  let rawLinks = extractLinks($);
+  let candidates = scoreContactLinks(rawLinks, normalized, config);
+  logger.debug(`Lightweight fetch: ${rawLinks.length} links, ${candidates.length} candidates`);
 
-  const candidates = scoreContactLinks(rawLinks, normalized, config);
-  logger.debug(`Ranked ${candidates.length} contact candidates`);
+  // If we got zero candidates from a fetch that succeeded, the response is
+  // almost certainly a CDN challenge page / JS-rendered nav / empty shell.
+  // Retry with Playwright before giving up.
+  if (candidates.length === 0) {
+    const browserHtml = await loadHomepageWithPlaywright('zero candidates from lightweight fetch');
+    if (browserHtml) {
+      $ = loadHtml(browserHtml);
+      rawLinks = extractLinks($);
+      candidates = scoreContactLinks(rawLinks, normalized, config);
+      logger.debug(`Playwright retry: ${rawLinks.length} links, ${candidates.length} candidates`);
+    }
+  }
 
   if (candidates.length === 0) {
     return { candidate: null, allCandidates: [], usedAiFallback: false };
