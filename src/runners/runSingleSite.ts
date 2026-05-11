@@ -116,7 +116,22 @@ export async function runSingleSite(
     // ── Step 2: Load contact page in Playwright ──────────────────────────────
     const { context, page } = await newPage(browser, config);
     try {
-      await page.goto(candidate.url, { waitUntil: 'domcontentloaded' });
+      // Wait for full 'load' instead of just 'domcontentloaded' — many sites
+      // (Elementor, FluentForms, Webflow, React-rendered SPAs) inject the
+      // contact form via JS that runs after DOMContentLoaded. Without this,
+      // we'd analyze the page before the form even exists in the DOM.
+      await page.goto(candidate.url, { waitUntil: 'load' });
+
+      // Give the network a brief chance to settle so JS-rendered forms appear.
+      // We don't strictly require networkidle (some sites have long-polling
+      // analytics that never go idle) — capped at 3.5s, ignore timeout.
+      await page.waitForLoadState('networkidle', { timeout: 3500 }).catch(() => { /* ignore */ });
+
+      // Explicitly wait for at least one <form> to be in the DOM (capped).
+      // This is the most reliable signal that the page is "ready" for our
+      // form-detection logic. If still no form appears, we proceed and report
+      // FORM_NOT_FOUND as before.
+      await page.waitForSelector('form', { timeout: 5000 }).catch(() => { /* ignore */ });
 
       // Check for anti-bot on the contact page itself
       const pageHtml = await page.content();
