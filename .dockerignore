@@ -1,0 +1,35 @@
+# Speeds up builds AND keeps secrets out of the image.
+
+# Dependencies (will be installed fresh in the container)
+node_modules
+ui/node_modules
+
+# Build output (will be built fresh in the container)
+.next
+ui/.next
+dist
+*.tsbuildinfo
+ui/tsconfig.tsbuildinfo
+
+# User data (the running container should start with a clean volume)
+data
+
+# Local secrets — these come from Railway env vars in production
+.env
+.env.local
+.env.*.local
+ui/.env
+ui/.env.local
+
+# Git / OS / editor noise
+.git
+.gitignore
+.github
+.DS_Store
+Thumbs.db
+*.log
+*.tar.gz
+
+# Tests aren't needed in the production image
+tests
+vitest.config.ts

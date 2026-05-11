@@ -45,15 +45,9 @@ export function middleware(req: NextRequest) {
   });
 }
 
-// Apply to everything except Next.js internals & static assets
+// Apply to everything except Next.js internals, static assets, and the
+// health check (Railway / Docker orchestrators need to hit /api/health
+// without supplying credentials).
 export const config = {
-  matcher: [
-    /*
-     * Match all paths EXCEPT:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/health).*)'],
 };
