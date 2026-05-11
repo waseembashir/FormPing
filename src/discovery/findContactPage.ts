@@ -171,7 +171,12 @@ export async function findContactPage(
   let $ = loadHtml(html);
   let rawLinks = extractLinks($);
   let candidates = scoreContactLinks(rawLinks, normalized, config);
-  logger.debug(`Lightweight fetch: ${rawLinks.length} links, ${candidates.length} candidates`);
+  // Diagnostic — info level so it shows in production deploy logs
+  const hasContactInHtml = /\/contact[\/"'\s]/i.test(html);
+  logger.info(
+    `Lightweight fetch: ${html.length}B, ${rawLinks.length} links, ${candidates.length} candidates, ` +
+      `contact-substring-in-html=${hasContactInHtml}`,
+  );
 
   // If we got zero candidates from a fetch that succeeded, the response is
   // almost certainly a CDN challenge page / JS-rendered nav / empty shell.
@@ -182,7 +187,23 @@ export async function findContactPage(
       $ = loadHtml(browserHtml);
       rawLinks = extractLinks($);
       candidates = scoreContactLinks(rawLinks, normalized, config);
-      logger.debug(`Playwright retry: ${rawLinks.length} links, ${candidates.length} candidates`);
+      const browserHasContact = /\/contact[\/"'\s]/i.test(browserHtml);
+      logger.info(
+        `Playwright retry: ${browserHtml.length}B, ${rawLinks.length} links, ${candidates.length} candidates, ` +
+          `contact-substring-in-html=${browserHasContact}`,
+      );
+
+      // If the HTML clearly contains a /contact link but our scoring still
+      // came up empty, dump the first contact-looking anchor for debugging.
+      if (candidates.length === 0 && browserHasContact) {
+        const match = browserHtml.match(/<a[^>]+href=["']([^"']*\/contact[^"']*)["'][^>]*>([^<]{0,80})/i);
+        if (match) {
+          logger.warn(
+            `Found contact-like anchor in HTML but scoring rejected it: ` +
+              `href="${match[1]!.slice(0, 100)}" text="${(match[2] ?? '').trim().slice(0, 60)}"`,
+          );
+        }
+      }
     }
   }
 
