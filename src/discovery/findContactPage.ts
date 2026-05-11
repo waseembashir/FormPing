@@ -179,8 +179,9 @@ export async function findContactPage(
   );
 
   // If we got zero candidates from a fetch that succeeded, the response is
-  // almost certainly a CDN challenge page / JS-rendered nav / empty shell.
-  // Retry with Playwright before giving up.
+  // suspicious. Try Playwright. If that also fails, wait 2.5s and try once
+  // more — many cache/proxy issues are transient and the second hit lands
+  // on a different cache edge or fully-warmed origin.
   if (candidates.length === 0) {
     const browserHtml = await loadHomepageWithPlaywright('zero candidates from lightweight fetch');
     if (browserHtml) {
@@ -203,6 +204,23 @@ export async function findContactPage(
               `href="${match[1]!.slice(0, 100)}" text="${(match[2] ?? '').trim().slice(0, 60)}"`,
           );
         }
+      }
+    }
+
+    // Second-chance: maybe the first hit got an unwarmed cache / stale CDN
+    // edge. Sleep and try once more — empirically helps with LiteSpeed Cache
+    // and similar.
+    if (candidates.length === 0) {
+      logger.warn('Still 0 candidates — sleeping 2.5s and retrying once more');
+      await new Promise((r) => setTimeout(r, 2500));
+      const retryHtml = await loadHomepageWithPlaywright('second-chance retry after 2.5s sleep');
+      if (retryHtml) {
+        $ = loadHtml(retryHtml);
+        rawLinks = extractLinks($);
+        candidates = scoreContactLinks(rawLinks, normalized, config);
+        logger.info(
+          `Second-chance retry: ${retryHtml.length}B, ${rawLinks.length} links, ${candidates.length} candidates`,
+        );
       }
     }
   }

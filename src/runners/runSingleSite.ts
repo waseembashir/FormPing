@@ -133,30 +133,52 @@ export async function runSingleSite(
       // FORM_NOT_FOUND as before.
       await page.waitForSelector('form', { timeout: 5000 }).catch(() => { /* ignore */ });
 
-      // Check for anti-bot on the contact page itself
-      const pageHtml = await page.content();
-      const pageTitle = await page.title();
-      const antiBotDetected = detectAntiBot(pageHtml, pageTitle, config);
-      const captchaDetected = detectCaptcha(pageHtml, config);
-
       // Diagnostic: what did Playwright actually see on this page?
-      // Helps us distinguish "form genuinely isn't there" from "CDN served us
-      // a stripped/challenge version of the page".
-      const formTagCount = (pageHtml.match(/<form\b/gi) ?? []).length;
-      const visibleFormCount = await page.locator('form').count().catch(() => -1);
+      let pageHtml = await page.content();
+      let pageTitle = await page.title();
+      let formTagCount = (pageHtml.match(/<form\b/gi) ?? []).length;
+      let visibleFormCount = await page.locator('form').count().catch(() => -1);
       logger.info(
         `Contact page loaded: url=${page.url()} title="${pageTitle.slice(0, 60)}" ` +
           `htmlSize=${pageHtml.length}B formTagsInHtml=${formTagCount} ` +
-          `formLocatorCount=${visibleFormCount} antiBot=${antiBotDetected} captcha=${captchaDetected}`,
+          `formLocatorCount=${visibleFormCount}`,
       );
 
-      // If we got an empty page (a CDN often returns this to bot IPs), warn loudly
+      // If we got an empty page (CDN often returns this to bot IPs), warn loudly
       if (pageHtml.length < 2000) {
         logger.warn(
           `Contact page HTML is suspiciously small (${pageHtml.length}B) — likely a CDN ` +
             `challenge / WAF block. Dump: ${pageHtml.slice(0, 300).replace(/\s+/g, ' ')}`,
         );
       }
+
+      // Second-chance: if no forms appeared after our waits, reload the page
+      // and try once more. Often cures transient caching / partial-response
+      // issues (especially LiteSpeed Cache miss → re-fetch → cache hit).
+      if (formTagCount === 0) {
+        logger.warn(
+          `No <form> tags in contact page DOM after initial waits — reloading and trying once more`,
+        );
+        await new Promise((r) => setTimeout(r, 1500));
+        try {
+          await page.reload({ waitUntil: 'load' });
+          await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => { /* ignore */ });
+          await page.waitForSelector('form', { timeout: 6000 }).catch(() => { /* ignore */ });
+          pageHtml = await page.content();
+          pageTitle = await page.title();
+          formTagCount = (pageHtml.match(/<form\b/gi) ?? []).length;
+          visibleFormCount = await page.locator('form').count().catch(() => -1);
+          logger.info(
+            `Contact page reload: htmlSize=${pageHtml.length}B ` +
+              `formTagsInHtml=${formTagCount} formLocatorCount=${visibleFormCount}`,
+          );
+        } catch (err) {
+          logger.warn(`Reload retry failed: ${err}`);
+        }
+      }
+
+      const antiBotDetected = detectAntiBot(pageHtml, pageTitle, config);
+      const captchaDetected = detectCaptcha(pageHtml, config);
 
       if (antiBotDetected) {
         return {
