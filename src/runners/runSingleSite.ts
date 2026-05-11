@@ -139,6 +139,25 @@ export async function runSingleSite(
       const antiBotDetected = detectAntiBot(pageHtml, pageTitle, config);
       const captchaDetected = detectCaptcha(pageHtml, config);
 
+      // Diagnostic: what did Playwright actually see on this page?
+      // Helps us distinguish "form genuinely isn't there" from "CDN served us
+      // a stripped/challenge version of the page".
+      const formTagCount = (pageHtml.match(/<form\b/gi) ?? []).length;
+      const visibleFormCount = await page.locator('form').count().catch(() => -1);
+      logger.info(
+        `Contact page loaded: url=${page.url()} title="${pageTitle.slice(0, 60)}" ` +
+          `htmlSize=${pageHtml.length}B formTagsInHtml=${formTagCount} ` +
+          `formLocatorCount=${visibleFormCount} antiBot=${antiBotDetected} captcha=${captchaDetected}`,
+      );
+
+      // If we got an empty page (a CDN often returns this to bot IPs), warn loudly
+      if (pageHtml.length < 2000) {
+        logger.warn(
+          `Contact page HTML is suspiciously small (${pageHtml.length}B) — likely a CDN ` +
+            `challenge / WAF block. Dump: ${pageHtml.slice(0, 300).replace(/\s+/g, ' ')}`,
+        );
+      }
+
       if (antiBotDetected) {
         return {
           ...baseResult,
