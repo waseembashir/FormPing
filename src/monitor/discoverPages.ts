@@ -4,6 +4,7 @@ import { fetchHtml } from '../browser/playwrightClient.js';
 import { loadHtml, extractLinks } from '../utils/dom.js';
 import { resolveHref, isSameOrigin, normalizeUrl, urlPath } from '../utils/url.js';
 import { findContactPage } from '../discovery/findContactPage.js';
+import { fetchSitemapUrls } from '../discovery/sitemap.js';
 import { logger } from '../utils/logger.js';
 
 const PAGE_PATTERNS: { name: string; patterns: RegExp[] }[] = [
@@ -37,17 +38,15 @@ export async function discoverImportantPages(
     return [...found.keys()];
   }
 
-  const $ = loadHtml(html);
-  const rawLinks = extractLinks($);
-
-  for (const { href } of rawLinks) {
-    const resolved = resolveHref(homepage, href);
-    if (!resolved || !isSameOrigin(resolved, homepage)) continue;
-
+  /** Try to classify a URL against PAGE_PATTERNS, add it to `found` if it matches. */
+  function classifyAndAdd(rawUrl: string): boolean {
+    if (found.size >= maxPages) return false;
+    const resolved = resolveHref(homepage, rawUrl);
+    if (!resolved || !isSameOrigin(resolved, homepage)) return false;
     const path = urlPath(resolved);
-    if (EXCLUDE.some((p) => p.test(path))) continue;
+    if (EXCLUDE.some((p) => p.test(path))) return false;
 
-    // Dedupe by path-only key
+    // Dedupe by origin + path (strip trailing slash)
     let key: string;
     try {
       const u = new URL(resolved);
@@ -55,18 +54,43 @@ export async function discoverImportantPages(
     } catch {
       key = resolved;
     }
-    if (found.has(key)) continue;
+    if (found.has(key)) return false;
 
     for (const { name, patterns } of PAGE_PATTERNS) {
       if (patterns.some((p) => p.test(path))) {
         found.set(key, name);
-        break;
+        return true;
       }
     }
-    if (found.size >= maxPages) break;
+    return false;
   }
 
-  // If we didn't find a contact page via patterns, fall back to the existing detector
+  const $ = loadHtml(html);
+  const rawLinks = extractLinks($);
+  let fromHomepage = 0;
+  for (const { href } of rawLinks) {
+    if (classifyAndAdd(href)) fromHomepage++;
+    if (found.size >= maxPages) break;
+  }
+  logger.debug(`Homepage links: ${fromHomepage} important pages identified`);
+
+  // Sitemap source: lots of sites don't link to every section from the
+  // homepage (or our homepage fetch got a stripped version). Sitemap fills
+  // in the gaps and is essentially free.
+  if (found.size < maxPages) {
+    const sitemapUrls = await fetchSitemapUrls(homepage, config.timeout);
+    let fromSitemap = 0;
+    for (const url of sitemapUrls) {
+      if (classifyAndAdd(url)) fromSitemap++;
+      if (found.size >= maxPages) break;
+    }
+    if (sitemapUrls.length > 0) {
+      logger.info(`Sitemap: ${sitemapUrls.length} URLs → +${fromSitemap} important pages`);
+    }
+  }
+
+  // If we still didn't find a contact page, fall back to the dedicated detector
+  // (it has its own AI-rescue + sitemap logic for the harder cases)
   const hasContact = [...found.values()].includes('contact');
   if (!hasContact && found.size < maxPages) {
     try {

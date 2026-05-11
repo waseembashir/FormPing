@@ -200,13 +200,44 @@ export async function findContactForm(
 
   scored.sort((a, b) => b.score - a.score);
 
+  let usedAiFallback = false;
   const best = scored[0];
+
+  // AI rescue path: deterministic scoring rejected every form. Before giving
+  // up, ask the AI to look at all forms (with their fields) and decide if any
+  // is actually the contact form. Only fires when AI is configured.
+  if ((!best || best.score < 0) && config.aiProvider !== 'off' && rawForms.length > 0) {
+    const { rescueContactForm } = await import('../ai/aiClassifier.js');
+    const rescueInput = rawForms.slice(0, 8).map((f) => ({
+      index: f.index,
+      fields: f.fields.map((field) => ({
+        name: field.name,
+        type: field.type,
+        label: field.label,
+      })),
+      submitText: f.submitText,
+      identifier: [f.id, f.name].filter(Boolean).join('/') || '(no id/name)',
+    }));
+    const rescue = await rescueContactForm(rescueInput, page.url(), config.aiProvider);
+    if (rescue) {
+      const picked = scored.find((f) => f.index === rescue.chosenIndex);
+      if (picked) {
+        usedAiFallback = true;
+        logger.info(`AI rescue (${rescue.provider}) picked form index=${picked.index}: ${rescue.reasoning}`);
+        return {
+          form: { ...picked, signals: [...picked.signals, `AI rescue: ${rescue.reasoning}`] },
+          allForms: scored,
+          usedAiFallback,
+        };
+      }
+    }
+  }
+
   if (!best || best.score < 0) {
-    return { form: null, allForms: scored, usedAiFallback: false };
+    return { form: null, allForms: scored, usedAiFallback };
   }
 
   // If ambiguous (two forms within 5 points) and AI is enabled, fall back to AI
-  let usedAiFallback = false;
   let chosen = best;
   if (scored.length >= 2 && scored[1]!.score >= best.score - 5 && config.aiProvider !== 'off') {
     const { pickContactForm } = await import('../ai/aiClassifier.js');

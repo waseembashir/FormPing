@@ -5,6 +5,7 @@ import { loadHtml, extractLinks, extractTitle, extractHeading, extractText } fro
 import { normalizeUrl } from '../utils/url.js';
 import { normalizeText, containsAny } from '../utils/text.js';
 import { scoreContactLinks } from './scoreContactLinks.js';
+import { fetchSitemapUrls } from './sitemap.js';
 import { logger } from '../utils/logger.js';
 
 const CONTACT_TITLE_PATTERNS = [/contact/i, /get\s+in\s+touch/i, /reach\s+us/i, /write\s+to\s+us/i];
@@ -270,6 +271,69 @@ export async function findContactPage(
     }
   }
 
+  // ── Sitemap augmentation ───────────────────────────────────────────────
+  // Independent of homepage links: a site's contact page is often listed in
+  // sitemap.xml even when it's not prominently linked from the homepage
+  // (or when CDN serves us a stripped homepage). We always try sitemap and
+  // merge those URLs into the candidate pool; scoring de-duplicates by path.
+  const sitemapUrls = await fetchSitemapUrls(normalized, config.timeout);
+  if (sitemapUrls.length > 0) {
+    const sitemapAsLinks = sitemapUrls.map((href) => ({ href, text: '' }));
+    const sitemapCandidates = scoreContactLinks(sitemapAsLinks, normalized, config);
+    if (sitemapCandidates.length > 0) {
+      // Merge — scoreContactLinks already de-dupes by origin+path
+      const merged = scoreContactLinks(
+        [...rawLinks, ...sitemapAsLinks],
+        normalized,
+        config,
+      );
+      logger.info(
+        `Sitemap: ${sitemapUrls.length} URLs → ${sitemapCandidates.length} contact-pattern matches, ` +
+          `merged total: ${merged.length} candidates`,
+      );
+      candidates = merged;
+    } else {
+      logger.info(`Sitemap: ${sitemapUrls.length} URLs but none matched contact patterns`);
+    }
+  }
+
+  // ── AI rescue ──────────────────────────────────────────────────────────
+  // Deterministic + sitemap both came up empty, but we DID get real content
+  // (not a block page). Ask AI to look at all the links we collected and
+  // decide if any of them is a contact page in disguise. Skipped entirely
+  // when AI is off, when we look blocked, or when there are no links to ask
+  // about.
+  let usedAiFallback = false;
+  if (candidates.length === 0 && config.aiProvider !== 'off') {
+    const ranAttempts = [
+      attemptBlocked.lightweight,
+      attemptSizes.playwright !== null ? attemptBlocked.playwright : null,
+      attemptSizes.retry !== null ? attemptBlocked.retry : null,
+    ].filter((v): v is boolean => v !== null);
+    const allBlocked = ranAttempts.length > 0 && ranAttempts.every((b) => b);
+
+    if (!allBlocked && (rawLinks.length > 0 || sitemapUrls.length > 0)) {
+      // Combine homepage links (have anchor text) + sitemap URLs (no text)
+      const sitemapAsLinks = sitemapUrls.map((href) => ({ href, text: '' }));
+      const allLinks = [...rawLinks, ...sitemapAsLinks];
+      const { rescueContactPage } = await import('../ai/aiClassifier.js');
+      const rescue = await rescueContactPage(allLinks, normalized, config.aiProvider);
+      if (rescue) {
+        usedAiFallback = true;
+        candidates = [
+          {
+            url: rescue.chosenUrl,
+            score: 1, // low-confidence — flag it as AI rescue
+            signals: [`AI rescue (${rescue.provider}): ${rescue.reasoning}`],
+            pageScore: 0.6,
+            totalScore: 0.6,
+          },
+        ];
+        logger.info(`AI rescue produced candidate: ${rescue.chosenUrl}`);
+      }
+    }
+  }
+
   if (candidates.length === 0) {
     // Decide: was this "site has no contact page" or "hosting blocked us"?
     // If every attempt that ran looked like a block page → it's the host.
@@ -287,7 +351,7 @@ export async function findContactPage(
     return {
       candidate: null,
       allCandidates: [],
-      usedAiFallback: false,
+      usedAiFallback,
       ...(allBlocked ? { blockedByHost: true } : {}),
       diagnostic,
     };
@@ -297,14 +361,15 @@ export async function findContactPage(
   const top = candidates[0]!;
   if (top.score >= 5 && /\/contact/i.test(top.url) && candidates.length === 1) {
     logger.debug(`High-confidence candidate from link scoring: ${top.url}`);
-    return { candidate: { ...top, pageScore: 0.9, totalScore: 0.9 }, allCandidates: candidates, usedAiFallback: false };
+    return { candidate: { ...top, pageScore: 0.9, totalScore: 0.9 }, allCandidates: candidates, usedAiFallback };
   }
 
   // Step 3: Playwright verification for top candidates
   const verified = await verifyWithPlaywright(candidates, browser, config);
 
-  // Step 4: AI fallback if Playwright verification failed and AI is enabled
-  let usedAiFallback = false;
+  // Step 4: AI disambiguation if Playwright verification failed and AI is enabled
+  // (different from the AI rescue earlier — this disambiguates between candidates,
+  // doesn't generate them)
   if (!verified && config.aiProvider !== 'off') {
     const { pickContactPage } = await import('../ai/aiClassifier.js');
     const choice = await pickContactPage(candidates.slice(0, 5), normalized, config.aiProvider);
