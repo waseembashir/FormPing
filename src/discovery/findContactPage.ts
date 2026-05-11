@@ -125,6 +125,30 @@ export interface FindContactPageResult {
   candidate: ContactCandidate | null;
   allCandidates: ContactCandidate[];
   usedAiFallback: boolean;
+  /** Set when every attempt to load the homepage returned a tiny / stripped
+   * response — the strong signature of a hosting-provider IP block. */
+  blockedByHost?: boolean;
+  /** Per-attempt diagnostics — used to populate notes/explanations. */
+  diagnostic?: {
+    lightweightBytes: number;
+    playwrightBytes: number | null; // null = Playwright didn't run
+    retryBytes: number | null;       // null = retry didn't run
+  };
+}
+
+const BLOCK_PAGE_MARKERS = /(?:access\s+denied|forbidden|blocked|429\s+too\s+many|just\s+a\s+moment|please\s+enable\s+javascript|cloudflare|bot\s+detection|verifying.{0,30}browser|hostinger.{0,30}protect|sucuri|webserver\s+is\s+returning\s+an\s+unknown\s+error)/i;
+
+/** Returns true when the HTML looks like a hosting-provider error/block page
+ * rather than a real site response. Combines three signals to avoid false
+ * positives on legitimately small landing pages. */
+function looksLikeBlockPage(html: string, linkCount: number): boolean {
+  // Tiny body — almost always a 403/error response
+  if (html.length < 2000) return true;
+  // Medium body + zero navigation links — a stripped page or challenge
+  if (html.length < 20000 && linkCount < 3) return true;
+  // Explicit block-page text markers anywhere in the HTML
+  if (BLOCK_PAGE_MARKERS.test(html)) return true;
+  return false;
 }
 
 export async function findContactPage(
@@ -159,6 +183,20 @@ export async function findContactPage(
     }
   }
 
+  // Track each attempt so we can tell at the end if every attempt looked
+  // like a hosting-provider block page (vs a site that genuinely has no
+  // contact-like links). Helps us surface the right reason code to the UI.
+  const attemptSizes = {
+    lightweight: 0,
+    playwright: null as number | null,
+    retry: null as number | null,
+  };
+  const attemptBlocked = {
+    lightweight: false,
+    playwright: false,
+    retry: false,
+  };
+
   let html = await fetchHtml(normalized, config.timeout);
   if (!html) {
     html = await loadHomepageWithPlaywright('lightweight fetch failed');
@@ -171,11 +209,13 @@ export async function findContactPage(
   let $ = loadHtml(html);
   let rawLinks = extractLinks($);
   let candidates = scoreContactLinks(rawLinks, normalized, config);
+  attemptSizes.lightweight = html.length;
+  attemptBlocked.lightweight = looksLikeBlockPage(html, rawLinks.length);
   // Diagnostic — info level so it shows in production deploy logs
   const hasContactInHtml = /\/contact[\/"'\s]/i.test(html);
   logger.info(
     `Lightweight fetch: ${html.length}B, ${rawLinks.length} links, ${candidates.length} candidates, ` +
-      `contact-substring-in-html=${hasContactInHtml}`,
+      `contact-substring-in-html=${hasContactInHtml}, looks-blocked=${attemptBlocked.lightweight}`,
   );
 
   // If we got zero candidates from a fetch that succeeded, the response is
@@ -188,10 +228,12 @@ export async function findContactPage(
       $ = loadHtml(browserHtml);
       rawLinks = extractLinks($);
       candidates = scoreContactLinks(rawLinks, normalized, config);
+      attemptSizes.playwright = browserHtml.length;
+      attemptBlocked.playwright = looksLikeBlockPage(browserHtml, rawLinks.length);
       const browserHasContact = /\/contact[\/"'\s]/i.test(browserHtml);
       logger.info(
         `Playwright retry: ${browserHtml.length}B, ${rawLinks.length} links, ${candidates.length} candidates, ` +
-          `contact-substring-in-html=${browserHasContact}`,
+          `contact-substring-in-html=${browserHasContact}, looks-blocked=${attemptBlocked.playwright}`,
       );
 
       // If the HTML clearly contains a /contact link but our scoring still
@@ -218,15 +260,37 @@ export async function findContactPage(
         $ = loadHtml(retryHtml);
         rawLinks = extractLinks($);
         candidates = scoreContactLinks(rawLinks, normalized, config);
+        attemptSizes.retry = retryHtml.length;
+        attemptBlocked.retry = looksLikeBlockPage(retryHtml, rawLinks.length);
         logger.info(
-          `Second-chance retry: ${retryHtml.length}B, ${rawLinks.length} links, ${candidates.length} candidates`,
+          `Second-chance retry: ${retryHtml.length}B, ${rawLinks.length} links, ${candidates.length} candidates, ` +
+            `looks-blocked=${attemptBlocked.retry}`,
         );
       }
     }
   }
 
   if (candidates.length === 0) {
-    return { candidate: null, allCandidates: [], usedAiFallback: false };
+    // Decide: was this "site has no contact page" or "hosting blocked us"?
+    // If every attempt that ran looked like a block page → it's the host.
+    const ranAttempts = [
+      attemptBlocked.lightweight,
+      attemptSizes.playwright !== null ? attemptBlocked.playwright : null,
+      attemptSizes.retry !== null ? attemptBlocked.retry : null,
+    ].filter((v): v is boolean => v !== null);
+    const allBlocked = ranAttempts.length > 0 && ranAttempts.every((b) => b);
+    const diagnostic = {
+      lightweightBytes: attemptSizes.lightweight,
+      playwrightBytes: attemptSizes.playwright,
+      retryBytes: attemptSizes.retry,
+    };
+    return {
+      candidate: null,
+      allCandidates: [],
+      usedAiFallback: false,
+      ...(allBlocked ? { blockedByHost: true } : {}),
+      diagnostic,
+    };
   }
 
   // If top candidate has a very high link score and /contact in path, skip browser verification

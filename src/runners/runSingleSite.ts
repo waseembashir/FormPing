@@ -75,19 +75,40 @@ export async function runSingleSite(
 
   try {
     // ── Step 1: Find contact page ────────────────────────────────────────────
-    const { candidate, allCandidates, usedAiFallback } = await findContactPage(
-      normalizedUrl,
-      browser,
-      config,
-    );
+    const { candidate, allCandidates, usedAiFallback, blockedByHost, diagnostic } =
+      await findContactPage(normalizedUrl, browser, config);
 
     if (!candidate) {
       logger.warn(`No contact page found for ${normalizedUrl}`);
+      const diagNotes: string[] = [];
+      if (diagnostic) {
+        diagNotes.push(`Lightweight fetch returned ${diagnostic.lightweightBytes}B`);
+        if (diagnostic.playwrightBytes !== null)
+          diagNotes.push(`Playwright fetch returned ${diagnostic.playwrightBytes}B`);
+        if (diagnostic.retryBytes !== null)
+          diagNotes.push(`Retry fetch returned ${diagnostic.retryBytes}B`);
+      }
+      if (blockedByHost) {
+        return {
+          ...baseResult,
+          finalStatus: 'warn',
+          reasonCode: 'BLOCKED_BY_HOST',
+          notes: [
+            'Every attempt to load the homepage returned a tiny / stripped response.',
+            ...diagNotes,
+            'Hosting providers like Hostinger, Bluehost, GoDaddy, etc. routinely block cloud-IP traffic. Run FormPing from a residential network for sites with this protection.',
+          ],
+          durationMs: Date.now() - start,
+        };
+      }
       return {
         ...baseResult,
         finalStatus: 'fail',
         reasonCode: 'CONTACT_PAGE_NOT_FOUND',
-        notes: [`Tried ${allCandidates.length} candidate(s), none passed scoring`],
+        notes: [
+          `Tried ${allCandidates.length} candidate(s), none passed scoring`,
+          ...diagNotes,
+        ],
         durationMs: Date.now() - start,
       };
     }
@@ -197,6 +218,28 @@ export async function runSingleSite(
       const { form, allForms } = await findContactForm(page, config);
 
       if (!form) {
+        // If the contact page itself looks like a hosting-provider block
+        // page (tiny response or no real markup), surface BLOCKED_BY_HOST
+        // instead of FORM_NOT_FOUND — way more actionable for the user.
+        const contactPageLooksBlocked =
+          pageHtml.length < 2000 ||
+          (pageHtml.length < 20000 && formTagCount === 0 && !/<nav|<main|<article/i.test(pageHtml));
+        if (contactPageLooksBlocked) {
+          return {
+            ...baseResult,
+            finalUrl: page.url(),
+            captchaDetected,
+            finalStatus: 'warn',
+            reasonCode: 'BLOCKED_BY_HOST',
+            notes: [
+              ...baseResult.notes,
+              `Contact page response from cloud IP is suspiciously thin (${pageHtml.length}B, ${formTagCount} form tags).`,
+              'Hosting providers like Hostinger, Bluehost, GoDaddy, etc. often serve different content to cloud-host IPs.',
+              'Run FormPing from a residential network (your local machine) for sites with this protection.',
+            ],
+            durationMs: Date.now() - start,
+          };
+        }
         return {
           ...baseResult,
           finalUrl: page.url(),
@@ -205,7 +248,7 @@ export async function runSingleSite(
           reasonCode: 'FORM_NOT_FOUND',
           notes: [
             ...baseResult.notes,
-            `${allForms.length} form(s) found but none passed contact form scoring`,
+            `${allForms.length} form(s) found but none passed contact form scoring (contact page was ${pageHtml.length}B, ${formTagCount} <form> tags in HTML)`,
           ],
           durationMs: Date.now() - start,
         };

@@ -12,6 +12,12 @@ const MESSAGES: Record<string, ReasonMessage> = {
     description: 'Could not locate a contact page. The homepage may not link to one, or it uses an unusual URL pattern.',
     severity: 'error',
   },
+  BLOCKED_BY_HOST: {
+    title: 'Site appears to be blocking cloud-host IPs',
+    description:
+      'The site returned a tiny, content-less response — typical of a hosting-provider firewall (Hostinger, Bluehost, GoDaddy, etc. often block cloud IPs by default to prevent scrapers). FormPing works fine from a residential IP — run it locally on your machine for sites with this protection, or whitelist your cloud provider in the site\'s hosting panel.',
+    severity: 'warn',
+  },
   CONTACT_PAGE_AMBIGUOUS: {
     title: 'Multiple candidate contact pages',
     description: 'Several pages scored similarly as contact-page candidates. Enable AI fallback to disambiguate.',
