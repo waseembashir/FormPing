@@ -199,11 +199,33 @@ export async function findContactPage(
   };
 
   let html = await fetchHtml(normalized, config.timeout);
+  let lightweightFailed = false;
   if (!html) {
+    lightweightFailed = true;
     html = await loadHomepageWithPlaywright('lightweight fetch failed');
     if (!html) {
-      return { candidate: null, allCandidates: [], usedAiFallback: false };
+      // Both transport paths failed entirely (no response, timeout, or
+      // connection drop). When a site responds normally to a residential IP
+      // but gives zero response from two different cloud-IP transports, the
+      // overwhelming explanation is an IP-level block from the hosting
+      // provider (Hostinger, Bluehost, etc. silently hold or drop the
+      // connection rather than returning a 403). Surface BLOCKED_BY_HOST so
+      // the UI shows the actionable message instead of a generic failure.
+      return {
+        candidate: null,
+        allCandidates: [],
+        usedAiFallback: false,
+        blockedByHost: true,
+        diagnostic: {
+          lightweightBytes: 0,
+          playwrightBytes: 0,
+          retryBytes: null,
+        },
+      };
     }
+  }
+  if (lightweightFailed) {
+    logger.info('Lightweight fetch failed but Playwright recovered the homepage');
   }
 
   // Step 2: extract and rank links

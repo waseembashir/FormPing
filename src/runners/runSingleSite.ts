@@ -89,12 +89,21 @@ export async function runSingleSite(
           diagNotes.push(`Retry fetch returned ${diagnostic.retryBytes}B`);
       }
       if (blockedByHost) {
+        // Distinguish "tiny/stripped response" from "no response at all" —
+        // both are hosting-provider IP-block signatures, but the user
+        // experience differs and the note should reflect what actually happened.
+        const allZero =
+          diagnostic &&
+          diagnostic.lightweightBytes === 0 &&
+          diagnostic.playwrightBytes === 0;
         return {
           ...baseResult,
           finalStatus: 'warn',
           reasonCode: 'BLOCKED_BY_HOST',
           notes: [
-            'Every attempt to load the homepage returned a tiny / stripped response.',
+            allZero
+              ? 'The site did not respond to any fetch attempt from this cloud IP (connection held open until timeout).'
+              : 'Every attempt to load the homepage returned a tiny / stripped response.',
             ...diagNotes,
             'Hosting providers like Hostinger, Bluehost, GoDaddy, etc. routinely block cloud-IP traffic. Run FormPing from a residential network for sites with this protection.',
           ],
