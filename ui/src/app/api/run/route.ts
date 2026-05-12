@@ -104,6 +104,10 @@ export async function POST(request: NextRequest) {
       });
 
       child.stderr.on('data', (chunk: Buffer) => {
+        // Forward to the parent process's stderr so Railway / Docker /
+        // any log collector captures the CLI's diagnostic output.
+        process.stderr.write(chunk);
+
         const lines = chunk.toString().split('\n').filter(Boolean);
         for (const line of lines) {
           // Only forward INFO/WARN lines (not DEBUG noise)

@@ -78,6 +78,9 @@ export async function POST(request: NextRequest) {
       });
 
       child.stderr.on('data', (chunk: Buffer) => {
+        // Forward to parent stderr so Railway/Docker log collectors see it
+        process.stderr.write(chunk);
+
         const lines = chunk.toString().split('\n').filter(Boolean);
         for (const line of lines) {
           if (/INFO|WARN|ERROR/.test(line)) {
