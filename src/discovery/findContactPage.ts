@@ -172,8 +172,8 @@ export async function findContactPage(
       const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
       ctx.setDefaultNavigationTimeout(config.navigationTimeout);
       const pg = await ctx.newPage();
-      await pg.goto(normalized, { waitUntil: 'load' });
-      // brief settle for JS-rendered navigation menus
+      await pg.goto(normalized, { waitUntil: 'domcontentloaded' });
+      // brief settle for JS-rendered navigation menus — bounded so slow resources don't block us
       await pg.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => { /* ignore */ });
       const html = await pg.content();
       await ctx.close();

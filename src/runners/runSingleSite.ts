@@ -137,11 +137,12 @@ export async function runSingleSite(
     // ── Step 2: Load contact page in Playwright ──────────────────────────────
     const { context, page } = await newPage(browser, config);
     try {
-      // Wait for full 'load' instead of just 'domcontentloaded' — many sites
-      // (Elementor, FluentForms, Webflow, React-rendered SPAs) inject the
-      // contact form via JS that runs after DOMContentLoaded. Without this,
-      // we'd analyze the page before the form even exists in the DOM.
-      await page.goto(candidate.url, { waitUntil: 'load' });
+      // Use 'domcontentloaded' (not 'load') — many sites have slow async
+      // resources (analytics pixels, fonts, third-party widgets) that delay
+      // the 'load' event past our timeout. JS-rendered forms (Elementor,
+      // FluentForms, Webflow, React SPAs) are still handled by the
+      // networkidle + waitForSelector waits below.
+      await page.goto(candidate.url, { waitUntil: 'domcontentloaded' });
 
       // Give the network a brief chance to settle so JS-rendered forms appear.
       // We don't strictly require networkidle (some sites have long-polling
@@ -182,7 +183,7 @@ export async function runSingleSite(
         );
         await new Promise((r) => setTimeout(r, 1500));
         try {
-          await page.reload({ waitUntil: 'load' });
+          await page.reload({ waitUntil: 'domcontentloaded' });
           await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => { /* ignore */ });
           await page.waitForSelector('form', { timeout: 6000 }).catch(() => { /* ignore */ });
           pageHtml = await page.content();
