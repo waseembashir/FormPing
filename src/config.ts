@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   navigationTimeout: 20000,
   batchConcurrency: 2,
   aiProvider: 'off',
+  residentialFallback: false,
   saveScreenshotOnFailure: false,
   saveHtmlSnapshotOnFailure: false,
   prettyJson: false,

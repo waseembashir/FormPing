@@ -116,6 +116,17 @@ export function ConfigPanel({ config, onChange, disabled }: Props) {
         {/* Toggles */}
         <div className="space-y-3 pt-1">
           <Toggle label="Show browser (headed)" checked={config.headed} onChange={v => set('headed', v)} disabled={disabled} />
+          <div>
+            <Toggle
+              label="Residential IP fallback"
+              checked={config.residentialFallback}
+              onChange={v => set('residentialFallback', v)}
+              disabled={disabled}
+            />
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              When a site blocks our cloud IP, retry once via Browserbase residential IP. Requires <span className="font-mono text-slate-400">BROWSERBASE_API_KEY</span> + <span className="font-mono text-slate-400">BROWSERBASE_PROJECT_ID</span>. <span className="text-amber-500/80">Each retry uses paid session-seconds.</span>
+            </p>
+          </div>
         </div>
 
         {/* AI provider — picks between Claude / Gemini / Groq / Ollama / Off */}

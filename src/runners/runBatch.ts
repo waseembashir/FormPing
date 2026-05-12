@@ -1,6 +1,6 @@
 import type { AppConfig, SiteResult } from '../types.js';
 import { launchBrowser, closeBrowser } from '../browser/playwrightClient.js';
-import { runSingleSite } from './runSingleSite.js';
+import { runSingleSiteWithResidentialFallback } from './runSingleSite.js';
 import { logger } from '../utils/logger.js';
 
 /** Run URLs in controlled-concurrency batches sharing one browser instance */
@@ -19,7 +19,7 @@ export async function runBatch(
     for (let i = 0; i < urls.length; i += concurrency) {
       const chunk = urls.slice(i, i + concurrency);
       const chunkResults = await Promise.all(
-        chunk.map((url) => runSingleSite(url, browser, config)),
+        chunk.map((url) => runSingleSiteWithResidentialFallback(url, browser, config)),
       );
       for (let j = 0; j < chunkResults.length; j++) {
         const result = chunkResults[j]!;

@@ -14,6 +14,7 @@ const DEFAULT_CONFIG: RunConfig = {
   headed: false,
   aiProvider: 'off',
   concurrency: 2,
+  residentialFallback: false,
 };
 
 export default function Home() {

@@ -61,6 +61,8 @@ export interface RunConfig {
   /** AI provider for ambiguity disambiguation in form-tester */
   aiProvider: AiProviderSelection;
   concurrency: number;
+  /** Retry BLOCKED_BY_HOST sites once via Browserbase residential IP. Costs money per retry. */
+  residentialFallback: boolean;
 }
 
 export type SSEEvent =

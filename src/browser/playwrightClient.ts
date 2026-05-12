@@ -52,6 +52,56 @@ export async function closePage(context: BrowserContext): Promise<void> {
   await context.close();
 }
 
+/**
+ * Connect to a Browserbase-hosted Chrome instance routed through a residential
+ * IP. Used as a fallback when a site blocks our cloud IP (BLOCKED_BY_HOST).
+ *
+ * Caller MUST close the returned browser when done — Browserbase bills per
+ * session-second, so leaking a session is real money.
+ *
+ * Requires env vars: BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID
+ */
+export async function connectResidentialBrowser(): Promise<Browser> {
+  const apiKey = process.env.BROWSERBASE_API_KEY;
+  const projectId = process.env.BROWSERBASE_PROJECT_ID;
+  if (!apiKey || !projectId) {
+    throw new Error(
+      'BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID must be set to use residential fallback',
+    );
+  }
+
+  logger.info('Creating Browserbase session (residential IP)');
+  const sessionResp = await fetch('https://api.browserbase.com/v1/sessions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-BB-API-Key': apiKey,
+    },
+    body: JSON.stringify({
+      projectId,
+      // `proxies: true` enables Browserbase's built-in residential proxy pool.
+      // Without this we'd be on their datacenter IPs — same problem we have on
+      // Railway, just shifted to a different cloud.
+      proxies: true,
+    }),
+  });
+
+  if (!sessionResp.ok) {
+    const text = await sessionResp.text().catch(() => '');
+    throw new Error(`Browserbase session create failed: ${sessionResp.status} ${text}`);
+  }
+
+  const session = (await sessionResp.json()) as { id: string; connectUrl: string };
+  logger.info(`Browserbase session ${session.id} created — connecting via CDP`);
+  const browser = await chromium.connectOverCDP(session.connectUrl);
+  return browser;
+}
+
+/** Returns true when both Browserbase env vars are present. */
+export function hasBrowserbaseCreds(): boolean {
+  return Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
+}
+
 /** Lightweight fetch using node's built-in — no browser needed */
 export async function fetchHtml(url: string, timeoutMs = 10000): Promise<string | null> {
   try {

@@ -5,7 +5,7 @@ import { DEFAULT_CONFIG, DEFAULT_MONITOR_OPTIONS } from './config.js';
 import type { AppConfig, SiteResult, SubmitMode } from './types.js';
 import type { MonitorMode, MonitorOptions } from './monitor/types.js';
 import type { AiProviderSelection } from './ai/providers.js';
-import { runSingleSite } from './runners/runSingleSite.js';
+import { runSingleSiteWithResidentialFallback } from './runners/runSingleSite.js';
 import { runBatch } from './runners/runBatch.js';
 import { launchBrowser, closeBrowser } from './browser/playwrightClient.js';
 import { readLines, writeJson, fileExists } from './utils/fs.js';
@@ -49,6 +49,7 @@ program
   })
   .option('--ai', 'Shortcut for --ai-provider auto (form-tester AI fallback)', false)
   .option('--ai-provider <id>', 'AI provider: off | auto | anthropic | gemini | groq | ollama', parseAiProvider)
+  .option('--residential-fallback', 'Retry BLOCKED_BY_HOST sites once via Browserbase residential IP (requires BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID env vars; per-session billing)', false)
   .option('--email <email>', 'Test email address to use in forms')
   // ─── Monitor mode options ────────────────────────────────────────────────
   .option('--monitor <mode>', 'Run change monitor: snapshot | compare | watch')
@@ -76,6 +77,7 @@ program
     concurrency?: number;
     ai: boolean;
     aiProvider?: AiProviderSelection;
+    residentialFallback: boolean;
     email?: string;
     monitor?: string;
     pages?: number;
@@ -103,6 +105,7 @@ program
       mode: opts.mode as SubmitMode,
       headless: !opts.headed,
       aiProvider,
+      residentialFallback: opts.residentialFallback,
       prettyJson: opts.jsonPretty,
       outputFile: opts.output,
       ...(opts.timeout ? { timeout: opts.timeout, navigationTimeout: opts.timeout * 1.5 } : {}),
@@ -199,7 +202,7 @@ program
       emitProgress(opts.url, 0, total);
       const browser = await launchBrowser(config);
       try {
-        const result = await runSingleSite(opts.url, browser, config);
+        const result = await runSingleSiteWithResidentialFallback(opts.url, browser, config);
         emitResult(result);
         results = [result];
       } finally {

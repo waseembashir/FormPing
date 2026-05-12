@@ -6,7 +6,12 @@ import { findContactForm } from '../forms/findContactForm.js';
 import { fillForm } from '../forms/fillForm.js';
 import { submitForm } from '../forms/submitForm.js';
 import { detectCaptcha, detectAntiBot } from '../forms/detectSuccess.js';
-import { newPage, closePage } from '../browser/playwrightClient.js';
+import {
+  newPage,
+  closePage,
+  connectResidentialBrowser,
+  hasBrowserbaseCreds,
+} from '../browser/playwrightClient.js';
 import { logger } from '../utils/logger.js';
 
 function makeErrorResult(
@@ -432,5 +437,60 @@ export async function runSingleSite(
       ...makeErrorResult(inputUrl, normalizedUrl, config, err),
       durationMs: Date.now() - start,
     };
+  }
+}
+
+/**
+ * Run a single site, retrying once via a residential-IP browser (Browserbase)
+ * if the direct cloud-IP attempt returns BLOCKED_BY_HOST.
+ *
+ * The retry is gated on three things:
+ *   1. config.residentialFallback === true (user opt-in — it costs money)
+ *   2. hasBrowserbaseCreds() (env vars configured)
+ *   3. first attempt was specifically BLOCKED_BY_HOST (other failures don't
+ *      benefit from an IP change)
+ *
+ * Browserbase sessions are billed per-second, so we always close the
+ * residential browser when done, even if the retry crashes.
+ */
+export async function runSingleSiteWithResidentialFallback(
+  inputUrl: string,
+  browser: Browser,
+  config: AppConfig,
+): Promise<SiteResult> {
+  const result = await runSingleSite(inputUrl, browser, config);
+
+  if (result.reasonCode !== 'BLOCKED_BY_HOST') return result;
+  if (!config.residentialFallback) return result;
+
+  if (!hasBrowserbaseCreds()) {
+    result.notes.push(
+      'Residential fallback enabled but BROWSERBASE_API_KEY / BROWSERBASE_PROJECT_ID not set — retry skipped',
+    );
+    return result;
+  }
+
+  logger.info(`BLOCKED_BY_HOST on direct attempt — retrying ${inputUrl} via Browserbase residential IP`);
+  let residentialBrowser: Browser | null = null;
+  try {
+    residentialBrowser = await connectResidentialBrowser();
+    const retryResult = await runSingleSite(inputUrl, residentialBrowser, config);
+    retryResult.notes = [
+      'Retried via Browserbase residential IP after direct attempt was BLOCKED_BY_HOST',
+      ...retryResult.notes,
+    ];
+    return retryResult;
+  } catch (err) {
+    logger.warn(`Browserbase residential retry failed: ${err}`);
+    result.notes.push(`Residential fallback attempted but failed: ${String(err)}`);
+    return result;
+  } finally {
+    if (residentialBrowser) {
+      try {
+        await residentialBrowser.close();
+      } catch (err) {
+        logger.debug(`Closing residential browser failed: ${err}`);
+      }
+    }
   }
 }

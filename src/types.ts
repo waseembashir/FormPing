@@ -43,6 +43,11 @@ export interface AppConfig {
   /** AI provider selection for form-tester ambiguity resolution.
    * 'off' = deterministic only; 'auto' = first configured in priority order. */
   aiProvider: 'off' | 'auto' | 'anthropic' | 'gemini' | 'groq' | 'ollama';
+  /** When a site is BLOCKED_BY_HOST on the direct cloud-IP attempt, retry once
+   * via Browserbase's residential-IP browser. Requires BROWSERBASE_API_KEY
+   * and BROWSERBASE_PROJECT_ID env vars. Defaults to false because each
+   * residential session is billed. */
+  residentialFallback: boolean;
   saveScreenshotOnFailure: boolean;
   saveHtmlSnapshotOnFailure: boolean;
   outputFile?: string;
