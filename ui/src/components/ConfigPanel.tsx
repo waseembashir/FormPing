@@ -124,7 +124,11 @@ export function ConfigPanel({ config, onChange, disabled }: Props) {
               disabled={disabled}
             />
             <p className="mt-1 text-xs text-slate-500 leading-relaxed">
-              When a site blocks our cloud IP, retry once via Browserbase residential IP. Requires <span className="font-mono text-slate-400">BROWSERBASE_API_KEY</span> + <span className="font-mono text-slate-400">BROWSERBASE_PROJECT_ID</span>. <span className="text-amber-500/80">Each retry uses paid session-seconds.</span>
+              When a site blocks our cloud IP, retry once through a proxy. Configure one of:
+              <br />
+              <span className="font-mono text-slate-400">RESIDENTIAL_PROXY_URL</span> (+ <span className="font-mono text-slate-400">_USER</span>/<span className="font-mono text-slate-400">_PASS</span>) for Webshare/IPRoyal/Smartproxy — <span className="text-emerald-500/80">preferred when both set</span>
+              <br />
+              <span className="font-mono text-slate-400">BROWSERBASE_API_KEY</span> + <span className="font-mono text-slate-400">BROWSERBASE_PROJECT_ID</span> for Browserbase
             </p>
           </div>
         </div>

@@ -102,6 +102,54 @@ export function hasBrowserbaseCreds(): boolean {
   return Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
 }
 
+/**
+ * Launch a fresh Chromium that routes all traffic through a residential
+ * (or datacenter) proxy. Caller MUST close it when done — this is NOT the
+ * shared singleton.
+ *
+ * Env vars:
+ *   RESIDENTIAL_PROXY_URL   — required, e.g. "http://p.webshare.io:80"
+ *                             (bare "host:port" is accepted and prefixed)
+ *   RESIDENTIAL_PROXY_USER  — optional (HTTP Basic auth username)
+ *   RESIDENTIAL_PROXY_PASS  — optional (HTTP Basic auth password)
+ *
+ * Works with any HTTP(S) or SOCKS proxy — tested with Webshare, IPRoyal,
+ * Smartproxy, Bright Data's gateway endpoints.
+ */
+export async function launchProxiedBrowser(config: AppConfig): Promise<Browser> {
+  const rawServer = process.env.RESIDENTIAL_PROXY_URL;
+  if (!rawServer) {
+    throw new Error('RESIDENTIAL_PROXY_URL must be set to use the residential proxy fallback');
+  }
+  // Accept "p.webshare.io:80" or "http://p.webshare.io:80" or "socks5://..."
+  const server = /^(https?|socks[45]?):\/\//i.test(rawServer)
+    ? rawServer
+    : `http://${rawServer}`;
+
+  const username = process.env.RESIDENTIAL_PROXY_USER;
+  const password = process.env.RESIDENTIAL_PROXY_PASS;
+
+  logger.info(`Launching proxied browser via ${server} (auth=${username ? 'yes' : 'no'})`);
+  return await chromium.launch({
+    headless: config.headless,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+    ],
+    proxy: {
+      server,
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {}),
+    },
+  });
+}
+
+/** Returns true when the direct-proxy env var is set. */
+export function hasResidentialProxyCreds(): boolean {
+  return Boolean(process.env.RESIDENTIAL_PROXY_URL);
+}
+
 /** Lightweight fetch using node's built-in — no browser needed */
 export async function fetchHtml(url: string, timeoutMs = 10000): Promise<string | null> {
   try {

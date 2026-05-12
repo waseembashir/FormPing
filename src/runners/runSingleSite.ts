@@ -11,6 +11,8 @@ import {
   closePage,
   connectResidentialBrowser,
   hasBrowserbaseCreds,
+  launchProxiedBrowser,
+  hasResidentialProxyCreds,
 } from '../browser/playwrightClient.js';
 import { logger } from '../utils/logger.js';
 
@@ -441,17 +443,22 @@ export async function runSingleSite(
 }
 
 /**
- * Run a single site, retrying once via a residential-IP browser (Browserbase)
- * if the direct cloud-IP attempt returns BLOCKED_BY_HOST.
+ * Run a single site, retrying once via a residential-IP browser if the direct
+ * cloud-IP attempt returns BLOCKED_BY_HOST.
  *
- * The retry is gated on three things:
- *   1. config.residentialFallback === true (user opt-in — it costs money)
- *   2. hasBrowserbaseCreds() (env vars configured)
- *   3. first attempt was specifically BLOCKED_BY_HOST (other failures don't
- *      benefit from an IP change)
+ * Two transport options, picked in this order:
+ *   1. Direct proxy (RESIDENTIAL_PROXY_URL) — cheaper, simpler, faster. Works
+ *      with Webshare/IPRoyal/Smartproxy/any HTTP-or-SOCKS proxy.
+ *   2. Browserbase (BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID) — hosted
+ *      browser with built-in residential pool, per-session billing.
  *
- * Browserbase sessions are billed per-second, so we always close the
- * residential browser when done, even if the retry crashes.
+ * Gated on:
+ *   - config.residentialFallback === true (user opt-in)
+ *   - At least one transport configured
+ *   - First attempt was specifically BLOCKED_BY_HOST
+ *
+ * The proxied/hosted browser is always closed in `finally` so we don't leak
+ * sessions (Browserbase) or open Chrome processes (direct proxy).
  */
 export async function runSingleSiteWithResidentialFallback(
   inputUrl: string,
@@ -463,26 +470,33 @@ export async function runSingleSiteWithResidentialFallback(
   if (result.reasonCode !== 'BLOCKED_BY_HOST') return result;
   if (!config.residentialFallback) return result;
 
-  if (!hasBrowserbaseCreds()) {
+  const useDirectProxy = hasResidentialProxyCreds();
+  const useBrowserbase = !useDirectProxy && hasBrowserbaseCreds();
+
+  if (!useDirectProxy && !useBrowserbase) {
     result.notes.push(
-      'Residential fallback enabled but BROWSERBASE_API_KEY / BROWSERBASE_PROJECT_ID not set — retry skipped',
+      'Residential fallback enabled but no proxy configured — set RESIDENTIAL_PROXY_URL (Webshare/IPRoyal/etc.) or BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID',
     );
     return result;
   }
 
-  logger.info(`BLOCKED_BY_HOST on direct attempt — retrying ${inputUrl} via Browserbase residential IP`);
+  const providerLabel = useDirectProxy ? 'residential proxy' : 'Browserbase';
+  logger.info(`BLOCKED_BY_HOST on direct attempt — retrying ${inputUrl} via ${providerLabel}`);
+
   let residentialBrowser: Browser | null = null;
   try {
-    residentialBrowser = await connectResidentialBrowser();
+    residentialBrowser = useDirectProxy
+      ? await launchProxiedBrowser(config)
+      : await connectResidentialBrowser();
     const retryResult = await runSingleSite(inputUrl, residentialBrowser, config);
     retryResult.notes = [
-      'Retried via Browserbase residential IP after direct attempt was BLOCKED_BY_HOST',
+      `Retried via ${providerLabel} after direct attempt was BLOCKED_BY_HOST`,
       ...retryResult.notes,
     ];
     return retryResult;
   } catch (err) {
-    logger.warn(`Browserbase residential retry failed: ${err}`);
-    result.notes.push(`Residential fallback attempted but failed: ${String(err)}`);
+    logger.warn(`${providerLabel} retry failed: ${err}`);
+    result.notes.push(`Residential fallback (${providerLabel}) attempted but failed: ${String(err)}`);
     return result;
   } finally {
     if (residentialBrowser) {
