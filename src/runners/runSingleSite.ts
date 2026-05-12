@@ -467,13 +467,31 @@ export async function runSingleSiteWithResidentialFallback(
 ): Promise<SiteResult> {
   const result = await runSingleSite(inputUrl, browser, config);
 
-  if (result.reasonCode !== 'BLOCKED_BY_HOST') return result;
-  if (!config.residentialFallback) return result;
+  // Loud, easy-to-grep diagnostics so we can tell from logs exactly which
+  // branch the wrapper took. Without these we end up reverse-engineering
+  // partial Railway logs to guess whether the retry fired.
+  logger.info(
+    `[RES-FALLBACK] first attempt reasonCode=${result.reasonCode}, residentialFallback=${config.residentialFallback}, ` +
+      `proxyUrl=${process.env.RESIDENTIAL_PROXY_URL ? 'set' : 'unset'}, ` +
+      `proxyUser=${process.env.RESIDENTIAL_PROXY_USER ? 'set' : 'unset'}, ` +
+      `proxyPass=${process.env.RESIDENTIAL_PROXY_PASS ? 'set' : 'unset'}, ` +
+      `browserbase=${hasBrowserbaseCreds() ? 'set' : 'unset'}`,
+  );
+
+  if (result.reasonCode !== 'BLOCKED_BY_HOST') {
+    logger.info('[RES-FALLBACK] skipped: first attempt was not BLOCKED_BY_HOST');
+    return result;
+  }
+  if (!config.residentialFallback) {
+    logger.info('[RES-FALLBACK] skipped: residentialFallback toggle is OFF');
+    return result;
+  }
 
   const useDirectProxy = hasResidentialProxyCreds();
   const useBrowserbase = !useDirectProxy && hasBrowserbaseCreds();
 
   if (!useDirectProxy && !useBrowserbase) {
+    logger.warn('[RES-FALLBACK] skipped: no proxy configured (set RESIDENTIAL_PROXY_URL or BROWSERBASE_API_KEY)');
     result.notes.push(
       'Residential fallback enabled but no proxy configured — set RESIDENTIAL_PROXY_URL (Webshare/IPRoyal/etc.) or BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID',
     );
@@ -481,21 +499,23 @@ export async function runSingleSiteWithResidentialFallback(
   }
 
   const providerLabel = useDirectProxy ? 'residential proxy' : 'Browserbase';
-  logger.info(`BLOCKED_BY_HOST on direct attempt — retrying ${inputUrl} via ${providerLabel}`);
+  logger.info(`[RES-FALLBACK] >>> RETRYING ${inputUrl} via ${providerLabel} <<<`);
 
   let residentialBrowser: Browser | null = null;
   try {
     residentialBrowser = useDirectProxy
       ? await launchProxiedBrowser(config)
       : await connectResidentialBrowser();
+    logger.info(`[RES-FALLBACK] ${providerLabel} browser ready — re-running site`);
     const retryResult = await runSingleSite(inputUrl, residentialBrowser, config);
+    logger.info(`[RES-FALLBACK] retry complete: reasonCode=${retryResult.reasonCode}`);
     retryResult.notes = [
       `Retried via ${providerLabel} after direct attempt was BLOCKED_BY_HOST`,
       ...retryResult.notes,
     ];
     return retryResult;
   } catch (err) {
-    logger.warn(`${providerLabel} retry failed: ${err}`);
+    logger.warn(`[RES-FALLBACK] ${providerLabel} retry threw: ${err}`);
     result.notes.push(`Residential fallback (${providerLabel}) attempted but failed: ${String(err)}`);
     return result;
   } finally {
