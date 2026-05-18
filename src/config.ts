@@ -12,8 +12,11 @@ export const DEFAULT_MONITOR_OPTIONS: MonitorOptions = {
 export const DEFAULT_CONFIG: AppConfig = {
   mode: 'safe',
   headless: true,
-  timeout: 15000,
-  navigationTimeout: 20000,
+  // Modern marketing sites (Elementor / heavy Wordpress / Webflow with fonts
+  // + analytics + chat widgets) routinely need 20-30s for DOMContentLoaded.
+  // Previous 15s/20s defaults were timing out on legitimately-loading pages.
+  timeout: 30000,
+  navigationTimeout: 45000,
   batchConcurrency: 2,
   aiProvider: 'off',
   residentialFallback: false,

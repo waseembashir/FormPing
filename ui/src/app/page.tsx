@@ -10,7 +10,7 @@ import type { SiteResult, RunConfig, SSEEvent, RunProgress } from '@/types';
 const DEFAULT_CONFIG: RunConfig = {
   mode: 'safe',
   email: 'formping-test@example.com',
-  timeout: 15000,
+  timeout: 30000,
   headed: false,
   aiProvider: 'off',
   concurrency: 2,
