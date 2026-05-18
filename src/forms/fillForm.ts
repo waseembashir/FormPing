@@ -651,7 +651,10 @@ export async function fillForm(
   // Wait briefly for invisible CAPTCHAs (Turnstile in auto mode, reCAPTCHA
   // v3) to auto-solve themselves, then read state. We only abort when
   // there's a *pending* widget — auto-solved widgets are submittable.
-  const captchaState = await waitForInvisibleCaptchas(page, form.index, 5000);
+  // 10s window: Turnstile typically resolves in 1-3s on trusted browsers
+  // but can take longer on first render or slow connections. Most pages
+  // without any CAPTCHA return immediately (loop exits on first check).
+  const captchaState = await waitForInvisibleCaptchas(page, form.index, 10000);
   const captchaPending =
     captchaState.turnstile === 'pending' ||
     captchaState.recaptcha === 'pending' ||

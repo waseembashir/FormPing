@@ -322,13 +322,29 @@ export async function runSingleSite(
       }
 
       if (fillCaptcha) {
+        const pendingTypes = (Object.entries(captchaState) as Array<[string, string]>)
+          .filter(([_, v]) => v === 'pending')
+          .map(([k]) => k);
+        const captchaSummary =
+          pendingTypes.length === 1
+            ? `${pendingTypes[0]} (interactive challenge required)`
+            : `${pendingTypes.join(' + ')} (interactive challenges required)`;
+        const stepLabel =
+          stepsTraversed > 1
+            ? `reached step ${stepsTraversed} (final), filled ${filledFields.length} field${filledFields.length === 1 ? '' : 's'} across all steps`
+            : `${filledFields.length} field${filledFields.length === 1 ? '' : 's'} filled before CAPTCHA was detected`;
+
         return {
           ...baseResult,
           finalUrl: page.url(),
           captchaDetected: true,
           finalStatus: 'fail',
           reasonCode: 'CAPTCHA_DETECTED',
-          notes: ['CAPTCHA detected during form fill — submission aborted'],
+          notes: [
+            ...baseResult.notes,
+            `${stepLabel} — but ${captchaSummary} blocked submission.`,
+            'Headless automation cannot pass interactive CAPTCHAs by design. To get a successful end-to-end run: disable CAPTCHA on the target site in staging, use a paid CAPTCHA-solving service (Browserbase Developer Plan, 2Captcha, NopeCHA), or test against a non-CAPTCHA-protected environment.',
+          ],
           durationMs: Date.now() - start,
         };
       }
