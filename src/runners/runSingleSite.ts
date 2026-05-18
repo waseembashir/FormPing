@@ -501,13 +501,25 @@ export async function runSingleSiteWithResidentialFallback(
   const providerLabel = useDirectProxy ? 'residential proxy' : 'Browserbase';
   logger.info(`[RES-FALLBACK] >>> RETRYING ${inputUrl} via ${providerLabel} <<<`);
 
+  // Residential proxies add 10-30s of real latency per request — far-away exits
+  // (e.g. ZA → US sites) routinely push page.goto past the 22.5s default. Bump
+  // both timeouts for the retry only, so direct attempts stay snappy.
+  const proxyConfig: AppConfig = {
+    ...config,
+    timeout: Math.max(config.timeout, 30000),
+    navigationTimeout: Math.max(config.navigationTimeout, 60000),
+  };
+
   let residentialBrowser: Browser | null = null;
   try {
     residentialBrowser = useDirectProxy
-      ? await launchProxiedBrowser(config)
+      ? await launchProxiedBrowser(proxyConfig)
       : await connectResidentialBrowser();
-    logger.info(`[RES-FALLBACK] ${providerLabel} browser ready — re-running site`);
-    const retryResult = await runSingleSite(inputUrl, residentialBrowser, config);
+    logger.info(
+      `[RES-FALLBACK] ${providerLabel} browser ready — re-running site ` +
+        `(timeout=${proxyConfig.timeout}ms, navigationTimeout=${proxyConfig.navigationTimeout}ms)`,
+    );
+    const retryResult = await runSingleSite(inputUrl, residentialBrowser, proxyConfig);
     logger.info(`[RES-FALLBACK] retry complete: reasonCode=${retryResult.reasonCode}`);
     retryResult.notes = [
       `Retried via ${providerLabel} after direct attempt was BLOCKED_BY_HOST`,
