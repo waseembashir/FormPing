@@ -90,11 +90,14 @@ export interface CaptchaState {
 }
 
 async function checkCaptchaState(page: Page): Promise<CaptchaState> {
+  // NOTE: arrow function (not named function declaration) — tsx/esbuild
+  // wraps named functions with __name() helper calls which don't exist in
+  // the browser eval context, causing ReferenceError when serialized.
   return await page.evaluate(() => {
-    function stateFor(
+    const stateFor = (
       widgetSelector: string,
       tokenSelector: string,
-    ): 'absent' | 'pending' | 'solved' {
+    ): 'absent' | 'pending' | 'solved' => {
       const widget = document.querySelector(widgetSelector);
       const tokenEl = document.querySelector(tokenSelector) as
         | HTMLInputElement
@@ -103,7 +106,7 @@ async function checkCaptchaState(page: Page): Promise<CaptchaState> {
       if (!widget && !tokenEl) return 'absent';
       const token = tokenEl?.value ?? '';
       return token.trim().length > 0 ? 'solved' : 'pending';
-    }
+    };
     return {
       turnstile: stateFor(
         '.cf-turnstile, #cf-turnstile, [data-sitekey][class*="turnstile"], iframe[src*="turnstile"]',
