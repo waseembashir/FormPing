@@ -90,37 +90,45 @@ export interface CaptchaState {
 }
 
 async function checkCaptchaState(page: Page): Promise<CaptchaState> {
-  // NOTE: arrow function (not named function declaration) — tsx/esbuild
-  // wraps named functions with __name() helper calls which don't exist in
-  // the browser eval context, causing ReferenceError when serialized.
+  // CRITICAL: no function-to-variable assignment inside this evaluate body.
+  // tsx/esbuild's keep-names (default on) wraps BOTH `function foo()` AND
+  // `const foo = () => {}` with __name(fn, "foo") calls that fail in the
+  // browser eval context. So everything must be fully inline — no helpers,
+  // no destructured assignment of arrow functions, no const-arrow patterns.
+  // The repetition below is intentional.
   return await page.evaluate(() => {
-    const stateFor = (
-      widgetSelector: string,
-      tokenSelector: string,
-    ): 'absent' | 'pending' | 'solved' => {
-      const widget = document.querySelector(widgetSelector);
-      const tokenEl = document.querySelector(tokenSelector) as
-        | HTMLInputElement
-        | HTMLTextAreaElement
-        | null;
-      if (!widget && !tokenEl) return 'absent';
-      const token = tokenEl?.value ?? '';
-      return token.trim().length > 0 ? 'solved' : 'pending';
-    };
-    return {
-      turnstile: stateFor(
-        '.cf-turnstile, #cf-turnstile, [data-sitekey][class*="turnstile"], iframe[src*="turnstile"]',
-        'input[name="cf-turnstile-response"]',
-      ),
-      recaptcha: stateFor(
-        '.g-recaptcha, iframe[src*="recaptcha"], iframe[src*="recaptcha/api2"]',
-        'textarea[name="g-recaptcha-response"]',
-      ),
-      hcaptcha: stateFor(
-        '.h-captcha, iframe[src*="hcaptcha.com"]',
-        'textarea[name="h-captcha-response"]',
-      ),
-    };
+    // Turnstile
+    const tW = document.querySelector(
+      '.cf-turnstile, #cf-turnstile, [data-sitekey][class*="turnstile"], iframe[src*="turnstile"]',
+    );
+    const tE = document.querySelector(
+      'input[name="cf-turnstile-response"]',
+    ) as HTMLInputElement | null;
+    const tV = tE?.value ?? '';
+    const turnstile: 'absent' | 'pending' | 'solved' =
+      !tW && !tE ? 'absent' : tV.trim().length > 0 ? 'solved' : 'pending';
+
+    // reCAPTCHA
+    const rW = document.querySelector(
+      '.g-recaptcha, iframe[src*="recaptcha"], iframe[src*="recaptcha/api2"]',
+    );
+    const rE = document.querySelector(
+      'textarea[name="g-recaptcha-response"]',
+    ) as HTMLTextAreaElement | null;
+    const rV = rE?.value ?? '';
+    const recaptcha: 'absent' | 'pending' | 'solved' =
+      !rW && !rE ? 'absent' : rV.trim().length > 0 ? 'solved' : 'pending';
+
+    // hCaptcha
+    const hW = document.querySelector('.h-captcha, iframe[src*="hcaptcha.com"]');
+    const hE = document.querySelector(
+      'textarea[name="h-captcha-response"]',
+    ) as HTMLTextAreaElement | null;
+    const hV = hE?.value ?? '';
+    const hcaptcha: 'absent' | 'pending' | 'solved' =
+      !hW && !hE ? 'absent' : hV.trim().length > 0 ? 'solved' : 'pending';
+
+    return { turnstile, recaptcha, hcaptcha };
   });
 }
 
