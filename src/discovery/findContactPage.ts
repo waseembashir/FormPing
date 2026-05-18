@@ -137,7 +137,9 @@ export interface FindContactPageResult {
   };
 }
 
-const BLOCK_PAGE_MARKERS = /(?:access\s+denied|forbidden|blocked|429\s+too\s+many|just\s+a\s+moment|please\s+enable\s+javascript|cloudflare|bot\s+detection|verifying.{0,30}browser|hostinger.{0,30}protect|sucuri|webserver\s+is\s+returning\s+an\s+unknown\s+error)/i;
+// Specific challenge-page text — NOT bare brand names like "cloudflare" or
+// "sucuri", which appear in normal pages that use those CDNs.
+const BLOCK_PAGE_MARKERS = /(?:access\s+denied|429\s+too\s+many|just\s+a\s+moment\.\.\.|please\s+enable\s+javascript\s+and\s+cookies|cloudflare\s+ray\s+id:|attention\s+required.*cloudflare|sucuri\s+website\s+firewall|hostinger.{0,30}protect|webserver\s+is\s+returning\s+an\s+unknown\s+error|verifying.{0,30}browser|checking\s+your\s+browser\s+before\s+accessing|sorry,\s+you\s+have\s+been\s+blocked)/i;
 
 /** Returns true when the HTML looks like a hosting-provider error/block page
  * rather than a real site response. Combines three signals to avoid false

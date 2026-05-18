@@ -140,6 +140,13 @@ export async function submitForm(
       } catch {
         // Response body unavailable (CORS, navigation closed it, etc.) — leave defaults
       }
+      // HTTP-level signal: any 4xx/5xx on a POST to the form's origin is the
+      // server explicitly refusing the submission (anti-spam plugin, WAF
+      // rule, validation error, nonce mismatch, etc.). Real-world example:
+      // Hostinger returns 402 from wp-admin/admin-ajax.php for rejected
+      // FluentForms submissions. Promote to failure unless the JSON body
+      // somehow indicated success (rare but possible).
+      if (status >= 400 && outcome !== 'success') outcome = 'failure';
       captured.push({ url, status, isJson, bodyPreview, outcome });
     })();
     pendingBodyReads.push(bodyRead);

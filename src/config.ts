@@ -78,18 +78,25 @@ export const DEFAULT_CONFIG: AppConfig = {
     /verify\s+you('re|\s+are)\s+human/i,
   ],
 
+  // Patterns that must appear in the HTML/title for a page to be considered
+  // a bot challenge. We deliberately do NOT match bare brand names like
+  // "cloudflare" or "akamai" — those appear on every site using those CDNs.
+  // Match the *challenge page text* instead.
   antiBotPatterns: [
-    /cloudflare/i,
-    /bot\s+detection/i,
-    /access\s+denied/i,
+    /just\s+a\s+moment\.\.\./i,
+    /checking\s+your\s+browser\s+before\s+accessing/i,
+    /please\s+enable\s+javascript\s+and\s+cookies/i,
+    /attention\s+required.*cloudflare/i,
+    /cloudflare\s+ray\s+id:/i,
+    /sorry,\s+you\s+have\s+been\s+blocked/i,
+    /please\s+complete\s+the\s+security\s+check/i,
+    /sucuri\s+website\s+firewall.*access\s+denied/i,
+    /your\s+request\s+has\s+been\s+blocked.*(?:sucuri|akamai|reference)/i,
+    /access\s+denied.*reference\s+#/i,
     /403\s+forbidden/i,
-    /challenge[-_]?platform/i,
-    /ray\s+id/i,
-    /cf[-_]ray/i,
-    /just\s+a\s+moment/i,
     /ddos[-_]?guard/i,
-    /sucuri/i,
-    /akamai/i,
+    /challenge[-_]?platform/i,
+    /bot\s+detection/i,
   ],
 
   contactPathPatterns: [
