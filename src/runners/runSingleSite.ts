@@ -416,6 +416,46 @@ export async function runSingleSite(
         };
       }
 
+      // ── AJAX response verdict ──────────────────────────────────────────────
+      // Many form plugins submit via AJAX and never trigger a URL change or
+      // visible success element. The submitForm wrapper inspected the XHR
+      // response bodies for common success/failure JSON shapes — use that as
+      // a definitive signal when neither URL nor DOM detection fired.
+      if (submitResult.ajaxOutcome === 'success') {
+        return {
+          ...baseResult,
+          finalUrl: submitResult.finalUrl,
+          redirectUrl,
+          inlineSuccessDetected: true,
+          submissionResult: 'success',
+          finalStatus: 'pass',
+          reasonCode: 'INLINE_SUCCESS_ONLY',
+          notes: [
+            ...baseResult.notes,
+            ...submitResult.notes,
+            'Success detected via AJAX response body (no URL change or visible success element)',
+          ],
+          durationMs: Date.now() - start,
+        };
+      }
+
+      if (submitResult.ajaxOutcome === 'failure') {
+        return {
+          ...baseResult,
+          finalUrl: submitResult.finalUrl,
+          redirectUrl,
+          submissionResult: 'submit_failed',
+          finalStatus: 'fail',
+          reasonCode: 'SUBMIT_FAILED',
+          notes: [
+            ...baseResult.notes,
+            ...submitResult.notes,
+            'AJAX response body explicitly reported failure — submission was rejected server-side (likely spam filter, validation error, or nonce mismatch)',
+          ],
+          durationMs: Date.now() - start,
+        };
+      }
+
       return {
         ...baseResult,
         finalUrl: submitResult.finalUrl,

@@ -28,8 +28,11 @@ export const DEFAULT_CONFIG: AppConfig = {
     email: 'formping-test@example.com',
     phone: '9999999999',
     company: 'Test Company',
+    // Natural-sounding so Akismet and similar anti-spam filters don't auto-trash it.
+    // Earlier wording ("automated test submission used to verify...") was getting
+    // silently filtered server-side on WordPress/FluentForms sites.
     message:
-      'This is an automated test submission used to verify contact form thank-you page redirection.',
+      'Hi team, just sending a quick note through your contact form to make sure submissions are coming through on your end. Could you reply when you get a chance? Thanks!',
   },
 
   thankYouUrlPatterns: [
