@@ -69,6 +69,12 @@ const MESSAGES: Record<string, ReasonMessage> = {
       'The server returned a status code (402/403/429) consistent with an anti-spam or WAF block — typically Akismet, Wordfence, FluentForms honeypot, or your host\'s built-in protection. The form is doing its job by rejecting suspicious traffic. FormPing cannot bypass this: disable the anti-spam plugin on the target site, or whitelist the residential proxy IPs in the site\'s firewall.',
     severity: 'warn',
   },
+  PROXY_REJECTED_POST: {
+    title: 'Proxy provider blocked the submission',
+    description:
+      'The form submission never reached the target site — your residential proxy provider refused to forward the POST. This is usually a billing/KYC policy (e.g. Bright Data\'s trial blocks POSTs until KYC is completed), not the site\'s fault. Fix: complete the proxy provider\'s KYC verification, upgrade to a paid plan that allows POSTs, or switch to a different residential proxy provider.',
+    severity: 'warn',
+  },
   VALIDATION_ERROR: {
     title: 'Form rejected submission',
     description: 'The form displayed validation errors after submission. Field values may be incorrect for this site.',

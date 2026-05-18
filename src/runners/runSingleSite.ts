@@ -284,8 +284,20 @@ export async function runSingleSite(
         skippedFields,
         errors: fillErrors,
         captchaDetected: fillCaptcha,
+        honeypotsSkipped,
+        honeypotProvider,
+        honeypotReason,
       } = await fillForm(page, form, config);
       baseResult.errors.push(...fillErrors);
+
+      // Surface honeypot detection in the result notes so users see the AI
+      // contributed to a clean submission. Helps users trust the AI feature.
+      if (honeypotsSkipped.length > 0) {
+        baseResult.notes.push(
+          `AI (${honeypotProvider}) flagged ${honeypotsSkipped.length} likely honeypot field(s) and skipped them: ${honeypotsSkipped.join(', ')}` +
+            (honeypotReason ? ` — ${honeypotReason}` : ''),
+        );
+      }
 
       if (fillCaptcha) {
         return {
@@ -469,6 +481,50 @@ export async function runSingleSite(
             'Required fields may be missing values, or a value didn\'t match the expected format.';
         }
 
+        // AI diagnosis — picks the failing response with the most diagnostic
+        // value (largest body or non-2xx status) and asks AI to categorize.
+        // Can promote a misclassified "antispam" to "proxy_block" when the
+        // body actually contains Bright Data / Luminati / proxy provider
+        // error signatures (which we can't reliably match with a regex without
+        // false positives).
+        const aiNotes: string[] = [];
+        if (config.aiProvider !== 'off' && submitResult.capturedResponses.length > 0) {
+          // Pick the most informative failing response — one with a body and
+          // a 4xx/5xx status, preferring those with longer bodies (more signal).
+          const failing = submitResult.capturedResponses
+            .filter((r) => r.status >= 400 && r.bodyPreview)
+            .sort((a, b) => b.bodyPreview.length - a.bodyPreview.length);
+          const target = failing[0];
+
+          if (target) {
+            const { diagnoseSubmitFailure } = await import('../ai/aiClassifier.js');
+            const diagnosis = await diagnoseSubmitFailure(
+              target.status,
+              target.url,
+              target.bodyPreview,
+              config.aiProvider,
+            );
+
+            if (diagnosis) {
+              aiNotes.push(
+                `AI (${diagnosis.provider}) diagnosed failure as "${diagnosis.category}": ${diagnosis.explanation}`,
+              );
+
+              // Promote to more specific reason code when AI is highly
+              // confident this is a proxy block (key insight that status
+              // code alone can't reveal — both proxy and anti-spam often
+              // use 402/403).
+              if (diagnosis.category === 'proxy_block') {
+                reasonCode = 'PROXY_REJECTED_POST';
+                explanation =
+                  'The proxy provider (not the target site) refused to forward the POST request. ' +
+                  'See AI diagnosis below for specifics. Fix on the proxy side: complete KYC, ' +
+                  'upgrade to a paid plan, or switch providers.';
+              }
+            }
+          }
+        }
+
         return {
           ...baseResult,
           finalUrl: submitResult.finalUrl,
@@ -480,6 +536,7 @@ export async function runSingleSite(
             ...baseResult.notes,
             ...submitResult.notes,
             explanation,
+            ...aiNotes,
           ],
           durationMs: Date.now() - start,
         };

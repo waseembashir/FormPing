@@ -47,6 +47,12 @@ export interface FillResult {
   skippedFields: string[];
   errors: string[];
   captchaDetected: boolean;
+  /** Fields skipped because AI honeypot detection flagged them. */
+  honeypotsSkipped: string[];
+  /** AI provider that produced the honeypot verdict, if any. */
+  honeypotProvider?: string;
+  /** One-line AI explanation of the honeypot verdict, if any. */
+  honeypotReason?: string;
 }
 
 /** Attribute-selector-safe quoting — handles field names like names[first_name] */
@@ -125,18 +131,66 @@ export async function fillForm(
   if (hasCaptcha) {
     captchaDetected = true;
     logger.warn('CAPTCHA detected on form — will not fill');
-    return { filledFields, skippedFields, errors, captchaDetected };
+    return {
+      filledFields,
+      skippedFields,
+      errors,
+      captchaDetected,
+      honeypotsSkipped: [],
+    };
   }
 
   logger.debug(`Filling ${fields.length} visible field(s) in form[${formIndex}]`);
+
+  // AI honeypot pre-check — flag suspicious fields BEFORE filling. Many forms
+  // have visible-but-bot-trap fields (named "url", "homepage", "email_confirm"
+  // when a regular email field exists) that silently mark submissions as spam
+  // when filled. The detector only runs when AI is configured AND the form has
+  // ≥4 fields (low-field forms rarely have honeypots).
+  let honeypotKeys = new Set<string>();
+  let honeypotProvider: string | undefined;
+  let honeypotReason: string | undefined;
+  if (config.aiProvider !== 'off') {
+    const { detectHoneypots } = await import('../ai/aiClassifier.js');
+    const candidates = fields
+      .filter((f) => !f.isCheckbox && !f.isRadio && !f.isSelect)
+      .map((f) => ({
+        key: f.id || f.name,
+        name: f.name,
+        id: f.id,
+        type: f.type,
+        label: f.label,
+        placeholder: f.placeholder,
+        required: f.required,
+      }))
+      .filter((c) => c.key); // need a key to skip with
+
+    const verdict = await detectHoneypots(candidates, page.url(), config.aiProvider);
+    if (verdict && verdict.skipKeys.length > 0) {
+      honeypotKeys = new Set(verdict.skipKeys);
+      honeypotProvider = verdict.provider;
+      honeypotReason = verdict.reasoning;
+    }
+  }
 
   // Scope all field lookups under this specific form instance — robust even
   // when the form is nested deep or when field names contain brackets.
   const formLocator = page.locator('form').nth(formIndex);
 
+  const honeypotsSkipped: string[] = [];
+
   for (const field of fields) {
     const role = classifyField(field.name, field.id, field.placeholder, field.label, field.type);
     const fieldKey = field.name || field.id || field.type;
+
+    // AI-flagged honeypot — skip entirely. Filling these is a guaranteed
+    // silent rejection by anti-spam plugins.
+    const aiKey = field.id || field.name;
+    if (aiKey && honeypotKeys.has(aiKey)) {
+      honeypotsSkipped.push(fieldKey);
+      skippedFields.push(`${field.type}:${fieldKey}(ai-honeypot)`);
+      continue;
+    }
 
     // Prefer id-based lookup, fall back to name-based. Both use attribute
     // selectors so they handle special chars (brackets, dots, colons) safely.
@@ -206,5 +260,13 @@ export async function fillForm(
     }
   }
 
-  return { filledFields, skippedFields, errors, captchaDetected };
+  return {
+    filledFields,
+    skippedFields,
+    errors,
+    captchaDetected,
+    honeypotsSkipped,
+    ...(honeypotProvider ? { honeypotProvider } : {}),
+    ...(honeypotReason ? { honeypotReason } : {}),
+  };
 }

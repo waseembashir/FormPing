@@ -248,3 +248,181 @@ Reply with ONLY JSON, no prose:
     provider: result.provider.modelLabel,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HONEYPOT DETECTION — ask AI to flag fields that look like spam traps
+// before fillForm tries to fill them. Honeypots are often visible (not
+// display:none) but have deceptive names — "email_confirm", "url",
+// "homepage", labels like "leave this empty", etc. Filling them is a
+// guaranteed silent submission rejection.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface HoneypotCandidate {
+  /** Stable identifier — name or id, whatever we'd use to skip during fill */
+  key: string;
+  name: string;
+  id: string;
+  type: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+}
+
+export interface HoneypotDetectionResult {
+  skipKeys: string[];
+  reasoning: string;
+  provider: string;
+}
+
+/**
+ * Ask AI to identify likely honeypot fields. Returns the set of field keys
+ * (name or id) that should NOT be filled. Returns null when AI is off,
+ * unavailable, or returns malformed output — caller falls through to the
+ * default "fill everything visible" behavior.
+ */
+export async function detectHoneypots(
+  fields: HoneypotCandidate[],
+  formContext: string,
+  selection: AiProviderSelection,
+): Promise<HoneypotDetectionResult | null> {
+  if (selection === 'off' || fields.length === 0) return null;
+
+  // Honeypot detection is most useful when there are *more* fields than a
+  // typical contact form. If the form has 4 fields, the cost/benefit is
+  // marginal; if it has 9, there's a much higher chance some are traps.
+  if (fields.length < 4) return null;
+
+  const prompt = `You are a QA assistant analyzing a contact form for spam-trap (honeypot) fields. The form is at "${formContext}".
+
+A honeypot is a field designed to be filled ONLY by bots — humans never see or fill them. Tell-tale signs:
+- Deceptive field name suggesting it's something other than what it is (e.g., name="url" or "homepage" or "website" on a contact form that doesn't ask for a URL)
+- Field that asks for already-asked-for info (e.g., name="email_confirm" alongside a regular email field)
+- Label literally says "leave this empty" or "do not fill"
+- A "subject" or "phone" field appearing TWICE with one being unlabeled
+
+Below is the list of visible fillable fields. Identify which (if any) look like honeypots. Be conservative — only flag fields that are highly suspicious. A normal contact form has ~4 legitimate fields (name, email, phone, message); extra fields beyond that are the typical honeypot zone.
+
+Fields:
+${fields.map((f, i) => `${i}. key="${f.key}" name="${f.name}" id="${f.id}" type=${f.type} label="${f.label.slice(0, 40)}" placeholder="${f.placeholder.slice(0, 40)}" required=${f.required}`).join('\n')}
+
+Reply with ONLY JSON, no prose:
+{"honeypots": ["<key1>", "<key2>"], "reason": "<one short sentence explaining why these were flagged, or 'none detected' if empty>"}`;
+
+  const result = await tryAiCall(selection, prompt, { maxTokens: 250, temperature: 0 });
+  if (!result) return null;
+
+  const parsed = parseJsonSafely<{ honeypots?: string[]; reason?: string }>(result.text);
+  if (!parsed?.reason || !Array.isArray(parsed.honeypots)) {
+    logger.warn(`AI honeypot-detect returned malformed JSON: ${result.text.slice(0, 120)}`);
+    return null;
+  }
+
+  // Sanity: every returned key must exist in the input list
+  const validKeys = new Set(fields.map((f) => f.key));
+  const skipKeys = parsed.honeypots.filter((k) => validKeys.has(k));
+  if (skipKeys.length !== parsed.honeypots.length) {
+    const dropped = parsed.honeypots.filter((k) => !validKeys.has(k));
+    logger.warn(`AI honeypot-detect returned unknown keys, dropping: ${dropped.join(', ')}`);
+  }
+
+  if (skipKeys.length > 0) {
+    logger.info(
+      `AI (${result.provider.modelLabel}) flagged ${skipKeys.length} likely honeypot field(s): ${skipKeys.join(', ')} — ${parsed.reason}`,
+    );
+  } else {
+    logger.debug(`AI honeypot-detect: no honeypots in ${fields.length}-field form`);
+  }
+
+  return {
+    skipKeys,
+    reasoning: parsed.reason,
+    provider: result.provider.modelLabel,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUBMIT-FAILURE DIAGNOSIS — when a form submit response indicates failure,
+// ask AI to categorize WHY based on the response status code and body.
+// Distinguishes proxy errors (Bright Data 402 etc.), server-side anti-spam
+// (Akismet/Wordfence), validation errors, and rate limits.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type SubmitFailureCategory =
+  | 'proxy_block'      // proxy provider refused (Bright Data, IPRoyal, etc.)
+  | 'antispam'         // server-side anti-spam (Akismet, Wordfence, honeypot)
+  | 'validation'       // missing/invalid field
+  | 'rate_limit'       // 429 / too many requests
+  | 'auth'             // session/nonce mismatch
+  | 'unknown';
+
+export interface SubmitFailureDiagnosis {
+  category: SubmitFailureCategory;
+  explanation: string;
+  provider: string;
+}
+
+/**
+ * Ask AI to categorize a failed form submission. Caller already knows the
+ * status code; AI adds semantic understanding from the response body.
+ * Returns null when AI is off, unavailable, or returns malformed output.
+ */
+export async function diagnoseSubmitFailure(
+  status: number,
+  url: string,
+  bodyPreview: string,
+  selection: AiProviderSelection,
+): Promise<SubmitFailureDiagnosis | null> {
+  if (selection === 'off') return null;
+  if (!bodyPreview || bodyPreview.length === 0) return null;
+
+  // Trim body to keep prompt small — first 600 chars is plenty for diagnosis
+  const trimmedBody = bodyPreview.slice(0, 600).replace(/\s+/g, ' ').trim();
+
+  const prompt = `You are a QA assistant diagnosing why a form submission failed.
+
+The form's submit POST returned HTTP ${status} from: ${url}
+
+Response body (truncated):
+${trimmedBody}
+
+Categorize the failure into ONE of these categories:
+- "proxy_block" — the response is from a proxy provider (Bright Data, Luminati, IPRoyal, Webshare, etc.) rejecting the request, NOT from the target site itself. Tell-tale: mentions of "brightdata.com", "luminati", "x-brd-", "residential failed", "KYC required", "policy_", etc.
+- "antispam" — the target site's anti-spam (Akismet, Wordfence, FluentForms honeypot, hosting WAF) rejected as spam. Tell-tale: mentions of "spam", "blocked", "captcha", or site-firewall language; status 402/403/429 with no proxy indicators.
+- "validation" — required field missing or value invalid. Tell-tale: status 400/422, JSON with "errors"/"validation"/"required" mentions.
+- "rate_limit" — too many requests. Tell-tale: status 429, retry-after headers, "rate limit" wording.
+- "auth" — session/nonce/csrf mismatch. Tell-tale: "expired", "invalid token", "nonce", "session", status 401/403 with token references.
+- "unknown" — none of the above clearly fits.
+
+Reply with ONLY JSON, no prose:
+{"category": "<one of the categories above>", "explanation": "<one short sentence describing what likely happened, suitable for showing to a developer>"}`;
+
+  const result = await tryAiCall(selection, prompt, { maxTokens: 200, temperature: 0 });
+  if (!result) return null;
+
+  const parsed = parseJsonSafely<{ category?: string; explanation?: string }>(result.text);
+  if (!parsed?.category || !parsed?.explanation) {
+    logger.warn(`AI submit-diagnose returned malformed JSON: ${result.text.slice(0, 120)}`);
+    return null;
+  }
+  const validCategories: SubmitFailureCategory[] = [
+    'proxy_block',
+    'antispam',
+    'validation',
+    'rate_limit',
+    'auth',
+    'unknown',
+  ];
+  if (!validCategories.includes(parsed.category as SubmitFailureCategory)) {
+    logger.warn(`AI submit-diagnose returned unknown category: ${parsed.category}`);
+    return null;
+  }
+
+  logger.info(
+    `AI (${result.provider.modelLabel}) diagnosed submit failure as ${parsed.category}: ${parsed.explanation}`,
+  );
+  return {
+    category: parsed.category as SubmitFailureCategory,
+    explanation: parsed.explanation,
+    provider: result.provider.modelLabel,
+  };
+}
