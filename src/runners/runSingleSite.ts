@@ -440,17 +440,46 @@ export async function runSingleSite(
       }
 
       if (submitResult.ajaxOutcome === 'failure') {
+        // Pick the most specific reason code based on the HTTP status of
+        // the failing response. Different status codes tell different
+        // stories — surfacing the right one means the UI can render an
+        // accurate banner instead of a generic "submit failed".
+        const statuses = submitResult.capturedResponses.map((r) => r.status);
+        const hasAntiSpamStatus = statuses.some((s) => s === 402 || s === 403 || s === 429);
+        const hasValidationStatus = statuses.some((s) => s === 400 || s === 422);
+
+        let reasonCode: SiteResult['reasonCode'] = 'SUBMIT_FAILED';
+        let explanation =
+          'AJAX response explicitly reported failure — submission was rejected server-side.';
+
+        if (hasAntiSpamStatus) {
+          reasonCode = 'SUBMISSION_BLOCKED_BY_ANTISPAM';
+          const statusStr = statuses.filter((s) => s === 402 || s === 403 || s === 429).join('/');
+          explanation =
+            `Server returned HTTP ${statusStr} for the form submission — this is the signature of an anti-spam ` +
+            `or WAF block (Akismet, Wordfence, Hostinger anti-spam, FluentForms honeypot, etc.). ` +
+            'The site is actively protecting against automated submissions. ' +
+            'To get the submission through: disable the relevant anti-spam plugin on the target site, ' +
+            'or whitelist FormPing\'s residential proxy IPs in the site\'s firewall.';
+        } else if (hasValidationStatus) {
+          reasonCode = 'VALIDATION_ERROR';
+          const statusStr = statuses.filter((s) => s === 400 || s === 422).join('/');
+          explanation =
+            `Server returned HTTP ${statusStr} for the form submission — typically a validation error. ` +
+            'Required fields may be missing values, or a value didn\'t match the expected format.';
+        }
+
         return {
           ...baseResult,
           finalUrl: submitResult.finalUrl,
           redirectUrl,
           submissionResult: 'submit_failed',
           finalStatus: 'fail',
-          reasonCode: 'SUBMIT_FAILED',
+          reasonCode,
           notes: [
             ...baseResult.notes,
             ...submitResult.notes,
-            'AJAX response body explicitly reported failure — submission was rejected server-side (likely spam filter, validation error, or nonce mismatch)',
+            explanation,
           ],
           durationMs: Date.now() - start,
         };

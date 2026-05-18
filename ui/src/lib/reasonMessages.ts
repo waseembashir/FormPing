@@ -60,8 +60,14 @@ const MESSAGES: Record<string, ReasonMessage> = {
   },
   SUBMIT_FAILED: {
     title: 'Submit failed',
-    description: 'The form was filled but the submit button could not be clicked.',
+    description: 'The form was filled but the submission could not complete. The submit button may be unclickable, or the server returned an error response that did not match a known anti-spam or validation pattern.',
     severity: 'error',
+  },
+  SUBMISSION_BLOCKED_BY_ANTISPAM: {
+    title: 'Anti-spam blocked the submission',
+    description:
+      'The server returned a status code (402/403/429) consistent with an anti-spam or WAF block — typically Akismet, Wordfence, FluentForms honeypot, or your host\'s built-in protection. The form is doing its job by rejecting suspicious traffic. FormPing cannot bypass this: disable the anti-spam plugin on the target site, or whitelist the residential proxy IPs in the site\'s firewall.',
+    severity: 'warn',
   },
   VALIDATION_ERROR: {
     title: 'Form rejected submission',
