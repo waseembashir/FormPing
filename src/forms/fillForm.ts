@@ -89,47 +89,129 @@ export interface CaptchaState {
   hcaptcha: 'absent' | 'pending' | 'solved';
 }
 
-async function checkCaptchaState(page: Page): Promise<CaptchaState> {
+async function checkCaptchaState(page: Page, formIndex: number): Promise<CaptchaState> {
   // CRITICAL: no function-to-variable assignment inside this evaluate body.
   // tsx/esbuild's keep-names (default on) wraps BOTH `function foo()` AND
   // `const foo = () => {}` with __name(fn, "foo") calls that fail in the
-  // browser eval context. So everything must be fully inline — no helpers,
-  // no destructured assignment of arrow functions, no const-arrow patterns.
-  // The repetition below is intentional.
-  return await page.evaluate(() => {
-    // Turnstile
-    const tW = document.querySelector(
+  // browser eval context. Everything must be fully inline — no helpers,
+  // no const-arrow patterns. The repetition below is intentional.
+  //
+  // Behavior:
+  //   - Scope search to the target form's parent (CAPTCHAs are sometimes
+  //     in sibling divs within a wizard wrapper, outside the <form> tag).
+  //   - A widget is only "pending" if it's currently *visible*. Multi-step
+  //     wizards keep all steps in the DOM with display:none on inactive
+  //     steps — Turnstile in step 3 would otherwise falsely flag as
+  //     pending when we're on step 1.
+  return await page.evaluate((idx: number) => {
+    const forms = Array.from(document.querySelectorAll('form'));
+    const targetForm = forms[idx];
+    // Scope: form's parent (so CAPTCHAs in a sibling wrapper get caught),
+    // falling back to the form itself, then to body.
+    const root: Element =
+      targetForm?.parentElement ?? targetForm ?? document.body;
+
+    // Inline visibility check — walks ancestors for display:none /
+    // visibility:hidden / opacity:0, then checks bounding box.
+    // Repeated 3 times because we can't extract to a function (would
+    // trigger __name wrapping). The {} block scope lets us reuse names.
+
+    // ── Turnstile ─────────────────────────────────────────────────────
+    const tW = root.querySelector(
       '.cf-turnstile, #cf-turnstile, [data-sitekey][class*="turnstile"], iframe[src*="turnstile"]',
     );
-    const tE = document.querySelector(
+    const tE = root.querySelector(
       'input[name="cf-turnstile-response"]',
     ) as HTMLInputElement | null;
     const tV = tE?.value ?? '';
+    let tVisible = false;
+    if (tW) {
+      tVisible = true;
+      let cur: Element | null = tW;
+      while (cur && cur !== document.body) {
+        const s = window.getComputedStyle(cur);
+        if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.1) {
+          tVisible = false;
+          break;
+        }
+        cur = cur.parentElement;
+      }
+      if (tVisible) {
+        const r = tW.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) tVisible = false;
+      }
+    }
     const turnstile: 'absent' | 'pending' | 'solved' =
-      !tW && !tE ? 'absent' : tV.trim().length > 0 ? 'solved' : 'pending';
+      tV.trim().length > 0
+        ? 'solved'
+        : tVisible
+          ? 'pending'
+          : 'absent';
 
-    // reCAPTCHA
-    const rW = document.querySelector(
+    // ── reCAPTCHA ─────────────────────────────────────────────────────
+    const rW = root.querySelector(
       '.g-recaptcha, iframe[src*="recaptcha"], iframe[src*="recaptcha/api2"]',
     );
-    const rE = document.querySelector(
+    const rE = root.querySelector(
       'textarea[name="g-recaptcha-response"]',
     ) as HTMLTextAreaElement | null;
     const rV = rE?.value ?? '';
+    let rVisible = false;
+    if (rW) {
+      rVisible = true;
+      let cur: Element | null = rW;
+      while (cur && cur !== document.body) {
+        const s = window.getComputedStyle(cur);
+        if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.1) {
+          rVisible = false;
+          break;
+        }
+        cur = cur.parentElement;
+      }
+      if (rVisible) {
+        const r = rW.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) rVisible = false;
+      }
+    }
     const recaptcha: 'absent' | 'pending' | 'solved' =
-      !rW && !rE ? 'absent' : rV.trim().length > 0 ? 'solved' : 'pending';
+      rV.trim().length > 0
+        ? 'solved'
+        : rVisible
+          ? 'pending'
+          : 'absent';
 
-    // hCaptcha
-    const hW = document.querySelector('.h-captcha, iframe[src*="hcaptcha.com"]');
-    const hE = document.querySelector(
+    // ── hCaptcha ──────────────────────────────────────────────────────
+    const hW = root.querySelector('.h-captcha, iframe[src*="hcaptcha.com"]');
+    const hE = root.querySelector(
       'textarea[name="h-captcha-response"]',
     ) as HTMLTextAreaElement | null;
     const hV = hE?.value ?? '';
+    let hVisible = false;
+    if (hW) {
+      hVisible = true;
+      let cur: Element | null = hW;
+      while (cur && cur !== document.body) {
+        const s = window.getComputedStyle(cur);
+        if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.1) {
+          hVisible = false;
+          break;
+        }
+        cur = cur.parentElement;
+      }
+      if (hVisible) {
+        const r = hW.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) hVisible = false;
+      }
+    }
     const hcaptcha: 'absent' | 'pending' | 'solved' =
-      !hW && !hE ? 'absent' : hV.trim().length > 0 ? 'solved' : 'pending';
+      hV.trim().length > 0
+        ? 'solved'
+        : hVisible
+          ? 'pending'
+          : 'absent';
 
     return { turnstile, recaptcha, hcaptcha };
-  });
+  }, formIndex);
 }
 
 /**
@@ -138,9 +220,13 @@ async function checkCaptchaState(page: Page): Promise<CaptchaState> {
  * poll the state until either all present widgets are solved, or the
  * timeout expires (then the caller decides based on the final state).
  */
-async function waitForInvisibleCaptchas(page: Page, timeoutMs = 5000): Promise<CaptchaState> {
+async function waitForInvisibleCaptchas(
+  page: Page,
+  formIndex: number,
+  timeoutMs = 5000,
+): Promise<CaptchaState> {
   const deadline = Date.now() + timeoutMs;
-  let state = await checkCaptchaState(page);
+  let state = await checkCaptchaState(page, formIndex);
   while (Date.now() < deadline) {
     const stillPending =
       state.turnstile === 'pending' ||
@@ -148,7 +234,7 @@ async function waitForInvisibleCaptchas(page: Page, timeoutMs = 5000): Promise<C
       state.hcaptcha === 'pending';
     if (!stillPending) return state;
     await page.waitForTimeout(500);
-    state = await checkCaptchaState(page);
+    state = await checkCaptchaState(page, formIndex);
   }
   return state;
 }
@@ -165,8 +251,12 @@ async function waitForInvisibleCaptchas(page: Page, timeoutMs = 5000): Promise<C
 // submit click.
 // ─────────────────────────────────────────────────────────────────────────
 
-const NEXT_BUTTON_TEXT = /^(?:next(?:\s+step)?|continue|proceed|→|>>)$/i;
-const SUBMIT_BUTTON_TEXT = /^(?:submit|send(?:\s+message)?|send\s+it|go|contact\s+us|get\s+in\s+touch)$/i;
+// Match "Next", "Next Step", "Next →", "Continue", "Continue ›", "→", etc.
+// Word-boundary match (not anchored) so trailing icons/arrows in button text
+// don't break detection. SUBMIT pattern takes precedence — if a button's
+// text matches BOTH (rare: "Send Next"), we prefer treating it as submit.
+const NEXT_BUTTON_TEXT = /\b(?:next|continue|proceed|forward)\b|^\s*[→›»>]+\s*$/i;
+const SUBMIT_BUTTON_TEXT = /\b(?:submit|send(?:\s+message)?|send\s+it|contact\s+us|get\s+in\s+touch)\b/i;
 
 /**
  * Find a visible "Next" button inside the target form (or its closest
@@ -561,7 +651,7 @@ export async function fillForm(
   // Wait briefly for invisible CAPTCHAs (Turnstile in auto mode, reCAPTCHA
   // v3) to auto-solve themselves, then read state. We only abort when
   // there's a *pending* widget — auto-solved widgets are submittable.
-  const captchaState = await waitForInvisibleCaptchas(page, 5000);
+  const captchaState = await waitForInvisibleCaptchas(page, form.index, 5000);
   const captchaPending =
     captchaState.turnstile === 'pending' ||
     captchaState.recaptcha === 'pending' ||
