@@ -287,6 +287,8 @@ export async function runSingleSite(
         honeypotsSkipped,
         honeypotProvider,
         honeypotReason,
+        stepsTraversed,
+        captchaState,
       } = await fillForm(page, form, config);
       baseResult.errors.push(...fillErrors);
 
@@ -296,6 +298,26 @@ export async function runSingleSite(
         baseResult.notes.push(
           `AI (${honeypotProvider}) flagged ${honeypotsSkipped.length} likely honeypot field(s) and skipped them: ${honeypotsSkipped.join(', ')}` +
             (honeypotReason ? ` — ${honeypotReason}` : ''),
+        );
+      }
+
+      // Multi-step diagnostic: only surface when we actually advanced past
+      // step 1, so we don't clutter notes on every single-step form.
+      if (stepsTraversed > 1) {
+        baseResult.notes.push(
+          `Multi-step form: traversed ${stepsTraversed} step(s) before reaching submit`,
+        );
+      }
+
+      // Surface auto-solved CAPTCHAs so the user can see FormPing got past
+      // them rather than aborting. Pending CAPTCHAs would have set
+      // fillCaptcha=true already (handled below).
+      const solvedCaptchas = (Object.entries(captchaState) as Array<[string, string]>)
+        .filter(([_, v]) => v === 'solved')
+        .map(([k]) => k);
+      if (solvedCaptchas.length > 0) {
+        baseResult.notes.push(
+          `Auto-solved CAPTCHA on final step: ${solvedCaptchas.join(', ')} (invisible/trusted-browser mode)`,
         );
       }
 
