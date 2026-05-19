@@ -118,13 +118,13 @@ export function ConfigPanel({ config, onChange, disabled }: Props) {
           <Toggle label="Show browser (headed)" checked={config.headed} onChange={v => set('headed', v)} disabled={disabled} />
           <div>
             <Toggle
-              label="Residential IP fallback"
+              label="Use residential IP"
               checked={config.residentialFallback}
               onChange={v => set('residentialFallback', v)}
               disabled={disabled}
             />
             <p className="mt-1 text-xs text-slate-500 leading-relaxed">
-              When a site blocks our cloud IP, retry once through a proxy. Configure one of:
+              When ON, runs every test directly through your configured residential proxy — skips the cloud-IP attempt entirely (faster for known-blocked sites like Hostinger). Configure one of:
               <br />
               <span className="font-mono text-slate-400">RESIDENTIAL_PROXY_URL</span> (+ <span className="font-mono text-slate-400">_USER</span>/<span className="font-mono text-slate-400">_PASS</span>) for Webshare/IPRoyal/Smartproxy — <span className="text-emerald-500/80">preferred when both set</span>
               <br />

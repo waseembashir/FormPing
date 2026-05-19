@@ -607,67 +607,74 @@ export async function runSingleSite(
 }
 
 /**
- * Run a single site, retrying once via a residential-IP browser if the direct
- * cloud-IP attempt returns BLOCKED_BY_HOST.
+ * Run a single site, picking between the regular cloud-IP browser and a
+ * residential-IP browser based on config.residentialFallback (now meaning
+ * "use residential IP", not "fall back to residential on block").
  *
- * Two transport options, picked in this order:
- *   1. Direct proxy (RESIDENTIAL_PROXY_URL) — cheaper, simpler, faster. Works
- *      with Webshare/IPRoyal/Smartproxy/any HTTP-or-SOCKS proxy.
+ *   residentialFallback === false  → use the passed-in (cloud) browser
+ *   residentialFallback === true   → launch a residential browser and use
+ *                                    it from the start. No detection-then-
+ *                                    retry cycle — direct attempt is
+ *                                    skipped entirely. Saves the 10-30s
+ *                                    we used to waste on the inevitable
+ *                                    BLOCKED_BY_HOST + retry on Hostinger
+ *                                    and similar.
+ *
+ * Two residential transport options, picked in this order:
+ *   1. Direct proxy (RESIDENTIAL_PROXY_URL) — Webshare/IPRoyal/Smartproxy
+ *      /any HTTP-or-SOCKS proxy.
  *   2. Browserbase (BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID) — hosted
  *      browser with built-in residential pool, per-session billing.
  *
- * Gated on:
- *   - config.residentialFallback === true (user opt-in)
- *   - At least one transport configured
- *   - First attempt was specifically BLOCKED_BY_HOST
- *
  * The proxied/hosted browser is always closed in `finally` so we don't leak
- * sessions (Browserbase) or open Chrome processes (direct proxy).
+ * sessions or open Chrome processes.
  */
 export async function runSingleSiteWithResidentialFallback(
   inputUrl: string,
   browser: Browser,
   config: AppConfig,
 ): Promise<SiteResult> {
-  const result = await runSingleSite(inputUrl, browser, config);
-
-  // Loud, easy-to-grep diagnostics so we can tell from logs exactly which
-  // branch the wrapper took. Without these we end up reverse-engineering
-  // partial Railway logs to guess whether the retry fired.
+  // Loud, easy-to-grep diagnostics so logs show exactly which path the
+  // wrapper took.
   logger.info(
-    `[RES-FALLBACK] first attempt reasonCode=${result.reasonCode}, residentialFallback=${config.residentialFallback}, ` +
+    `[RES] mode=${config.residentialFallback ? 'use-residential' : 'cloud-only'}, ` +
       `proxyUrl=${process.env.RESIDENTIAL_PROXY_URL ? 'set' : 'unset'}, ` +
       `proxyUser=${process.env.RESIDENTIAL_PROXY_USER ? 'set' : 'unset'}, ` +
       `proxyPass=${process.env.RESIDENTIAL_PROXY_PASS ? 'set' : 'unset'}, ` +
       `browserbase=${hasBrowserbaseCreds() ? 'set' : 'unset'}`,
   );
 
-  if (result.reasonCode !== 'BLOCKED_BY_HOST') {
-    logger.info('[RES-FALLBACK] skipped: first attempt was not BLOCKED_BY_HOST');
-    return result;
-  }
+  // Cloud-only mode (toggle off): use the passed-in browser, no proxy involved.
   if (!config.residentialFallback) {
-    logger.info('[RES-FALLBACK] skipped: residentialFallback toggle is OFF');
-    return result;
+    return runSingleSite(inputUrl, browser, config);
   }
 
+  // Use-residential mode (toggle on): pick a transport and run via it.
+  // We skip the direct cloud attempt entirely — no point wasting 10-30s
+  // on a host that we already know we want to bypass via residential.
   const useDirectProxy = hasResidentialProxyCreds();
   const useBrowserbase = !useDirectProxy && hasBrowserbaseCreds();
 
   if (!useDirectProxy && !useBrowserbase) {
-    logger.warn('[RES-FALLBACK] skipped: no proxy configured (set RESIDENTIAL_PROXY_URL or BROWSERBASE_API_KEY)');
-    result.notes.push(
-      'Residential fallback enabled but no proxy configured — set RESIDENTIAL_PROXY_URL (Webshare/IPRoyal/etc.) or BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID',
+    logger.warn(
+      '[RES] use-residential mode is ON but no proxy configured — set RESIDENTIAL_PROXY_URL or BROWSERBASE_API_KEY',
     );
-    return result;
+    return {
+      ...makeErrorResult(
+        inputUrl,
+        normalizeUrl(inputUrl),
+        config,
+        'Residential IP toggle is ON but no proxy credentials are configured. Set RESIDENTIAL_PROXY_URL (Webshare/IPRoyal/etc.) or BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID in your environment.',
+      ),
+      durationMs: 0,
+    };
   }
 
   const providerLabel = useDirectProxy ? 'residential proxy' : 'Browserbase';
-  logger.info(`[RES-FALLBACK] >>> RETRYING ${inputUrl} via ${providerLabel} <<<`);
+  logger.info(`[RES] >>> RUNNING ${inputUrl} via ${providerLabel} (direct attempt skipped) <<<`);
 
-  // Residential proxies add 10-30s of real latency per request — far-away exits
-  // (e.g. ZA → US sites) routinely push page.goto past the 22.5s default. Bump
-  // both timeouts for the retry only, so direct attempts stay snappy.
+  // Residential proxies add 10-30s of real latency per request — far-away
+  // exits routinely push page.goto past the default. Bump both timeouts.
   const proxyConfig: AppConfig = {
     ...config,
     timeout: Math.max(config.timeout, 30000),
@@ -680,20 +687,22 @@ export async function runSingleSiteWithResidentialFallback(
       ? await launchProxiedBrowser(proxyConfig)
       : await connectResidentialBrowser();
     logger.info(
-      `[RES-FALLBACK] ${providerLabel} browser ready — re-running site ` +
+      `[RES] ${providerLabel} browser ready — running site ` +
         `(timeout=${proxyConfig.timeout}ms, navigationTimeout=${proxyConfig.navigationTimeout}ms)`,
     );
-    const retryResult = await runSingleSite(inputUrl, residentialBrowser, proxyConfig);
-    logger.info(`[RES-FALLBACK] retry complete: reasonCode=${retryResult.reasonCode}`);
-    retryResult.notes = [
-      `Retried via ${providerLabel} after direct attempt was BLOCKED_BY_HOST`,
-      ...retryResult.notes,
+    const result = await runSingleSite(inputUrl, residentialBrowser, proxyConfig);
+    logger.info(`[RES] run complete: reasonCode=${result.reasonCode}`);
+    result.notes = [
+      `Routed via ${providerLabel} (residential IP — direct cloud attempt skipped)`,
+      ...result.notes,
     ];
-    return retryResult;
-  } catch (err) {
-    logger.warn(`[RES-FALLBACK] ${providerLabel} retry threw: ${err}`);
-    result.notes.push(`Residential fallback (${providerLabel}) attempted but failed: ${String(err)}`);
     return result;
+  } catch (err) {
+    logger.error(`[RES] ${providerLabel} run threw: ${err}`);
+    return {
+      ...makeErrorResult(inputUrl, normalizeUrl(inputUrl), config, err),
+      durationMs: 0,
+    };
   } finally {
     if (residentialBrowser) {
       try {
