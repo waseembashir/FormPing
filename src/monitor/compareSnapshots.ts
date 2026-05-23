@@ -4,6 +4,7 @@ import type { ChangeReport, MonitorOptions, SiteSnapshot } from './types.js';
 import { snapshotSite } from './snapshotSite.js';
 import { diffSnapshots, totalChanges } from './diffEngine.js';
 import { summarizeChanges } from './summarizeChanges.js';
+import { sendSlackChangeNotification } from '../notifications/slack.js';
 import { normalizeUrl } from '../utils/url.js';
 import { logger } from '../utils/logger.js';
 import { readdir, readFile } from 'fs/promises';
@@ -110,7 +111,7 @@ export async function runCompare(
     };
   });
 
-  return {
+  const report: ChangeReport = {
     site,
     rootUrl: normalized,
     checkedAt,
@@ -123,6 +124,13 @@ export async function runCompare(
     details,
     hashStatus,
   };
+
+  // Fire Slack notification if SLACK_WEBHOOK_URL is set and any changes
+  // were detected. No-op otherwise. Errors are logged but never thrown so
+  // a misconfigured webhook can't break the monitor loop.
+  await sendSlackChangeNotification(report);
+
+  return report;
 }
 
 /** Re-export so the CLI can call snapshot mode through one entry point. */
