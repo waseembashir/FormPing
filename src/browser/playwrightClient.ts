@@ -27,12 +27,24 @@ export async function closeBrowser(): Promise<void> {
 }
 
 export async function newPage(browser: Browser, config: AppConfig): Promise<{ context: BrowserContext; page: Page }> {
+  // QA bypass header — when APEXURE_QA_TOKEN is set, attach it to every
+  // request. WordPress sites running the matching mu-plugin recognize this
+  // header and skip anti-spam checks. Lets us test contact forms on our
+  // own dev sites without disabling spam protection for real visitors.
+  // Header is omitted entirely when env var is not set — no leak risk on
+  // sites without the matching code.
+  const extraHTTPHeaders: Record<string, string> = {};
+  if (process.env.APEXURE_QA_TOKEN) {
+    extraHTTPHeaders['X-Apexure-QA'] = process.env.APEXURE_QA_TOKEN;
+  }
+
   const context = await browser.newContext({
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
     javaScriptEnabled: true,
     ignoreHTTPSErrors: true,
+    ...(Object.keys(extraHTTPHeaders).length > 0 ? { extraHTTPHeaders } : {}),
   });
 
   context.setDefaultTimeout(config.timeout);
