@@ -1,48 +1,45 @@
 /**
- * Basic-auth gate for the entire app.
+ * Cookie-based auth gate for the entire app.
  *
- * Set BASIC_AUTH_USER and BASIC_AUTH_PASSWORD in ui/.env.local to enable.
- * If either is empty, the gate is OPEN (useful for local dev).
+ * - If AUTH_USER + AUTH_PASSWORD env vars are set, the app is gated:
+ *   any request without a valid session cookie gets redirected to /login.
+ * - If those env vars are NOT set, the gate is OPEN (useful for local dev).
  *
- * Goes in front of every page and API route — anyone hitting any URL gets
- * a browser-native login popup. Without the right credentials they get a
- * 401 and never reach the actual handler.
+ * Backward compat: BASIC_AUTH_USER / BASIC_AUTH_PASSWORD are still read
+ * if the new names aren't present, so existing Railway env vars keep
+ * working without renaming.
  */
 import { NextResponse, type NextRequest } from 'next/server';
+import { authEnabled, verifySession, SESSION_COOKIE_NAME } from '@/lib/session';
 
-const AUTH_USER = process.env['BASIC_AUTH_USER'] ?? '';
-const AUTH_PASSWORD = process.env['BASIC_AUTH_PASSWORD'] ?? '';
-const AUTH_ENABLED = AUTH_USER.length > 0 && AUTH_PASSWORD.length > 0;
+export async function middleware(req: NextRequest) {
+  // Open gate when auth env vars aren't configured (local dev).
+  if (!authEnabled()) return NextResponse.next();
 
-export function middleware(req: NextRequest) {
-  if (!AUTH_ENABLED) return NextResponse.next();
+  const { pathname, search } = req.nextUrl;
 
-  const header = req.headers.get('authorization') ?? '';
-  if (header.startsWith('Basic ')) {
-    const encoded = header.slice('Basic '.length).trim();
-    let decoded = '';
-    try {
-      decoded = atob(encoded);
-    } catch {
-      /* malformed header */
-    }
-    const sep = decoded.indexOf(':');
-    if (sep >= 0) {
-      const user = decoded.slice(0, sep);
-      const pass = decoded.slice(sep + 1);
-      if (user === AUTH_USER && pass === AUTH_PASSWORD) {
-        return NextResponse.next();
-      }
-    }
+  // Always allow the login page and login/logout API routes through without
+  // a session cookie — otherwise users could never log in.
+  if (pathname === '/login' || pathname.startsWith('/api/auth/')) {
+    return NextResponse.next();
   }
 
-  return new NextResponse('Authentication required', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="FormPing", charset="UTF-8"',
-      'Content-Type': 'text/plain',
-    },
-  });
+  const cookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await verifySession(cookie);
+  if (session) return NextResponse.next();
+
+  // Not authenticated. For API routes, return 401 JSON so client code can
+  // detect it cleanly. For page navigations, redirect to /login with the
+  // current path as ?redirect=... so we can bounce them back after login.
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const loginUrl = req.nextUrl.clone();
+  loginUrl.pathname = '/login';
+  // Preserve where they were trying to go so we can redirect back after login.
+  loginUrl.search = `?redirect=${encodeURIComponent(pathname + search)}`;
+  return NextResponse.redirect(loginUrl);
 }
 
 // Apply to everything except Next.js internals, static assets, and the
