@@ -28,7 +28,12 @@ export function MonitorInputPanel({ url, onChange, onRun, onStop, running, watch
       />
 
       <div className="px-4 py-3 border-t border-slate-800">
-        {running ? (
+        {running || watchActive ? (
+          // Stop button — appears for any actively-running mode AND for
+          // detached watches (server has a watch running but no live SSE
+          // stream from this browser, e.g. after a refresh). Without this
+          // OR-watchActive the post-refresh "Stop watching" button never
+          // showed up and users were stuck with a stale Run button.
           <button
             onClick={onStop}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/10 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/20 transition-colors text-sm font-medium"
