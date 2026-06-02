@@ -5,6 +5,12 @@ import {
 } from '@/lib/activeWatchesStore';
 
 export const runtime = 'nodejs';
+// CRITICAL: this route reads runtime state (disk file + process liveness).
+// Without `force-dynamic` Next.js sees a GET with no params and prerenders
+// the empty {watches: []} response at build time — that cached payload is
+// what the browser was getting on every refresh, which is exactly why the
+// UI kept showing the Run button even though the watch was running.
+export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/monitor/watches
