@@ -94,18 +94,22 @@ export function MonitorConfigPanel({ config, onChange, disabled }: Props) {
         {config.monitorMode === 'watch' && (
           <div>
             <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-              Watch interval (seconds)
+              Watch interval (hours)
             </label>
             <input
               type="number"
-              min={10}
-              step={60}
-              value={Math.round(config.watchIntervalMs / 1000)}
-              onChange={(e) => set('watchIntervalMs', Math.max(10, parseInt(e.target.value, 10) || 60) * 1000)}
+              min={1}
+              step={1}
+              value={Math.max(1, Math.round(config.watchIntervalMs / 3_600_000))}
+              onChange={(e) =>
+                set('watchIntervalMs', Math.max(1, parseInt(e.target.value, 10) || 1) * 3_600_000)
+              }
               disabled={disabled}
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40 font-mono"
             />
-            <p className="text-xs text-slate-500 mt-1">Default: 3600s (1 hour)</p>
+            <p className="text-xs text-slate-500 mt-1">
+              How often to re-check the site. Default: 1 hour. Common picks: 1, 6, 12, 24.
+            </p>
           </div>
         )}
 
