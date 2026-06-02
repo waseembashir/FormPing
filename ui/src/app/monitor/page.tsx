@@ -16,6 +16,9 @@ const DEFAULT_CONFIG: MonitorConfig = {
   watchIntervalMs: 60 * 60 * 1000, // 1 hour
 };
 
+const STORAGE_KEY_URL = 'fp:monitor:url';
+const STORAGE_KEY_CONFIG = 'fp:monitor:config';
+
 /** Hostname-only key — mirrors siteKey() in lib/watchRegistry. */
 function siteKey(url: string): string {
   try {
@@ -28,6 +31,47 @@ function siteKey(url: string): string {
 export default function MonitorPage() {
   const [url, setUrl] = useState('');
   const [config, setConfig] = useState<MonitorConfig>(DEFAULT_CONFIG);
+  /** True after we've attempted to restore from localStorage. Prevents the
+   * "save to localStorage" effect from clobbering the saved value with the
+   * default initial state before restoration runs. */
+  const [restored, setRestored] = useState(false);
+
+  // ── Restore URL + config from localStorage on first mount ─────────────
+  // Server-rendered initial state defaults to DEFAULT_CONFIG. On client
+  // mount we read the persisted values (if any) and apply them. This lets
+  // a refresh land back on the same URL + mode the user had set — critical
+  // for "I started a watch, refreshed, want to come back to it" flow.
+  useEffect(() => {
+    try {
+      const savedUrl = window.localStorage.getItem(STORAGE_KEY_URL);
+      if (savedUrl) setUrl(savedUrl);
+      const savedConfigRaw = window.localStorage.getItem(STORAGE_KEY_CONFIG);
+      if (savedConfigRaw) {
+        const parsed = JSON.parse(savedConfigRaw) as Partial<MonitorConfig>;
+        setConfig((cur) => ({ ...cur, ...parsed }));
+      }
+    } catch {
+      // localStorage may be unavailable (private browsing, etc.) — silent fallback
+    }
+    setRestored(true);
+  }, []);
+
+  // Save URL when it changes (skip empty + don't write until restored).
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      if (url) window.localStorage.setItem(STORAGE_KEY_URL, url);
+      else window.localStorage.removeItem(STORAGE_KEY_URL);
+    } catch { /* ignore */ }
+  }, [url, restored]);
+
+  // Save config when it changes (don't write until restored).
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(config));
+    } catch { /* ignore */ }
+  }, [config, restored]);
   const [reports, setReports] = useState<ChangeReport[]>([]);
   const [snapshot, setSnapshot] = useState<SnapshotResult | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
