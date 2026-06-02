@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
+import { registerWatch, getWatch, siteKey } from '@/lib/watchRegistry';
+import { saveReport } from '@/lib/reportStore';
 
 export const runtime = 'nodejs';
 export const maxDuration = 600; // up to 10 min for watch cycles
@@ -22,12 +24,42 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: 'url and monitorMode are required' }), { status: 400 });
   }
 
+  // For watch mode: refuse if there's already an active watch for this site.
+  // Two watches against the same site would spam Slack and waste resources.
+  // The user can call /api/monitor/stop first if they want to restart with
+  // a different config.
+  const site = siteKey(url);
+  if (monitorMode === 'watch' && getWatch(site)) {
+    return new Response(
+      JSON.stringify({
+        error: `A watch is already active for ${site}. Stop it first to start a new one.`,
+      }),
+      { status: 409 },
+    );
+  }
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
       function send(event: Record<string, unknown>) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          // Controller already closed — happens after watch detach when
+          // the stream ends but the child keeps running. Safe to ignore.
+        }
+      }
+      function close() {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
       }
 
       const uiRoot = process.cwd();
@@ -53,6 +85,18 @@ export async function POST(request: NextRequest) {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
+      // Register watch processes so they survive client disconnect and
+      // can be stopped from any tab via /api/monitor/stop.
+      if (monitorMode === 'watch') {
+        registerWatch({
+          site,
+          url,
+          startedAt: new Date(),
+          watchIntervalMs,
+          child,
+        });
+      }
+
       let stdoutBuf = '';
 
       child.stdout.on('data', (chunk: Buffer) => {
@@ -69,6 +113,10 @@ export async function POST(request: NextRequest) {
             if ('snapshotPath' in parsed) {
               send({ type: 'snapshot', result: parsed });
             } else if ('details' in parsed && 'pagesScanned' in parsed) {
+              // Persist the report to disk so it survives browser refresh,
+              // then forward it on the SSE stream. Fire-and-forget; failures
+              // are logged inside saveReport and won't break the loop.
+              void saveReport(site, parsed);
               send({ type: 'report', report: parsed });
             }
           } catch {
@@ -95,21 +143,34 @@ export async function POST(request: NextRequest) {
           try {
             const parsed = JSON.parse(stdoutBuf.trim()) as Record<string, unknown>;
             if ('snapshotPath' in parsed) send({ type: 'snapshot', result: parsed });
-            else if ('details' in parsed) send({ type: 'report', report: parsed });
+            else if ('details' in parsed) {
+              void saveReport(site, parsed);
+              send({ type: 'report', report: parsed });
+            }
           } catch { /* ignore */ }
         }
         send({ type: 'done', exitCode: code });
-        controller.close();
+        close();
       });
 
       child.on('error', (err) => {
         send({ type: 'error', message: err.message });
-        controller.close();
+        close();
       });
 
-      // Allow cancellation: kill the child if the client disconnects
+      // Client-disconnect behavior depends on mode:
+      //   - snapshot/compare: one-off, kill the child if the user navigates
+      //     away (otherwise it would keep running but produce no useful
+      //     output since the stream's closed).
+      //   - watch: keep running in the background. The /api/monitor/stop
+      //     endpoint is the only way to stop it. This is what makes
+      //     "leave it running overnight" actually work.
       request.signal.addEventListener('abort', () => {
-        if (!child.killed) child.kill('SIGINT');
+        // Close the stream either way — there's no client to send to anymore.
+        close();
+        if (monitorMode !== 'watch' && !child.killed) {
+          child.kill('SIGINT');
+        }
       });
     },
   });

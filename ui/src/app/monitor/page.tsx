@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Header } from '@/components/Header';
 import { MonitorInputPanel } from '@/components/monitor/MonitorInputPanel';
 import { MonitorConfigPanel } from '@/components/monitor/MonitorConfigPanel';
@@ -16,6 +16,15 @@ const DEFAULT_CONFIG: MonitorConfig = {
   watchIntervalMs: 60 * 60 * 1000, // 1 hour
 };
 
+/** Hostname-only key — mirrors siteKey() in lib/watchRegistry. */
+function siteKey(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
 export default function MonitorPage() {
   const [url, setUrl] = useState('');
   const [config, setConfig] = useState<MonitorConfig>(DEFAULT_CONFIG);
@@ -23,10 +32,65 @@ export default function MonitorPage() {
   const [snapshot, setSnapshot] = useState<SnapshotResult | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  /** True when a watch is running on the server for the current URL — even
+   * if we don't have a live SSE stream to it (e.g., after refresh). */
+  const [watchDetached, setWatchDetached] = useState(false);
   const [snapshotsRefreshKey, setSnapshotsRefreshKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
-  const watchActive = running && config.monitorMode === 'watch';
+  const watchActive =
+    (running && config.monitorMode === 'watch') || watchDetached;
+
+  // ── Hydrate state from server whenever the URL changes ────────────────
+  // - Check /api/monitor/watches to see if a watch is already running for
+  //   this URL (detached from any browser).
+  // - Fetch /api/monitor/reports to populate the report history.
+  useEffect(() => {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setWatchDetached(false);
+      setReports([]);
+      return;
+    }
+    const ourSite = siteKey(trimmed);
+    if (!ourSite) {
+      setWatchDetached(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const [watchesRes, reportsRes] = await Promise.all([
+          fetch('/api/monitor/watches').then((r) => r.json()),
+          fetch(`/api/monitor/reports?url=${encodeURIComponent(trimmed)}&limit=50`).then((r) => r.json()),
+        ]);
+        if (cancelled) return;
+
+        // Is there an active watch for this site?
+        const watches = Array.isArray(watchesRes?.watches) ? watchesRes.watches : [];
+        const ours = watches.find((w: { site: string }) => w.site === ourSite);
+        setWatchDetached(Boolean(ours));
+
+        // Report history (newest first from the API; we keep that order)
+        const storedReports = Array.isArray(reportsRes?.reports) ? reportsRes.reports : [];
+        const hydrated: ChangeReport[] = storedReports
+          .map((r: { report: ChangeReport }) => r.report)
+          .filter(Boolean);
+        // Sort oldest-first to match the live-stream append order — newer
+        // reports go at the end of the list (matches how MonitorResultsPanel
+        // expects them).
+        hydrated.reverse();
+        setReports(hydrated);
+      } catch {
+        // Best-effort: API down, hydration just fails silently
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
 
   const handleCleared = useCallback(() => {
     setReports([]);
@@ -38,8 +102,13 @@ export default function MonitorPage() {
   const handleRun = useCallback(async () => {
     if (!url.trim()) return;
 
-    setReports([]);
-    setSnapshot(null);
+    // For watch mode we want to PRESERVE the history when re-clicking Watch
+    // (the user might be re-attaching after refresh, in which case starting
+    // empty would feel wrong). For one-off snapshot/compare, clearing is fine.
+    if (config.monitorMode !== 'watch') {
+      setReports([]);
+      setSnapshot(null);
+    }
     setLogs([]);
     setRunning(true);
 
@@ -56,8 +125,21 @@ export default function MonitorPage() {
 
       if (!response.ok || !response.body) {
         const text = await response.text().catch(() => '');
+        // 409 = a watch is already active for this site (detached). Show that
+        // state in the UI rather than treating it as an error.
+        if (response.status === 409 && config.monitorMode === 'watch') {
+          setWatchDetached(true);
+          setLogs((prev) => [
+            ...prev,
+            'A watch is already running for this site. Click "Stop watching" to end it.',
+          ]);
+          setRunning(false);
+          return;
+        }
         throw new Error(`Server error ${response.status}: ${text}`);
       }
+
+      if (config.monitorMode === 'watch') setWatchDetached(true);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -89,6 +171,7 @@ export default function MonitorPage() {
                 setLogs((prev) => [...prev, `⚠ ${event.message}`]);
               }
               setRunning(false);
+              if (config.monitorMode !== 'watch') setWatchDetached(false);
             }
           } catch {
             // malformed SSE line — skip
@@ -104,11 +187,31 @@ export default function MonitorPage() {
     }
   }, [url, config]);
 
-  const handleStop = useCallback(() => {
+  // Stop button: for watch mode, ask the server to kill the detached
+  // process; for snapshot/compare, just abort the local stream.
+  const handleStop = useCallback(async () => {
     abortRef.current?.abort();
+
+    if (config.monitorMode === 'watch' || watchDetached) {
+      try {
+        await fetch('/api/monitor/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url.trim() }),
+        });
+        setLogs((prev) => [...prev, 'Watch stopped.']);
+      } catch (err) {
+        setLogs((prev) => [
+          ...prev,
+          `⚠ Failed to stop watch: ${err instanceof Error ? err.message : String(err)}`,
+        ]);
+      }
+      setWatchDetached(false);
+    } else {
+      setLogs((prev) => [...prev, 'Stopped by user.']);
+    }
     setRunning(false);
-    setLogs((prev) => [...prev, 'Stopped by user.']);
-  }, []);
+  }, [config.monitorMode, watchDetached, url]);
 
   return (
     <div className="min-h-screen bg-slate-950">
