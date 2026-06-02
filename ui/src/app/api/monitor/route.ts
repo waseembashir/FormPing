@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server';
 import { registerWatch, getWatch, siteKey } from '@/lib/watchRegistry';
 import { spawnMonitor } from '@/lib/watchSpawner';
-import { saveActiveWatch } from '@/lib/activeWatchesStore';
+import {
+  saveActiveWatch,
+  loadAliveActiveWatches,
+} from '@/lib/activeWatchesStore';
 
 export const runtime = 'nodejs';
 export const maxDuration = 600; // up to 10 min for watch cycles
@@ -25,16 +28,28 @@ export async function POST(request: NextRequest) {
 
   // For watch mode: refuse if there's already an active watch for this site.
   // Two watches against the same site would spam Slack and waste resources.
-  // The user can call /api/monitor/stop first if they want to restart with
-  // a different config.
+  // Check both the in-memory registry AND the disk file (with PID liveness
+  // check) — the worker handling this request may not be the same one that
+  // spawned the existing watch.
   const site = siteKey(url);
-  if (monitorMode === 'watch' && getWatch(site)) {
-    return new Response(
-      JSON.stringify({
-        error: `A watch is already active for ${site}. Stop it first to start a new one.`,
-      }),
-      { status: 409 },
-    );
+  if (monitorMode === 'watch') {
+    if (getWatch(site)) {
+      return new Response(
+        JSON.stringify({
+          error: `A watch is already active for ${site}. Stop it first to start a new one.`,
+        }),
+        { status: 409 },
+      );
+    }
+    const aliveOnDisk = await loadAliveActiveWatches();
+    if (aliveOnDisk.some((w) => w.site === site)) {
+      return new Response(
+        JSON.stringify({
+          error: `A watch is already active for ${site} (detached from this worker). Stop it first to start a new one.`,
+        }),
+        { status: 409 },
+      );
+    }
   }
 
   const encoder = new TextEncoder();
@@ -107,6 +122,9 @@ export async function POST(request: NextRequest) {
           ...(aiProvider !== undefined ? { aiProvider } : {}),
           watchIntervalMs,
           startedAt: new Date().toISOString(),
+          // Save PID so cross-worker queries can verify the watch is alive
+          // via process.kill(pid, 0). undefined if spawn failed.
+          ...(typeof child.pid === 'number' ? { pid: child.pid } : {}),
         });
       }
 

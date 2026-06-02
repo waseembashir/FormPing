@@ -12,7 +12,7 @@
  * a site (e.g. dev mode HMR re-running register), it's skipped.
  */
 
-import { loadActiveWatches } from './activeWatchesStore';
+import { loadActiveWatches, saveActiveWatch } from './activeWatchesStore';
 import { registerWatch, getWatch } from './watchRegistry';
 import { spawnMonitor } from './watchSpawner';
 
@@ -77,8 +77,15 @@ export async function resumeActiveWatches(): Promise<void> {
         child,
       });
 
+      // Update the disk entry with the NEW PID — the old one is from a dead
+      // process and would always fail the liveness check.
+      void saveActiveWatch({
+        ...entry,
+        ...(typeof child.pid === 'number' ? { pid: child.pid } : { pid: undefined }),
+      });
+
       console.log(
-        `[watchResume] resumed ${entry.site} (interval ${Math.round(entry.watchIntervalMs / 1000)}s, max ${entry.maxPages} pages)`,
+        `[watchResume] resumed ${entry.site} (pid=${child.pid}, interval ${Math.round(entry.watchIntervalMs / 1000)}s, max ${entry.maxPages} pages)`,
       );
     } catch (err) {
       // Don't let one bad entry break the others

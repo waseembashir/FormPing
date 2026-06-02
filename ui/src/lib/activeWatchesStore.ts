@@ -39,6 +39,10 @@ export interface ActiveWatchEntry {
   watchIntervalMs: number;
   /** ISO timestamp of when it was first started. */
   startedAt: string;
+  /** OS PID of the CLI subprocess. Used as the cross-worker source of truth
+   * for "is this watch still running?" — we send signal 0 to check liveness
+   * regardless of which Node worker handles the API request. */
+  pid?: number;
 }
 
 interface FileShape {
@@ -104,4 +108,37 @@ export async function loadActiveWatches(): Promise<ActiveWatchEntry[]> {
     `[activeWatchesStore] loadActiveWatches: ${data.watches.length} entry(ies) from ${fp}`,
   );
   return data.watches;
+}
+
+/**
+ * Check whether a process with the given PID is alive.
+ *
+ * Sends signal 0 — a no-op kernel call that just checks if the process
+ * exists and we have permission to signal it. Returns true if alive,
+ * false if the PID doesn't exist (or is undefined). This is the
+ * cross-worker source of truth for "is this watch still running?" —
+ * works regardless of which Node worker spawned the process.
+ */
+export function isProcessAlive(pid: number | undefined): boolean {
+  if (typeof pid !== 'number' || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    // ESRCH (process doesn't exist) or EPERM (can't signal it — almost
+    // always means it's gone since we spawned it ourselves)
+    return false;
+  }
+}
+
+/** Load only entries whose PID is currently alive. Used by /api/monitor/watches. */
+export async function loadAliveActiveWatches(): Promise<ActiveWatchEntry[]> {
+  const all = await loadActiveWatches();
+  const alive = all.filter((e) => isProcessAlive(e.pid));
+  if (alive.length !== all.length) {
+    console.log(
+      `[activeWatchesStore] filtered ${all.length - alive.length} dead entry(ies); ${alive.length} alive`,
+    );
+  }
+  return alive;
 }
