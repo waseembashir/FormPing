@@ -19,7 +19,13 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 
-const FILE_REL = 'data/active-watches.json';
+// Path note: Railway's persistent volume is mounted at `data/snapshots`
+// rather than `data/`, so anything written to `data/active-watches.json`
+// gets wiped on every redeploy. Put the file INSIDE the snapshots
+// directory so it lives in the volume too. The dot-prefix marks it as
+// a "system" file — won't collide with the hostname-named subdirectories
+// snapshotSite.ts creates.
+const FILE_REL = 'data/snapshots/.formping-active-watches.json';
 
 export interface ActiveWatchEntry {
   /** Hostname-only key (matches siteKey() in watchRegistry.ts). */

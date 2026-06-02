@@ -17,8 +17,11 @@
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 
-/** Mirror snapshotRoot's default — kept in sync via simple constant. */
-const REPORT_ROOT = 'data/reports';
+// Path note: Railway's persistent volume is mounted at `data/snapshots`
+// rather than `data/`, so reports written to `data/reports/...` would get
+// wiped on every redeploy. Stash them INSIDE the snapshots directory in a
+// dot-prefixed subdir that won't collide with hostname-named subdirs.
+const REPORT_ROOT = 'data/snapshots/.formping-reports';
 
 /** Resolve the absolute filesystem path for reports of a given site. */
 function reportsDir(site: string): string {
