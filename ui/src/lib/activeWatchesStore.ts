@@ -58,21 +58,28 @@ async function readFile_(): Promise<FileShape> {
 }
 
 async function writeFile_(data: FileShape): Promise<void> {
+  const fp = filePath();
   try {
-    await mkdir(path.dirname(filePath()), { recursive: true });
-    await writeFile(filePath(), JSON.stringify(data, null, 2), 'utf-8');
+    await mkdir(path.dirname(fp), { recursive: true });
+    await writeFile(fp, JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`[activeWatchesStore] wrote ${data.watches.length} entry(ies) to ${fp}`);
   } catch (err) {
-    console.warn(`[activeWatchesStore] write failed: ${err}`);
+    console.warn(`[activeWatchesStore] write failed at ${fp}: ${err}`);
   }
 }
 
 /** Add or update an entry (keyed by site). */
 export async function saveActiveWatch(entry: ActiveWatchEntry): Promise<void> {
-  const data = await readFile_();
-  const idx = data.watches.findIndex((w) => w.site === entry.site);
-  if (idx >= 0) data.watches[idx] = entry;
-  else data.watches.push(entry);
-  await writeFile_(data);
+  console.log(`[activeWatchesStore] saveActiveWatch called for site=${entry.site} url=${entry.url}`);
+  try {
+    const data = await readFile_();
+    const idx = data.watches.findIndex((w) => w.site === entry.site);
+    if (idx >= 0) data.watches[idx] = entry;
+    else data.watches.push(entry);
+    await writeFile_(data);
+  } catch (err) {
+    console.warn(`[activeWatchesStore] saveActiveWatch threw for site=${entry.site}: ${err}`);
+  }
 }
 
 /** Remove the entry for a given site (no-op if absent). */
@@ -85,6 +92,10 @@ export async function removeActiveWatch(site: string): Promise<void> {
 
 /** Snapshot the list of persisted watches. Used by watchResume on startup. */
 export async function loadActiveWatches(): Promise<ActiveWatchEntry[]> {
+  const fp = filePath();
   const data = await readFile_();
+  console.log(
+    `[activeWatchesStore] loadActiveWatches: ${data.watches.length} entry(ies) from ${fp}`,
+  );
   return data.watches;
 }
