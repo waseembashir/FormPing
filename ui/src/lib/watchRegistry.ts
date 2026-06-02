@@ -19,6 +19,7 @@
  */
 
 import type { ChildProcess } from 'child_process';
+import { removeActiveWatch } from './activeWatchesStore';
 
 export interface WatchRecord {
   /** Hostname-derived key for the site being watched (e.g. "optionsgoddess.com"). */
@@ -30,6 +31,11 @@ export interface WatchRecord {
   watchIntervalMs: number;
   /** The OS process. */
   child: ChildProcess;
+  /** True when the user explicitly called stop. Distinguishes a deliberate
+   *  shutdown from a crash or a server-restart kill — only the former
+   *  removes the entry from active-watches.json. The latter leaves it on
+   *  disk so the next server start can auto-resume the watch. */
+  intentionalStop?: boolean;
 }
 
 export interface ActiveWatchInfo {
@@ -69,7 +75,16 @@ export function registerWatch(record: WatchRecord): boolean {
     const cur = registry.get(record.site);
     // Only delete if it's still the same process — a fast restart could
     // have replaced the entry already.
-    if (cur && cur.child === record.child) registry.delete(record.site);
+    if (cur && cur.child === record.child) {
+      registry.delete(record.site);
+      // Only remove from disk if the user intentionally stopped this watch.
+      // For crashes/server-shutdowns, the entry stays on disk so the next
+      // server boot can auto-resume the watch. Fire-and-forget; disk
+      // failures already log inside removeActiveWatch.
+      if (record.intentionalStop) {
+        void removeActiveWatch(record.site);
+      }
+    }
   });
   return true;
 }
@@ -81,10 +96,15 @@ export function getWatch(site: string): WatchRecord | null {
 /**
  * Stop the watch for a given site. Returns true if a process was killed,
  * false if no watch was running.
+ *
+ * Sets intentionalStop=true on the record BEFORE killing, so the exit
+ * handler in registerWatch knows to also remove the entry from disk
+ * (otherwise the next server start would auto-resume it).
  */
 export function stopWatch(site: string): boolean {
   const record = registry.get(site);
   if (!record) return false;
+  record.intentionalStop = true;
   // SIGINT first (graceful — the CLI traps it and finishes the current cycle).
   // If it doesn't exit within 5s, SIGKILL.
   if (!record.child.killed) {
