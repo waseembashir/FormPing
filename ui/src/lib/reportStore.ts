@@ -14,8 +14,13 @@
  * avoids a "writes the same data twice" race.
  */
 
-import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readdir, readFile, unlink, writeFile } from 'fs/promises';
 import path from 'path';
+
+/** How many reports to keep on disk per site. User wants only the most
+ * recent one visible — keep a tiny buffer so we never lose the latest if
+ * a write races with a prune. */
+const KEEP_REPORTS_PER_SITE = 1;
 
 // Path note: Railway's persistent volume is mounted at `data/snapshots`
 // rather than `data/`, so reports written to `data/reports/...` would get
@@ -56,10 +61,30 @@ export async function saveReport(
     const ts = (typeof report.checkedAt === 'string' && report.checkedAt) || new Date().toISOString();
     const filename = safeSegment(ts) + '.json';
     await writeFile(path.join(dir, filename), JSON.stringify(report), 'utf-8');
+    // Prune older reports — keep only the most recent. Watch mode runs
+    // hourly so unbounded growth would fill disk + flood the UI history.
+    await pruneOldReports(dir, KEEP_REPORTS_PER_SITE);
   } catch (err) {
     // Don't throw — disk write failure should never break a watch loop
     console.warn(`[reportStore] saveReport failed: ${err}`);
   }
+}
+
+/** Delete all but the `keep` newest report files in `dir`. Best-effort. */
+async function pruneOldReports(dir: string, keep: number): Promise<void> {
+  try {
+    const files = await readdir(dir);
+    const jsonFiles = files.filter((f) => f.endsWith('.json')).sort().reverse();
+    const toDelete = jsonFiles.slice(keep);
+    for (const f of toDelete) {
+      try {
+        await unlink(path.join(dir, f));
+      } catch { /* ignore unlink races */ }
+    }
+    if (toDelete.length > 0) {
+      console.log(`[reportStore] pruned ${toDelete.length} old report(s) in ${dir}`);
+    }
+  } catch { /* dir vanished — nothing to prune */ }
 }
 
 /**

@@ -148,7 +148,7 @@ export default function MonitorPage() {
       try {
         const [watchesRes, reportsRes] = await Promise.all([
           fetch('/api/monitor/watches').then((r) => r.json()),
-          fetch(`/api/monitor/reports?url=${encodeURIComponent(trimmed)}&limit=50`).then((r) => r.json()),
+          fetch(`/api/monitor/reports?url=${encodeURIComponent(trimmed)}&limit=1`).then((r) => r.json()),
         ]);
         if (cancelled) return;
 
@@ -251,7 +251,9 @@ export default function MonitorPage() {
               setSnapshot(event.result);
               setSnapshotsRefreshKey((k) => k + 1);
             } else if (event.type === 'report') {
-              setReports((prev) => [...prev, event.report]);
+              // Keep only the most recent report — older ones stack up
+              // visually with no value (the diff is point-in-time).
+              setReports([event.report]);
               setSnapshotsRefreshKey((k) => k + 1);
             } else if (event.type === 'log') {
               setLogs((prev) => [...prev.slice(-99), event.message]);
