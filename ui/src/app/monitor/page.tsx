@@ -85,18 +85,59 @@ export default function MonitorPage() {
   const watchActive =
     (running && config.monitorMode === 'watch') || watchDetached;
 
+  // ── On mount: auto-fill URL from active watches if localStorage is empty ──
+  // Handles the case where the user clears localStorage / opens FormPing on a
+  // fresh browser but there's a watch running on the server (e.g. resumed
+  // from disk after a deploy). Without this, the URL stays empty and the
+  // URL-deps useEffect below never fetches.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/monitor/watches').then((r) => r.json());
+        if (cancelled) return;
+        const watches = Array.isArray(res?.watches) ? res.watches : [];
+        // eslint-disable-next-line no-console
+        console.log('[MonitorPage] mount: active watches on server:', watches);
+        if (watches.length === 0) return;
+        // Only auto-fill if URL is still empty (don't clobber whatever
+        // localStorage just restored).
+        setUrl((current) => {
+          if (current.trim()) return current;
+          const latest = [...watches].sort(
+            (a: { startedAt: string }, b: { startedAt: string }) =>
+              new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+          )[0];
+          // eslint-disable-next-line no-console
+          console.log('[MonitorPage] mount: auto-filling URL from active watch:', latest.url);
+          return latest.url;
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[MonitorPage] mount: failed to fetch /api/monitor/watches:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // ── Hydrate state from server whenever the URL changes ────────────────
   // - Check /api/monitor/watches to see if a watch is already running for
   //   this URL (detached from any browser).
   // - Fetch /api/monitor/reports to populate the report history.
   useEffect(() => {
     const trimmed = url.trim();
+    // eslint-disable-next-line no-console
+    console.log('[MonitorPage] URL useEffect fired, url:', JSON.stringify(trimmed));
     if (!trimmed) {
       setWatchDetached(false);
       setReports([]);
       return;
     }
     const ourSite = siteKey(trimmed);
+    // eslint-disable-next-line no-console
+    console.log('[MonitorPage] our siteKey:', ourSite);
     if (!ourSite) {
       setWatchDetached(false);
       return;
@@ -114,6 +155,8 @@ export default function MonitorPage() {
         // Is there an active watch for this site?
         const watches = Array.isArray(watchesRes?.watches) ? watchesRes.watches : [];
         const ours = watches.find((w: { site: string }) => w.site === ourSite);
+        // eslint-disable-next-line no-console
+        console.log('[MonitorPage] watches from server:', watches, '| our match:', ours);
         setWatchDetached(Boolean(ours));
 
         // Report history (newest first from the API; we keep that order)
@@ -126,8 +169,10 @@ export default function MonitorPage() {
         // expects them).
         hydrated.reverse();
         setReports(hydrated);
-      } catch {
+      } catch (err) {
         // Best-effort: API down, hydration just fails silently
+        // eslint-disable-next-line no-console
+        console.warn('[MonitorPage] hydration failed:', err);
       }
     })();
 
