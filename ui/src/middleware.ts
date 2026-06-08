@@ -1,20 +1,21 @@
 /**
  * Cookie-based auth gate for the entire app.
  *
- * - If AUTH_USER + AUTH_PASSWORD env vars are set, the app is gated:
- *   any request without a valid session cookie gets redirected to /login.
- * - If those env vars are NOT set, the gate is OPEN (useful for local dev).
+ * - If password auth (AUTH_USER + AUTH_PASSWORD) OR Google auth
+ *   (GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET) is configured, the app is
+ *   gated: any request without a valid session cookie is redirected to /login.
+ * - If neither is configured, the gate is OPEN (useful for local dev).
  *
  * Backward compat: BASIC_AUTH_USER / BASIC_AUTH_PASSWORD are still read
  * if the new names aren't present, so existing Railway env vars keep
  * working without renaming.
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { authEnabled, verifySession, SESSION_COOKIE_NAME } from '@/lib/session';
+import { gateEnabled, verifySession, SESSION_COOKIE_NAME } from '@/lib/session';
 
 export async function middleware(req: NextRequest) {
-  // Open gate when auth env vars aren't configured (local dev).
-  if (!authEnabled()) return NextResponse.next();
+  // Open gate when neither password nor Google auth is configured (local dev).
+  if (!gateEnabled()) return NextResponse.next();
 
   const { pathname, search } = req.nextUrl;
 

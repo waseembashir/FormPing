@@ -1,103 +1,76 @@
 'use client';
 
-import { Suspense, useState, useTransition } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+// Human-readable messages for the ?error=... codes the OAuth callback sets.
+const ERROR_MESSAGES: Record<string, string> = {
+  domain_not_allowed: 'That Google account is not permitted. Please use an authorized company account.',
+  email_unverified: 'Your Google email address is not verified.',
+  state_mismatch: 'Your sign-in session expired. Please try again.',
+  missing_code: 'Sign-in was interrupted. Please try again.',
+  google_denied: 'Sign-in was cancelled.',
+  google_error: 'Could not complete sign-in with Google. Please try again.',
+};
 
 // useSearchParams() requires a Suspense boundary during static prerender
 // (Next.js App Router requirement). Extracted into a child component so we
 // can wrap just the search-params-reading part with <Suspense>.
-function LoginForm() {
-  const router = useRouter();
+function LoginCard() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
+  const errorCode = searchParams.get('error');
+  const error = errorCode ? ERROR_MESSAGES[errorCode] ?? 'Sign-in failed. Please try again.' : null;
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: 'Login failed' }));
-      setError(data.error || 'Invalid username or password');
-      return;
-    }
-
-    // Cookie is set by the server. Navigate to the original destination.
-    startTransition(() => {
-      router.push(redirectTo);
-      router.refresh(); // forces middleware re-evaluation
-    });
-  };
+  // Plain link — the OAuth flow is a full top-level navigation, not a fetch.
+  const googleHref = `/api/auth/google?redirect=${encodeURIComponent(redirectTo)}`;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="username" className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-          Username
-        </label>
-        <input
-          id="username"
-          type="text"
-          autoComplete="username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-          autoFocus
-          disabled={pending}
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="password" className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          disabled={pending}
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-40"
-        />
-      </div>
-
+    <div className="space-y-4">
       {error && (
         <div className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-300">
           {error}
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={pending || username.length === 0 || password.length === 0}
-        className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow shadow-indigo-900/30"
+      <a
+        href={googleHref}
+        className="flex w-full items-center justify-center gap-3 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-800 transition-colors shadow"
       >
-        {pending ? 'Signing in…' : 'Sign in'}
-      </button>
-    </form>
+        <svg className="h-4 w-4" viewBox="0 0 18 18" aria-hidden>
+          <path
+            fill="#4285F4"
+            d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
+          />
+          <path
+            fill="#34A853"
+            d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.997 8.997 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"
+          />
+          <path
+            fill="#EA4335"
+            d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"
+          />
+        </svg>
+        Sign in with Google
+      </a>
+
+      <p className="text-center text-xs text-slate-600">
+        Access is restricted to authorized company accounts.
+      </p>
+    </div>
   );
 }
 
 /** Minimal placeholder shown while the Suspense boundary is resolving. */
-function LoginFormSkeleton() {
+function LoginCardSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
       <div className="h-10 bg-slate-800 rounded-lg" />
-      <div className="h-10 bg-slate-800 rounded-lg" />
-      <div className="h-10 bg-slate-800/60 rounded-lg" />
+      <div className="h-4 bg-slate-800/60 rounded w-2/3 mx-auto" />
     </div>
   );
 }
@@ -115,11 +88,11 @@ export default function LoginPage() {
           <p className="text-xs text-slate-500 mt-1">Contact Form QA & Site Monitor</p>
         </div>
 
-        {/* Form card */}
+        {/* Sign-in card */}
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-black/40">
           <h2 className="text-sm font-semibold text-slate-200 mb-4">Sign in to continue</h2>
-          <Suspense fallback={<LoginFormSkeleton />}>
-            <LoginForm />
+          <Suspense fallback={<LoginCardSkeleton />}>
+            <LoginCard />
           </Suspense>
         </div>
 
