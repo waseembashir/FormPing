@@ -10,6 +10,7 @@ import {
   exchangeCodeForToken,
   fetchUserInfo,
   redirectUri,
+  resolveOrigin,
   OAUTH_STATE_COOKIE,
 } from '@/lib/googleOAuth';
 
@@ -19,9 +20,10 @@ export const dynamic = 'force-dynamic';
 
 /** Bounce back to /login with a short error code shown to the user. */
 function loginError(request: NextRequest, code: string): NextResponse {
-  const url = request.nextUrl.clone();
-  url.pathname = '/login';
-  url.search = `?error=${encodeURIComponent(code)}`;
+  // Build absolute URL from the PUBLIC origin (x-forwarded-host) — without
+  // this, Railway's reverse proxy makes us redirect to the container's
+  // internal http://localhost:8080 instead of the user's actual URL.
+  const url = `${resolveOrigin(request)}/login?error=${encodeURIComponent(code)}`;
   const res = NextResponse.redirect(url);
   res.cookies.set({ name: OAUTH_STATE_COOKIE, value: '', path: '/', maxAge: 0 });
   return res;
@@ -87,16 +89,16 @@ export async function GET(request: NextRequest) {
   // Only redirect to safe, same-origin relative paths.
   const dest =
     storedRedirect.startsWith('/') && !storedRedirect.startsWith('//') ? storedRedirect : '/';
-  const url = request.nextUrl.clone();
-  url.pathname = dest;
-  url.search = '';
-
-  const res = NextResponse.redirect(url);
+  // Build absolute URL from the PUBLIC origin (x-forwarded-host) — without
+  // this, Railway's reverse proxy makes us redirect to the container's
+  // internal http://localhost:8080 instead of the user's actual URL.
+  const origin = resolveOrigin(request);
+  const res = NextResponse.redirect(`${origin}${dest}`);
   res.cookies.set({
     name: SESSION_COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: request.nextUrl.protocol === 'https:',
+    secure: origin.startsWith('https://'),
     sameSite: 'lax',
     path: '/',
     maxAge,
