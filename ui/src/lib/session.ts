@@ -39,6 +39,43 @@ export function authPassword(): string {
   return process.env.AUTH_PASSWORD ?? process.env.BASIC_AUTH_PASSWORD ?? '';
 }
 
+/**
+ * Email domains permitted to sign in via Google. Comma-separated env var,
+ * defaults to apexure.com. Leading "@" and surrounding whitespace are
+ * tolerated, and matching is case-insensitive.
+ *
+ *   ALLOWED_AUTH_DOMAINS="apexure.com, client.com"
+ */
+export function allowedAuthDomains(): string[] {
+  const raw = process.env.ALLOWED_AUTH_DOMAINS ?? 'apexure.com';
+  return raw
+    .split(',')
+    .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+    .filter(Boolean);
+}
+
+/** True when a verified email's domain is in the allow-list. */
+export function isEmailDomainAllowed(email: string): boolean {
+  const at = email.lastIndexOf('@');
+  if (at === -1) return false;
+  const domain = email.slice(at + 1).toLowerCase();
+  return allowedAuthDomains().includes(domain);
+}
+
+/** True when Google OAuth credentials are configured. */
+export function googleAuthEnabled(): boolean {
+  return Boolean(process.env.GOOGLE_CLIENT_ID) && Boolean(process.env.GOOGLE_CLIENT_SECRET);
+}
+
+/**
+ * The app gate is active when EITHER the legacy password auth OR Google
+ * auth is configured. When neither is set the gate stays open (local dev),
+ * exactly as before.
+ */
+export function gateEnabled(): boolean {
+  return authEnabled() || googleAuthEnabled();
+}
+
 export function sessionDurationDays(): number {
   const raw = process.env.AUTH_SESSION_DAYS;
   if (!raw) return 7;
@@ -54,7 +91,11 @@ function sessionSecret(): string {
   if (explicit && explicit.length >= 16) return explicit;
   const fallback = authPassword();
   if (fallback.length === 0) {
-    throw new Error('Cannot derive session secret: AUTH_PASSWORD and AUTH_SESSION_SECRET both empty');
+    // Google-only mode has no password to derive from, so a dedicated secret
+    // is mandatory there. Make the requirement explicit in the error.
+    throw new Error(
+      'Cannot derive session secret: set AUTH_SESSION_SECRET (required when using Google auth without a password)',
+    );
   }
   return `fp-derived-${fallback}`;
 }
