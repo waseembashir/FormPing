@@ -1,7 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+
+interface Profile {
+  user: string;
+  name: string | null;
+  picture: string | null;
+}
 
 const TABS = [
   { href: '/', label: 'Form Tester' },
@@ -13,6 +19,23 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  // Load the signed-in user's profile (name + avatar) for the header chip.
+  useEffect(() => {
+    let active = true;
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => {
+        if (active && d && d.user) setProfile(d as Profile);
+      })
+      .catch(() => {
+        /* not signed in or auth disabled — show nothing */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -56,10 +79,26 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-3">
-          <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-slate-500 bg-slate-800/60 px-3 py-1.5 rounded-full ring-1 ring-slate-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-            Authorized testing only
-          </span>
+          {profile && (
+            <div className="hidden sm:inline-flex items-center gap-2 bg-slate-800/60 pl-1 pr-3 py-1 rounded-full ring-1 ring-slate-700">
+              {profile.picture ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profile.picture}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-6 h-6 rounded-full object-cover"
+                />
+              ) : (
+                <span className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-[11px] font-semibold text-white">
+                  {(profile.name || profile.user).charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="text-xs font-medium text-slate-200 max-w-[140px] truncate">
+                {profile.name || profile.user}
+              </span>
+            </div>
+          )}
           <button
             type="button"
             onClick={handleLogout}

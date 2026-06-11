@@ -64,11 +64,15 @@ export async function GET(request: NextRequest) {
 
   let email: string;
   let emailVerified: boolean;
+  let name: string | undefined;
+  let picture: string | undefined;
   try {
     const accessToken = await exchangeCodeForToken(code, redirectUri(request));
     const info = await fetchUserInfo(accessToken);
     email = (info.email ?? '').toLowerCase();
     emailVerified = info.email_verified === true;
+    name = info.name;
+    picture = info.picture;
   } catch {
     return loginError(request, 'google_error');
   }
@@ -82,8 +86,9 @@ export async function GET(request: NextRequest) {
     return loginError(request, 'domain_not_allowed');
   }
 
-  // Success — mint the SAME signed session cookie the rest of the app trusts.
-  const token = await signSession(email);
+  // Success — mint the SAME signed session cookie the rest of the app trusts,
+  // now carrying the Google display name + avatar so the UI can show them.
+  const token = await signSession(email, { name, picture });
   const maxAge = sessionDurationDays() * 24 * 60 * 60;
 
   // Only redirect to safe, same-origin relative paths.

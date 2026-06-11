@@ -23,6 +23,10 @@
 
 export interface SessionPayload {
   user: string;
+  /** Display name from the Google profile (optional — password logins omit it). */
+  name?: string;
+  /** Avatar URL from the Google profile (optional). */
+  picture?: string;
   /** Unix seconds when the token expires. */
   exp: number;
 }
@@ -130,10 +134,15 @@ async function hmacKey(): Promise<CryptoKey> {
   );
 }
 
-/** Mint a signed token for the given user. */
-export async function signSession(user: string): Promise<string> {
+/** Mint a signed token for the given user, optionally with profile fields. */
+export async function signSession(
+  user: string,
+  profile?: { name?: string; picture?: string },
+): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + sessionDurationDays() * 24 * 60 * 60;
   const payload: SessionPayload = { user, exp };
+  if (profile?.name) payload.name = profile.name;
+  if (profile?.picture) payload.picture = profile.picture;
   const payloadB64 = b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
   const key = await hmacKey();
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64));
