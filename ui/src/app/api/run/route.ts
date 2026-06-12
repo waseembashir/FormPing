@@ -31,8 +31,19 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      // Guard against late events: the CLI child can emit a stderr/stdout line
+      // AFTER the stream has been closed (client disconnected, or close() already
+      // ran). Enqueuing on a closed controller throws ERR_INVALID_STATE as an
+      // uncaught exception — which can crash the server. Swallow it: a late line
+      // for a stream nobody is reading is safe to drop.
+      let streamClosed = false;
       function send(event: Record<string, unknown>) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        if (streamClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          streamClosed = true;
+        }
       }
 
       // Resolve paths relative to this file's location in the built app.
@@ -42,7 +53,10 @@ export async function POST(request: NextRequest) {
       const uiRoot = process.cwd(); // formping/ui/
       const formpingRoot = path.join(uiRoot, '..'); // formping/
       const cliPath = path.join(formpingRoot, 'src', 'cli.ts');
-      const tsxBin = path.join(formpingRoot, 'node_modules', '.bin', 'tsx');
+      // Launch tsx's JS entry via node (process.execPath). The `.bin/tsx` shim is
+      // a shell script Windows cannot exec (it needs tsx.cmd) — node + cli.mjs runs
+      // identically on Windows (local dev) and Linux (Railway).
+      const tsxCli = path.join(formpingRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
       // Build CLI args
       const args: string[] = [cliPath, '--stream', '--mode', mode];
@@ -67,7 +81,7 @@ export async function POST(request: NextRequest) {
       // Emit initial progress event so the UI shows something immediately
       send({ type: 'progress', url: urls[0]!, index: 0, total: urls.length });
 
-      const child = spawn(tsxBin, args, {
+      const child = spawn(process.execPath, [tsxCli, ...args], {
         cwd: formpingRoot,
         env: { ...process.env, DEBUG: '0' },
         stdio: ['ignore', 'pipe', 'pipe'],
