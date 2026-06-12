@@ -26,11 +26,14 @@ interface ProviderInfo {
 
 async function listProvidersViaCli(): Promise<ProviderInfo[]> {
   const formpingRoot = path.join(process.cwd(), '..');
-  const tsxBin = path.join(formpingRoot, 'node_modules', '.bin', 'tsx');
+  // Launch tsx's JS entry via node (process.execPath). The `.bin/tsx` shim is a
+  // shell script Windows cannot exec — node + cli.mjs runs identically on Windows
+  // (local dev) and Linux (Railway).
+  const tsxCli = path.join(formpingRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
   const helperPath = path.join(formpingRoot, 'src', 'ai', 'list-providers.ts');
 
   return new Promise((resolve, reject) => {
-    const child = spawn(tsxBin, [helperPath], {
+    const child = spawn(process.execPath, [tsxCli, helperPath], {
       cwd: formpingRoot,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],

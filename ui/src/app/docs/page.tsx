@@ -14,6 +14,7 @@ const SECTIONS = [
   { id: 'tradeoffs', label: 'Trade-offs' },
   { id: 'math', label: 'Scaling math' },
   { id: 'form-tester', label: 'Form Tester quick ref' },
+  { id: 'form-watch', label: 'Form Watch (scheduler)' },
 ];
 
 // ─── Styled primitives ─────────────────────────────────────────────────────
@@ -498,6 +499,88 @@ export default function DocsPage() {
               CAPTCHA / anti-bot is detected and reported, never bypassed. See the{' '}
               <Code>README.md</Code> in the repo for the full reason-code list.
             </P>
+
+            {/* ── Form Watch ──────────────────────────────────── */}
+            <H2 id="form-watch">Form Watch (scheduler)</H2>
+            <P>
+              Form Watch automatically re-tests a contact form on a fixed schedule and alerts you
+              when it changes or breaks — so you catch a silently-broken client form within one
+              cycle, instead of when leads stop arriving. It reuses the Form Tester engine; it just
+              runs it on a timer and tracks the result over time.
+            </P>
+            <P>Per watched URL:</P>
+            <UL>
+              <LI>You add a URL, a check frequency (e.g. every 3 days), and a mode.</LI>
+              <LI>
+                A baseline check runs immediately, then repeats on your interval — automatically —
+                until you click <strong>Stop</strong>.
+              </LI>
+              <LI>Each run records the result and compares it to the previous run.</LI>
+              <LI>
+                A Slack alert fires on every run (success <em>and</em> failure) with the URL,
+                status, any changes, and a suggested next action.
+              </LI>
+            </UL>
+
+            <P>Modes (same as the Form Tester):</P>
+            <Table
+              headers={['Mode', 'Behavior']}
+              rows={[
+                [
+                  <Code key="0">live</Code>,
+                  'Fills and submits — confirms the form actually delivers. The intended mode for monitoring.',
+                ],
+                [<Code key="0">safe</Code>, 'Fills the form but does not submit.'],
+                [<Code key="0">detect-only</Code>, 'Only confirms a form is present.'],
+              ]}
+            />
+            <Note tone="warn">
+              <strong>Live mode submits a real entry every cycle</strong>, which lands in the
+              client&apos;s inbox / CRM. Use it only on forms you own or are authorized to monitor.
+              The test data identifies it as a health check.
+            </Note>
+
+            <P>What each run records:</P>
+            <Table
+              headers={['Field', 'Meaning']}
+              rows={[
+                [<Code key="0">status</Code>, 'pass / warn / fail / error — the health verdict.'],
+                [
+                  <Code key="0">reasonCode</Code>,
+                  'e.g. THANK_YOU_REDIRECT, FORM_NOT_FOUND, CAPTCHA_DETECTED, SUBMIT_FAILED.',
+                ],
+                [
+                  'changes',
+                  'Before/after differences vs the previous run — form removed, CAPTCHA appeared, submit endpoint changed, confidence dropped.',
+                ],
+                ['suggestions', 'Plain-English next action derived from the result and the changes.'],
+              ]}
+            />
+
+            <P>Slack notifications:</P>
+            <UL>
+              <LI>
+                Set the <Code>SLACK_WEBHOOK_URL</Code> env var (the same webhook the Change Monitor
+                uses). Point it at the dev channel.
+              </LI>
+              <LI>
+                Without it, runs still execute and are stored — the Slack send is simply skipped
+                (best-effort, never blocks a run).
+              </LI>
+            </UL>
+
+            <P>Storage — no database, files on the same volume as the monitor:</P>
+            <CodeBlock>{`formping/data/snapshots/
+├── .formping-form-schedules.json     ← the active schedules
+└── .formping-form-runs/
+    └── <scheduleId>.json              ← run history, newest first, capped`}</CodeBlock>
+
+            <Note>
+              The scheduler runs in-process while the server is up. Schedules persist on disk and
+              <strong> resume automatically</strong> after a restart or redeploy, so no checks are
+              lost. Keep the service always-on for reliable cycles. Minimum interval is 1 hour; a
+              URL is validated (must be reachable) before it can be added.
+            </Note>
           </article>
         </div>
       </main>

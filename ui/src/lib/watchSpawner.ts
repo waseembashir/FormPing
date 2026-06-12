@@ -54,7 +54,10 @@ export function spawnMonitor(
   const uiRoot = process.cwd();
   const formpingRoot = path.join(uiRoot, '..');
   const cliPath = path.join(formpingRoot, 'src', 'cli.ts');
-  const tsxBin = path.join(formpingRoot, 'node_modules', '.bin', 'tsx');
+  // Launch tsx's JS entry via node (process.execPath). The `.bin/tsx` shim is a
+  // shell script Windows cannot exec — node + cli.mjs runs identically on Windows
+  // (local dev) and Linux (Railway).
+  const tsxCli = path.join(formpingRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
   const args: string[] = [
     cliPath,
@@ -68,7 +71,7 @@ export function spawnMonitor(
   else if (opts.aiSummary) args.push('--ai-summary');
   if (opts.monitorMode === 'watch') args.push('--watch-interval', String(opts.watchIntervalMs));
 
-  const child = spawn(tsxBin, args, {
+  const child = spawn(process.execPath, [tsxCli, ...args], {
     cwd: formpingRoot,
     env: { ...process.env, DEBUG: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],

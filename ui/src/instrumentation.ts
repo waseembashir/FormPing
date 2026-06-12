@@ -23,4 +23,14 @@ export async function register() {
   } catch (err) {
     console.warn(`[instrumentation] resumeActiveWatches threw: ${err}`);
   }
+
+  // Form Watch scheduler — additive, independent of the monitor watches above.
+  // Starts the recurring form-test loop; schedules persist on disk so this
+  // simply picks up any that are due after a restart/redeploy.
+  try {
+    const { startFormWatchTicker } = await import('./lib/formWatch/ticker');
+    startFormWatchTicker();
+  } catch (err) {
+    console.warn(`[instrumentation] startFormWatchTicker threw: ${err}`);
+  }
 }
