@@ -13,6 +13,7 @@ const TABS = [
   { href: '/', label: 'Form Tester' },
   { href: '/monitor', label: 'Change Monitor' },
   { href: '/form-watch', label: 'Form Watch' },
+  { href: '/site-watch', label: 'Site Watch' },
   { href: '/docs', label: 'Docs' },
 ];
 

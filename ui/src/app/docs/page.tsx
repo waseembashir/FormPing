@@ -15,6 +15,7 @@ const SECTIONS = [
   { id: 'math', label: 'Scaling math' },
   { id: 'form-tester', label: 'Form Tester quick ref' },
   { id: 'form-watch', label: 'Form Watch (scheduler)' },
+  { id: 'site-watch', label: 'Site Watch (uptime + SSL)' },
 ];
 
 // ─── Styled primitives ─────────────────────────────────────────────────────
@@ -580,6 +581,59 @@ export default function DocsPage() {
               <strong> resume automatically</strong> after a restart or redeploy, so no checks are
               lost. Keep the service always-on for reliable cycles. Minimum interval is 1 hour; a
               URL is validated (must be reachable) before it can be added.
+            </Note>
+
+            {/* ── Site Watch ──────────────────────────────────── */}
+            <H2 id="site-watch">Site Watch (uptime + SSL)</H2>
+            <P>
+              Site Watch monitors site **availability** and **TLS-certificate expiry** on a
+              schedule — separate from Form Watch because the data is different (no form, no
+              submission). It catches two failure modes form checks can&apos;t: a site going down
+              between (infrequent) form checks, and a cert silently expiring.
+            </P>
+            <P>Two lightweight probes per check:</P>
+            <Table
+              headers={['Probe', 'How', 'Result']}
+              rows={[
+                [
+                  <Code key="0">uptime</Code>,
+                  'A single HTTP GET (no browser).',
+                  'up / down / reachable-but-challenged, + status code & response time.',
+                ],
+                [
+                  <Code key="0">ssl</Code>,
+                  <span key="1">
+                    A TLS handshake via Node&apos;s <Code>tls</Code> module.
+                  </span>,
+                  'Days until the certificate expires.',
+                ],
+              ]}
+            />
+            <Note>
+              <strong>It&apos;s free</strong> — no browser, no external API, no proxy. Uptime is a
+              `fetch`; SSL is a TLS handshake reading the cert. Neither is bot-blocked the way form
+              submission is, so no residential proxy is needed.
+            </Note>
+            <P>Alerts fire only on change (never every cycle):</P>
+            <UL>
+              <LI>
+                <strong>Down</strong> — after 2 consecutive failed probes (flap protection), once
+                per outage; <strong>recovered</strong> when it&apos;s back.
+              </LI>
+              <LI>
+                <strong>SSL</strong> — once per severity threshold crossed (30 / 14 / 7 days, then
+                expired); resets when the cert is renewed.
+              </LI>
+            </UL>
+            <P>Storage mirrors the other features — JSON on the volume, no database:</P>
+            <CodeBlock>{`formping/data/snapshots/
+├── .formping-site-schedules.json     ← the monitors
+└── .formping-site-runs/
+    └── <scheduleId>.json              ← check history, newest first`}</CodeBlock>
+            <Note tone="warn">
+              A few heavily-protected sites may return a bot-challenge page to a datacenter IP — we
+              classify that as <em>reachable (challenged)</em>, not <em>down</em>, so we don&apos;t
+              cry wolf. Default interval is 5 minutes; minimum 1 minute.
             </Note>
           </article>
         </div>
