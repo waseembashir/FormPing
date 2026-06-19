@@ -33,4 +33,13 @@ export async function register() {
   } catch (err) {
     console.warn(`[instrumentation] startFormWatchTicker threw: ${err}`);
   }
+
+  // Site Watch scheduler — additive, independent of the above. Starts the
+  // uptime/SSL monitoring loop; schedules persist on disk and resume here.
+  try {
+    const { startSiteWatchTicker } = await import('./lib/siteWatch/ticker');
+    startSiteWatchTicker();
+  } catch (err) {
+    console.warn(`[instrumentation] startSiteWatchTicker threw: ${err}`);
+  }
 }
