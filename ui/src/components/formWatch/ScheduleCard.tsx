@@ -169,6 +169,37 @@ function RunRow({ run }: { run: FormRunRecord }) {
         {run.fingerprint.captchaDetected ? ' · CAPTCHA present' : ''}
         <span className="text-slate-600"> · {run.reasonCode}</span>
       </div>
+
+      {/* Form details — surfaced so the form info is visible on the page */}
+      {run.fingerprint.formFound && (
+        <div className="mt-1 text-[11px] text-slate-400">
+          Form detected
+          {run.fingerprint.formConfidence > 0 &&
+            ` · ${Math.round(run.fingerprint.formConfidence * 100)}% confidence`}
+          {run.fingerprint.formMethod && ` · ${run.fingerprint.formMethod.toUpperCase()}`}
+          {run.fingerprint.formId && (
+            <>
+              {' '}· id{' '}
+              <code className="rounded bg-slate-800/60 px-1 text-slate-300">
+                {run.fingerprint.formId}
+              </code>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Detailed run notes (form found, fields filled, suggestions, etc.) */}
+      {run.notes.length > 0 && (
+        <ul className="mt-1.5 space-y-1">
+          {run.notes.map((n, i) => (
+            <li key={i} className="flex gap-1.5 text-[11px] text-slate-500">
+              <span className="shrink-0 text-slate-600">•</span>
+              <span>{n}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {run.errors.length > 0 && (
         <p className="mt-1.5 text-[11px] text-red-300/80">{run.errors.slice(0, 2).join('; ')}</p>
       )}

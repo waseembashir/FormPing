@@ -116,21 +116,13 @@ export function ConfigPanel({ config, onChange, disabled }: Props) {
         {/* Toggles */}
         <div className="space-y-3 pt-1">
           <Toggle label="Show browser (headed)" checked={config.headed} onChange={v => set('headed', v)} disabled={disabled} />
-          <div>
-            <Toggle
-              label="Use residential IP"
-              checked={config.residentialFallback}
-              onChange={v => set('residentialFallback', v)}
-              disabled={disabled}
-            />
-            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
-              When ON, runs every test directly through your configured residential proxy — skips the cloud-IP attempt entirely (faster for known-blocked sites like Hostinger). Configure one of:
-              <br />
-              <span className="font-mono text-slate-400">RESIDENTIAL_PROXY_URL</span> (+ <span className="font-mono text-slate-400">_USER</span>/<span className="font-mono text-slate-400">_PASS</span>) for Webshare/IPRoyal/Smartproxy — <span className="text-emerald-500/80">preferred when both set</span>
-              <br />
-              <span className="font-mono text-slate-400">BROWSERBASE_API_KEY</span> + <span className="font-mono text-slate-400">BROWSERBASE_PROJECT_ID</span> for Browserbase
-            </p>
-          </div>
+          {/*
+            "Use residential IP" toggle is hidden for now — no residential proxy
+            is configured, so exposing it would be misleading. The
+            `config.residentialFallback` field stays in the model (defaults to
+            false), so backend behaviour is unchanged and the toggle can be
+            restored here once a RESIDENTIAL_PROXY_URL / Browserbase key is set.
+          */}
         </div>
 
         {/* AI provider — picks between Claude / Gemini / Groq / Ollama / Off */}

@@ -51,8 +51,23 @@ export function Header() {
     <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-6">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-indigo-900/50">
-            FP
+          {/* Brand mark — Form + Ping (same artwork as the favicon) */}
+          <div className="rounded-lg shadow-lg shadow-indigo-900/50">
+            <svg width="34" height="34" viewBox="0 0 64 64" aria-hidden className="block">
+              <defs>
+                <linearGradient id="fpHeaderMark" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#6366f1" />
+                  <stop offset="1" stopColor="#4338ca" />
+                </linearGradient>
+              </defs>
+              <rect width="64" height="64" rx="14" fill="url(#fpHeaderMark)" />
+              <rect x="14" y="12" width="27" height="29" rx="5" fill="#ffffff" />
+              <rect x="19" y="18.4" width="17" height="3.2" rx="1.6" fill="#c7d2fe" />
+              <rect x="19" y="24.4" width="17" height="3.2" rx="1.6" fill="#c7d2fe" />
+              <rect x="19" y="30.4" width="11" height="3.2" rx="1.6" fill="#c7d2fe" />
+              <circle cx="45" cy="46" r="8" fill="none" stroke="#ff6a2b" strokeWidth="2.4" opacity="0.5" />
+              <circle cx="45" cy="46" r="4.2" fill="#ff6a2b" />
+            </svg>
           </div>
           <div>
             <h1 className="text-base font-bold text-slate-100 leading-none">FormPing</h1>
