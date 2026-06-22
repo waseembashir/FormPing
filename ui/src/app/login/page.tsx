@@ -81,8 +81,23 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo + name */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-900/50 mb-3">
-            FP
+          {/* Brand mark — Form + Ping (same artwork as the favicon) */}
+          <div className="rounded-xl shadow-lg shadow-indigo-900/50 mb-3">
+            <svg width="48" height="48" viewBox="0 0 64 64" aria-hidden className="block">
+              <defs>
+                <linearGradient id="fpLoginMark" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#6366f1" />
+                  <stop offset="1" stopColor="#4338ca" />
+                </linearGradient>
+              </defs>
+              <rect width="64" height="64" rx="14" fill="url(#fpLoginMark)" />
+              <rect x="14" y="12" width="27" height="29" rx="5" fill="#ffffff" />
+              <rect x="19" y="18.4" width="17" height="3.2" rx="1.6" fill="#c7d2fe" />
+              <rect x="19" y="24.4" width="17" height="3.2" rx="1.6" fill="#c7d2fe" />
+              <rect x="19" y="30.4" width="11" height="3.2" rx="1.6" fill="#c7d2fe" />
+              <circle cx="45" cy="46" r="8" fill="none" stroke="#ff6a2b" strokeWidth="2.4" opacity="0.5" />
+              <circle cx="45" cy="46" r="4.2" fill="#ff6a2b" />
+            </svg>
           </div>
           <h1 className="text-xl font-bold text-slate-100">FormPing</h1>
           <p className="text-xs text-slate-500 mt-1">Contact Form QA & Site Monitor</p>

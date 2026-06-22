@@ -13,6 +13,16 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { gateEnabled, verifySession, SESSION_COOKIE_NAME } from '@/lib/session';
 
+// Next.js metadata file-convention routes that must stay publicly reachable
+// (see the PUBLIC_ASSETS check below). Kept in sync with the icon/image files
+// in src/app: icon.svg, apple-icon.png, opengraph-image.png, twitter-image.png.
+const PUBLIC_ASSETS = new Set([
+  '/icon.svg',
+  '/apple-icon.png',
+  '/opengraph-image.png',
+  '/twitter-image.png',
+]);
+
 export async function middleware(req: NextRequest) {
   // Open gate when neither password nor Google auth is configured (local dev).
   if (!gateEnabled()) return NextResponse.next();
@@ -22,6 +32,14 @@ export async function middleware(req: NextRequest) {
   // Always allow the login page and login/logout API routes through without
   // a session cookie — otherwise users could never log in.
   if (pathname === '/login' || pathname.startsWith('/api/auth/')) {
+    return NextResponse.next();
+  }
+
+  // Public SEO/brand assets (favicon + social share images). These must be
+  // reachable WITHOUT a session so external crawlers (Slackbot, Twitter,
+  // Google) can fetch the Open Graph image and favicon to render link
+  // unfurls. They contain only public brand artwork — no app data.
+  if (PUBLIC_ASSETS.has(pathname)) {
     return NextResponse.next();
   }
 

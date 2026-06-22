@@ -28,9 +28,29 @@ export function detectCaptcha(pageHtml: string, config: AppConfig): boolean {
   return containsAny(pageHtml, config.captchaPatterns);
 }
 
+/**
+ * Strip <script>, <style> and <noscript> blocks so we only inspect markup the
+ * user can actually see. Prevents challenge-related phrases that live inside a
+ * site's own JavaScript (e.g. a Turnstile validation string like "please
+ * complete the security check") from being mistaken for a real interstitial.
+ */
+function stripNonVisible(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ');
+}
+
+/**
+ * True only when the page DISPLAYS a bot-challenge message. Genuine challenge
+ * pages (Cloudflare "just a moment…", Sucuri / DDoS-Guard blocks) render their
+ * text as visible body content, which survives stripNonVisible(); phrases baked
+ * into the site's scripts do not — so a real page that merely *references* a
+ * challenge string in its JS is no longer flagged as blocked.
+ */
 export function detectAntiBot(pageHtml: string, pageTitle: string, config: AppConfig): boolean {
   return (
-    containsAny(pageHtml, config.antiBotPatterns) ||
+    containsAny(stripNonVisible(pageHtml), config.antiBotPatterns) ||
     containsAny(pageTitle, config.antiBotPatterns)
   );
 }

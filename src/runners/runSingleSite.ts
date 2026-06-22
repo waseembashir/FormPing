@@ -139,16 +139,11 @@ export async function runSingleSite(
 
     logger.info(`Contact page: ${candidate.url} (confidence=${baseResult.contactPageConfidence.toFixed(2)})`);
 
-    if (config.mode === 'detect-only') {
-      return {
-        ...baseResult,
-        finalUrl: candidate.url,
-        finalStatus: 'warn',
-        reasonCode: 'DETECT_ONLY',
-        notes: [...baseResult.notes, 'detect-only mode: no form interaction'],
-        durationMs: Date.now() - start,
-      };
-    }
+    // Note: detect-only does NOT return here. It still loads the contact page
+    // and runs form detection below (Step 2–3) so it can confirm the form
+    // actually exists — it just stops before filling/submitting. Returning at
+    // this point would leave formFound=false even when a form is present, which
+    // the Form Watch health verdict reads as "No contact form found".
 
     // ── Step 2: Load contact page in Playwright ──────────────────────────────
     const { context, page } = await newPage(browser, config);
@@ -278,6 +273,21 @@ export async function runSingleSite(
 
       logger.info(`Form found (confidence=${formConfidence.toFixed(2)}): ${JSON.stringify(form.identifier)}`);
 
+      // detect-only mode: the form has been located on the (loaded) contact
+      // page — report it as found without filling or submitting. formFound /
+      // formIdentifier / formConfidence are already populated on baseResult.
+      if (config.mode === 'detect-only') {
+        return {
+          ...baseResult,
+          finalUrl: page.url(),
+          captchaDetected,
+          finalStatus: 'warn',
+          reasonCode: 'DETECT_ONLY',
+          notes: [...baseResult.notes, 'detect-only mode: form detected, not filled or submitted'],
+          durationMs: Date.now() - start,
+        };
+      }
+
       // ── Step 4: Fill form ──────────────────────────────────────────────────
       const {
         filledFields,
@@ -321,7 +331,11 @@ export async function runSingleSite(
         );
       }
 
-      if (fillCaptcha) {
+      // A CAPTCHA only matters for LIVE mode, where it blocks the actual
+      // submission. In safe / detect-only we never submit, so a CAPTCHA on the
+      // form does NOT stop us reporting the form as found & filled — fall
+      // through to the safe-mode result below instead of failing here.
+      if (fillCaptcha && config.mode === 'live') {
         const pendingTypes = (Object.entries(captchaState) as Array<[string, string]>)
           .filter(([_, v]) => v === 'pending')
           .map(([k]) => k);
@@ -369,13 +383,19 @@ export async function runSingleSite(
 
       // ── Step 5: Submit (live mode only) ───────────────────────────────────
       if (config.mode === 'safe') {
+        const captchaPresent = captchaDetected || fillCaptcha;
         return {
           ...baseResult,
           finalUrl: page.url(),
-          captchaDetected,
+          captchaDetected: captchaPresent,
           finalStatus: 'warn',
           reasonCode: 'SAFE_MODE_NO_SUBMIT',
-          notes: [...baseResult.notes, 'safe mode: form filled but not submitted'],
+          notes: [
+            ...baseResult.notes,
+            captchaPresent
+              ? 'safe mode: form filled but not submitted (a CAPTCHA is present — it would block a live submission, but does not affect detection or filling)'
+              : 'safe mode: form filled but not submitted',
+          ],
           durationMs: Date.now() - start,
         };
       }
