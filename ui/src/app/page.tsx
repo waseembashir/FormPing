@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Header } from '@/components/Header';
 import { UrlInputPanel } from '@/components/UrlInputPanel';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { ResultsPanel } from '@/components/ResultsPanel';
@@ -116,8 +115,14 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <Header />
       <main className="max-w-7xl mx-auto px-4 pb-16 pt-8">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-slate-100">Test a form</h2>
+          <p className="text-sm text-slate-400 mt-1">
+            Run an on-demand check on one or more contact forms — find the form, fill it, and (in live
+            mode) submit to confirm it actually works.
+          </p>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
           {/* Left — input + config */}
           <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-20">

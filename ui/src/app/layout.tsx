@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { AppChrome } from '@/components/AppChrome';
 import { Footer } from '@/components/Footer';
 
 // Public base URL used to resolve absolute OG/Twitter image URLs. Defaults to the
@@ -60,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           attributes/divs into the DOM before React hydrates. Doesn't hide
           real bugs in the React tree itself. */}
       <body className="antialiased min-h-screen bg-slate-950 flex flex-col" suppressHydrationWarning>
+        <AppChrome />
         <div className="flex-1">{children}</div>
         <Footer />
       </body>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Header } from '@/components/Header';
 import { MonitorInputPanel } from '@/components/monitor/MonitorInputPanel';
 import { MonitorConfigPanel } from '@/components/monitor/MonitorConfigPanel';
 import { MonitorResultsPanel } from '@/components/monitor/MonitorResultsPanel';
@@ -306,10 +305,9 @@ export default function MonitorPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <Header />
       <main className="max-w-7xl mx-auto px-4 pb-16 pt-8">
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-slate-100">Website Change Monitor</h2>
+          <h2 className="text-xl font-bold text-slate-100">Change tracking</h2>
           <p className="text-sm text-slate-400 mt-1">
             Snapshot a site, compare it later, and see exactly what changed — content, SEO, forms, scripts, performance.
           </p>

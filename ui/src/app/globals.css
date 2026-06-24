@@ -10,6 +10,14 @@
   box-sizing: border-box;
 }
 
+/* Always show the vertical scrollbar so its width is reserved consistently.
+   Without this, navigating between pages of different heights makes the
+   scrollbar appear/disappear and shifts the centered content sideways — a
+   desktop-only "page jump" (mobile uses overlay scrollbars, so it's unaffected). */
+html {
+  overflow-y: scroll;
+}
+
 body {
   background-color: #020617; /* slate-950 */
   color: #f1f5f9; /* slate-100 */
@@ -35,4 +43,23 @@ body {
 :focus-visible {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
+}
+
+/* Sub-nav entrance animation — mobile only.
+   On desktop the entrance read as a "jump" on every navigation, so it's
+   instant there; on mobile the gentle fade-in looks good. */
+@keyframes fp-subnav-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 639px) {
+  .fp-subnav-in {
+    animation: fp-subnav-in 220ms ease-out;
+  }
 }
