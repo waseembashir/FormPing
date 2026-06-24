@@ -9,17 +9,57 @@ interface Profile {
   picture: string | null;
 }
 
-const TABS = [
-  { href: '/', label: 'Form Tester' },
-  { href: '/monitor', label: 'Change Monitor' },
-  { href: '/form-watch', label: 'Form Watch' },
-  { href: '/site-watch', label: 'Site Watch' },
-  { href: '/docs', label: 'Docs' },
+interface SubTab {
+  href: string;
+  label: string;
+}
+interface NavGroup {
+  label: string;
+  /** Where the top-level tab links to (the group's primary page). */
+  href: string;
+  /** Pathnames that belong to this group (drives active state). */
+  match: string[];
+  subTabs: SubTab[];
+  /** Shown in the sub-nav row for areas with no sub-tabs, so the header keeps a
+   *  constant height (prevents the page shifting when navigating to/from Docs). */
+  hint?: string;
+}
+
+// Two subject-based areas + Docs. The on-demand and scheduled views of the
+// same subject live together so the app reads as "the client's form" vs
+// "the client's site" rather than five unrelated tabs.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Forms',
+    href: '/',
+    match: ['/', '/form-watch'],
+    subTabs: [
+      { href: '/', label: 'Test a form' },
+      { href: '/form-watch', label: 'Scheduled monitors' },
+    ],
+  },
+  {
+    label: 'Site',
+    href: '/site-watch',
+    match: ['/site-watch', '/monitor'],
+    subTabs: [
+      { href: '/site-watch', label: 'Uptime & SSL' },
+      { href: '/monitor', label: 'Change tracking' },
+    ],
+  },
+  {
+    label: 'Docs',
+    href: '/docs',
+    match: ['/docs'],
+    subTabs: [],
+    hint: 'Reference & how-tos',
+  },
 ];
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const activeGroup = NAV_GROUPS.find((g) => g.match.includes(pathname));
   const [pending, startTransition] = useTransition();
   const [profile, setProfile] = useState<Profile | null>(null);
 
@@ -49,8 +89,8 @@ export function Header() {
 
   return (
     <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-10">
-      <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-6">
-        <div className="flex items-center gap-3">
+      <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:gap-6">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           {/* Brand mark — Form + Ping (same artwork as the favicon) */}
           <div className="rounded-lg shadow-lg shadow-indigo-900/50">
             <svg width="34" height="34" viewBox="0 0 64 64" aria-hidden className="block">
@@ -71,25 +111,27 @@ export function Header() {
           </div>
           <div>
             <h1 className="text-base font-bold text-slate-100 leading-none">FormPing</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Contact Form QA & Site Monitor</p>
+            <p className="hidden sm:block text-xs text-slate-500 mt-0.5">Contact Form QA & Site Monitor</p>
           </div>
         </div>
 
-        {/* Tab nav */}
-        <nav className="flex items-center gap-1 bg-slate-900/60 rounded-lg p-1 ring-1 ring-slate-800">
-          {TABS.map((tab) => {
-            const active = pathname === tab.href;
+        {/* Top-level nav — a segmented control grouped by subject (Forms / Site / Docs).
+            On mobile it drops to its own full-width row below the brand/sign-out, with
+            the pills sharing the width evenly. */}
+        <nav className="order-last w-full sm:order-none sm:w-auto flex items-center gap-1 bg-slate-900/70 rounded-xl p-1 ring-1 ring-slate-800 shadow-inner shadow-black/20">
+          {NAV_GROUPS.map((group) => {
+            const active = group.match.includes(pathname);
             return (
               <Link
-                key={tab.href}
-                href={tab.href}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                key={group.href}
+                href={group.href}
+                className={`flex-1 sm:flex-initial text-center px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                   active
-                    ? 'bg-indigo-600 text-white shadow shadow-indigo-900/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    ? 'bg-gradient-to-b from-indigo-500 to-indigo-600 text-white shadow-md shadow-indigo-900/50 ring-1 ring-indigo-400/30'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
                 }`}
               >
-                {tab.label}
+                {group.label}
               </Link>
             );
           })}
@@ -143,6 +185,46 @@ export function Header() {
             </svg>
             <span className="hidden sm:inline">{pending ? 'Signing out…' : 'Sign out'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Sub-nav — ALWAYS rendered so the header height stays constant. This stops
+          the page shifting when navigating to/from an area without sub-tabs (Docs).
+          Areas with sub-tabs show underline tabs (the indicator scales in on the
+          active one); others show a muted hint. Keyed on the area so the row fades
+          in on an area switch (mobile only). */}
+      <div className="border-t border-slate-800/60">
+        <div
+          key={activeGroup?.label ?? 'none'}
+          className="fp-subnav-in max-w-7xl mx-auto px-4 flex items-stretch gap-1 sm:gap-2 h-11 overflow-x-auto"
+        >
+          {activeGroup && activeGroup.subTabs.length > 0 ? (
+            activeGroup.subTabs.map((sub) => {
+              const subActive = pathname === sub.href;
+              return (
+                <Link
+                  key={sub.href}
+                  href={sub.href}
+                  className={`group relative flex-1 sm:flex-initial inline-flex items-center justify-center px-3 text-xs font-medium whitespace-nowrap transition-colors duration-200 ${
+                    subActive ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-200'
+                  }`}
+                >
+                  {sub.label}
+                  <span
+                    className={`pointer-events-none absolute inset-x-2 bottom-0 h-[2px] rounded-full origin-center transition-transform duration-300 ease-out ${
+                      subActive
+                        ? 'bg-indigo-400 scale-x-100'
+                        : 'bg-slate-600 scale-x-0 group-hover:scale-x-50'
+                    }`}
+                  />
+                </Link>
+              );
+            })
+          ) : (
+            <span className="inline-flex items-center text-xs font-medium text-slate-600">
+              {activeGroup?.hint ?? ''}
+            </span>
+          )}
         </div>
       </div>
     </header>

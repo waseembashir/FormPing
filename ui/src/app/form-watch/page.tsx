@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Header } from '@/components/Header';
 import { ScheduleCard } from '@/components/formWatch/ScheduleCard';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 
@@ -100,10 +99,9 @@ export default function FormWatchPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <Header />
       <main className="max-w-7xl mx-auto px-4 pb-16 pt-8">
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-slate-100">Form Watch</h2>
+          <h2 className="text-xl font-bold text-slate-100">Scheduled monitors</h2>
           <p className="text-sm text-slate-400 mt-1">
             Automatically test contact forms on a schedule. Each run checks form health, detects
             changes, and sends a Slack alert (success and failure) with the URL.

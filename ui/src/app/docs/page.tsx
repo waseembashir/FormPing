@@ -1,10 +1,10 @@
 'use client';
 
-import { Header } from '@/components/Header';
 import type { ReactNode } from 'react';
 
 const SECTIONS = [
-  { id: 'overview', label: 'Overview' },
+  { id: 'layout', label: 'How it is organized' },
+  { id: 'overview', label: 'Change tracking — overview' },
   { id: 'storage', label: 'Storage layout' },
   { id: 'snapshot-data', label: 'What gets saved' },
   { id: 'comparison', label: 'How comparison works' },
@@ -13,9 +13,9 @@ const SECTIONS = [
   { id: 'scaling', label: 'What scales' },
   { id: 'tradeoffs', label: 'Trade-offs' },
   { id: 'math', label: 'Scaling math' },
-  { id: 'form-tester', label: 'Form Tester quick ref' },
-  { id: 'form-watch', label: 'Form Watch (scheduler)' },
-  { id: 'site-watch', label: 'Site Watch (uptime + SSL)' },
+  { id: 'form-tester', label: 'Forms · Test a form' },
+  { id: 'form-watch', label: 'Forms · Scheduled monitors' },
+  { id: 'site-watch', label: 'Site · Uptime & SSL' },
 ];
 
 // ─── Styled primitives ─────────────────────────────────────────────────────
@@ -126,7 +126,6 @@ function LI({ children }: { children: ReactNode }) {
 export default function DocsPage() {
   return (
     <div className="min-h-screen bg-slate-950">
-      <Header />
       <main className="max-w-7xl mx-auto px-4 pb-24 pt-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* ── Sticky TOC ─────────────────────────────────────────── */}
@@ -154,12 +153,30 @@ export default function DocsPage() {
             <div className="mb-10">
               <H1>FormPing Docs</H1>
               <p className="text-slate-400 mt-2">
-                How the Website Change Monitor stores data, runs comparisons, and stays cheap.
+                How FormPing works — testing contact forms, and monitoring sites for uptime, SSL,
+                and content changes.
               </p>
             </div>
 
-            {/* ── Overview ─────────────────────────────────────── */}
-            <H2 id="overview">Overview</H2>
+            {/* ── How it is organized ───────────────────────────── */}
+            <H2 id="layout">How FormPing is organized</H2>
+            <P>
+              FormPing is grouped into two areas — <strong>Forms</strong> (is the client&apos;s
+              contact form working?) and <strong>Site</strong> (is the client&apos;s website up and
+              unchanged?) — plus these Docs. Each area has an on-demand view and a scheduled view:
+            </P>
+            <Table
+              headers={['Area', 'View', 'What it does']}
+              rows={[
+                ['Forms', 'Test a form', 'Run an on-demand form test now (find → fill → optionally submit).'],
+                ['Forms', 'Scheduled monitors', 'Re-test a form on a schedule; Slack alerts on change or break.'],
+                ['Site', 'Uptime & SSL', 'Monitor availability + TLS-certificate expiry on a schedule; Slack alerts.'],
+                ['Site', 'Change tracking', 'Snapshot pages and report content/SEO/form/script changes over time.'],
+              ]}
+            />
+
+            {/* ── Change tracking — overview ────────────────────── */}
+            <H2 id="overview">Change tracking — overview</H2>
             <P>
               The monitor takes a <em>snapshot</em> of a site (homepage + a few important pages),
               saves it to disk, and later compares the current state of the site against the most
@@ -467,7 +484,7 @@ export default function DocsPage() {
             </Note>
 
             {/* ── Form Tester ─────────────────────────────────── */}
-            <H2 id="form-tester">Form Tester quick reference</H2>
+            <H2 id="form-tester">Forms → Test a form</H2>
             <P>
               The original feature: discovers a site&apos;s contact page, finds the main contact
               form, fills it with test data, optionally submits, and verifies the thank-you state.
@@ -502,7 +519,7 @@ export default function DocsPage() {
             </P>
 
             {/* ── Form Watch ──────────────────────────────────── */}
-            <H2 id="form-watch">Form Watch (scheduler)</H2>
+            <H2 id="form-watch">Forms → Scheduled monitors</H2>
             <P>
               Form Watch automatically re-tests a contact form on a fixed schedule and alerts you
               when it changes or breaks — so you catch a silently-broken client form within one
@@ -584,7 +601,7 @@ export default function DocsPage() {
             </Note>
 
             {/* ── Site Watch ──────────────────────────────────── */}
-            <H2 id="site-watch">Site Watch (uptime + SSL)</H2>
+            <H2 id="site-watch">Site → Uptime &amp; SSL</H2>
             <P>
               Site Watch monitors site **availability** and **TLS-certificate expiry** on a
               schedule — separate from Form Watch because the data is different (no form, no
