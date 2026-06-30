@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ScheduleCard } from '@/components/formWatch/ScheduleCard';
+import { ProjectUrlPicker } from '@/components/projects/ProjectUrlPicker';
+import { AddToProjectModal } from '@/components/projects/AddToProjectModal';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 
 const INTERVAL_PRESETS = [
@@ -25,6 +27,8 @@ export default function FormWatchPage() {
   const [mode, setMode] = useState<FormWatchMode>('live');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** URL just added — drives the non-blocking "add to a project?" nudge. */
+  const [justAdded, setJustAdded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +79,7 @@ export default function FormWatchPage() {
           return;
         }
         setUrl('');
+        setJustAdded(target);
         await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Request failed');
@@ -118,9 +123,12 @@ export default function FormWatchPage() {
               <h3 className="text-sm font-semibold text-slate-200">Add a form to watch</h3>
 
               <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-                  Form URL
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Form URL
+                  </label>
+                  <ProjectUrlPicker align="right" onPick={(u) => setUrl(u)} />
+                </div>
                 <input
                   type="text"
                   value={url}
@@ -205,6 +213,7 @@ export default function FormWatchPage() {
                 until you stop it.
               </p>
             </form>
+
           </div>
 
           {/* Right — schedule list */}
@@ -236,6 +245,10 @@ export default function FormWatchPage() {
           </div>
         </div>
       </main>
+
+      {justAdded && (
+        <AddToProjectModal url={justAdded} onClose={() => setJustAdded(null)} />
+      )}
     </div>
   );
 }

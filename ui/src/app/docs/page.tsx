@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 const SECTIONS = [
   { id: 'layout', label: 'How it is organized' },
+  { id: 'projects', label: 'Projects' },
   { id: 'overview', label: 'Change tracking — overview' },
   { id: 'storage', label: 'Storage layout' },
   { id: 'snapshot-data', label: 'What gets saved' },
@@ -161,19 +162,83 @@ export default function DocsPage() {
             {/* ── How it is organized ───────────────────────────── */}
             <H2 id="layout">How FormPing is organized</H2>
             <P>
-              FormPing is grouped into two areas — <strong>Forms</strong> (is the client&apos;s
-              contact form working?) and <strong>Site</strong> (is the client&apos;s website up and
-              unchanged?) — plus these Docs. Each area has an on-demand view and a scheduled view:
+              FormPing is organized around <strong>Projects</strong> (a client + their URLs), plus
+              two tool areas — <strong>Forms</strong> (is the client&apos;s contact form working?)
+              and <strong>Site</strong> (is the client&apos;s website up and unchanged?) — and these
+              Docs:
             </P>
             <Table
               headers={['Area', 'View', 'What it does']}
               rows={[
+                ['Projects', 'Per client', 'Group a client + their URLs; see form, uptime and SSL health together.'],
                 ['Forms', 'Test a form', 'Run an on-demand form test now (find → fill → optionally submit).'],
                 ['Forms', 'Scheduled monitors', 'Re-test a form on a schedule; Slack alerts on change or break.'],
                 ['Site', 'Uptime & SSL', 'Monitor availability + TLS-certificate expiry on a schedule; Slack alerts.'],
                 ['Site', 'Change tracking', 'Snapshot pages and report content/SEO/form/script changes over time.'],
               ]}
             />
+            <Note>
+              Before any browser-based run (<strong>Test a form</strong>,{' '}
+              <strong>Change tracking</strong>) or adding a scheduled monitor, FormPing validates the
+              URL and does a quick reachability check first — so a typo or a dead host fails fast
+              instead of spinning up a browser for nothing.
+            </Note>
+
+            {/* ── Projects ──────────────────────────────────────── */}
+            <H2 id="projects">Projects</H2>
+            <P>
+              A <strong>Project</strong> groups one client&apos;s URLs under a name — the
+              <strong> one-stop view</strong> of that client&apos;s website health. It&apos;s a thin,
+              read-only overlay on top of the monitors you already run (no data is duplicated). The
+              Projects table lists every client <strong>worst-first</strong>, searchable by name or
+              URL.
+            </P>
+            <P>
+              You still add the actual monitors in the <strong>Forms</strong> and{' '}
+              <strong>Site</strong> tabs — Projects groups and surfaces them. Open a project, expand
+              a URL, and everything that URL has been through is shown together, each tagged by its
+              source:
+            </P>
+            <Table
+              headers={['Source', 'What it shows', 'Comes from']}
+              rows={[
+                [<Code key="0">Form Watch</Code>, 'Scheduled contact-form health — mode, verdict, cadence, last run.', 'Forms → Scheduled monitors'],
+                [<Code key="0">Site Watch</Code>, 'Uptime + SSL — status, response time, days to expiry, cadence.', 'Site → Uptime & SSL'],
+                [<Code key="0">Change Monitor</Code>, 'Latest content-change report — changes found, when checked.', 'Site → Change tracking'],
+                [<Code key="0">Form Tester</Code>, 'Your last manual run — same mode-aware verdict as Form Watch.', 'Forms → Test a form'],
+              ]}
+            />
+            <P>
+              <strong>Use a project</strong> — every tester tab has a &ldquo;Use a project&rdquo;
+              picker next to the URL field, so you fill it from a saved project instead of re-typing.
+            </P>
+            <P>
+              <strong>Keeping it coherent (no orphans)</strong> — every monitored URL should belong
+              to a client:
+            </P>
+            <UL>
+              <LI>
+                When you add or run a URL that isn&apos;t in a project, a popup asks to file it.
+                <strong> Yes</strong> → pick or create a project; <strong>No</strong> → it keeps
+                monitoring but stays hidden from Projects (a deliberate throwaway / test URL);
+                <strong> Decide later</strong> → it waits in the Unassigned bucket.
+              </LI>
+              <LI>
+                The <strong>Unassigned</strong> row at the bottom of Projects lists any monitored URL
+                not yet in a project, each with an <strong>Assign to project</strong> action — so
+                nothing monitored is ever invisible.
+              </LI>
+              <LI>
+                <strong>Deleting a project also stops and removes its monitors</strong> for those
+                URLs, so nothing keeps running in the background.
+              </LI>
+            </UL>
+            <Note>
+              Storage uses the same JSON-on-the-volume model as the rest of the app, behind a small{' '}
+              <Code>ProjectStore</Code> interface so it can move to a database (e.g. Supabase) later
+              without a rewrite. Why this matters: the Project/client entity is the foundation that
+              team-routing, a status page, and access controls will all build on.
+            </Note>
 
             {/* ── Change tracking — overview ────────────────────── */}
             <H2 id="overview">Change tracking — overview</H2>

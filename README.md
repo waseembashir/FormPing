@@ -6,10 +6,11 @@ A QA automation tool that finds, fills, and verifies contact forms on websites y
 
 ## What it does
 
-The web UI is organized into two areas — **Forms** and **Site** — plus Docs:
+The web UI is organized around **Projects** (a client + their URLs), plus two tool areas — **Forms** and **Site** — and Docs:
 
-| Area | Views |
+| Area | What it is |
 |------|-------|
+| **Projects** | Group a client's URLs into a project; see their form, uptime & SSL health in one place (a thin overlay over the monitors) |
 | **Forms** | *Test a form* (on-demand) · *Scheduled monitors* (recurring form tests + Slack alerts) |
 | **Site** | *Uptime & SSL* (availability + cert-expiry monitoring + Slack) · *Change tracking* (content / SEO / form / script changes over time) |
 

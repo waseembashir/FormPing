@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { writeFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
+import { recordRun } from '@/lib/onDemandRunStore';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 min cap for batch runs
@@ -103,6 +104,9 @@ export async function POST(request: NextRequest) {
 
             if (type === 'result') {
               send({ type: 'result', result: parsed['result'] });
+              // Persist the manual run so the Projects view can show it later.
+              // Fire-and-forget + self-guarded — must never break the stream.
+              void recordRun(parsed['result']);
             } else if (type === 'progress') {
               send({
                 type: 'progress',
@@ -140,6 +144,7 @@ export async function POST(request: NextRequest) {
             const parsed = JSON.parse(stdoutBuf.trim()) as Record<string, unknown>;
             if (parsed['__type'] === 'result') {
               send({ type: 'result', result: parsed['result'] });
+              void recordRun(parsed['result']);
             }
           } catch { /* ignore */ }
         }
