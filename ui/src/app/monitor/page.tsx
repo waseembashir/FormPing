@@ -5,6 +5,8 @@ import { MonitorInputPanel } from '@/components/monitor/MonitorInputPanel';
 import { MonitorConfigPanel } from '@/components/monitor/MonitorConfigPanel';
 import { MonitorResultsPanel } from '@/components/monitor/MonitorResultsPanel';
 import { SnapshotsManager } from '@/components/monitor/SnapshotsManager';
+import { ProjectAssignQueue } from '@/components/projects/ProjectAssignQueue';
+import { checkUrl } from '@/lib/urlCheck';
 import type { ChangeReport, MonitorConfig, MonitorSSEEvent, SnapshotResult } from '@/types';
 
 const DEFAULT_CONFIG: MonitorConfig = {
@@ -80,6 +82,11 @@ export default function MonitorPage() {
   const [watchDetached, setWatchDetached] = useState(false);
   const [snapshotsRefreshKey, setSnapshotsRefreshKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  /** Pre-flight URL check + post-run "add to project?" prompt. */
+  const [checking, setChecking] = useState(false);
+  const [preflight, setPreflight] = useState<string | null>(null);
+  const forceRef = useRef(false);
+  const [pendingAssign, setPendingAssign] = useState<string[]>([]);
 
   const watchActive =
     (running && config.monitorMode === 'watch') || watchDetached;
@@ -188,7 +195,29 @@ export default function MonitorPage() {
   }, []);
 
   const handleRun = useCallback(async () => {
-    if (!url.trim()) return;
+    if (!url.trim() || running || checking) return;
+
+    // ── Pre-flight: validate format + reachability before the crawl ──
+    setPreflight(null);
+    setChecking(true);
+    let target: string;
+    try {
+      const c = await checkUrl(url.trim());
+      if (!c.ok) {
+        setPreflight(`Not a valid URL: ${url.trim()}`);
+        forceRef.current = false;
+        return;
+      }
+      if (!c.reachable && !forceRef.current) {
+        setPreflight(`Couldn’t reach ${url.trim()}. Click “Run” again to check anyway.`);
+        forceRef.current = true;
+        return;
+      }
+      forceRef.current = false;
+      target = c.url; // normalized
+    } finally {
+      setChecking(false);
+    }
 
     // For watch mode we want to PRESERVE the history when re-clicking Watch
     // (the user might be re-attaching after refresh, in which case starting
@@ -199,6 +228,7 @@ export default function MonitorPage() {
     }
     setLogs([]);
     setRunning(true);
+    let prompted = false; // prompt "add to project?" once we get a value
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -207,7 +237,7 @@ export default function MonitorPage() {
       const response = await fetch('/api/monitor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), ...config }),
+        body: JSON.stringify({ url: target, ...config }),
         signal: abort.signal,
       });
 
@@ -249,16 +279,21 @@ export default function MonitorPage() {
             if (event.type === 'snapshot') {
               setSnapshot(event.result);
               setSnapshotsRefreshKey((k) => k + 1);
+              if (!prompted) { prompted = true; setPendingAssign([target]); }
             } else if (event.type === 'report') {
               // Keep only the most recent report — older ones stack up
               // visually with no value (the diff is point-in-time).
               setReports([event.report]);
               setSnapshotsRefreshKey((k) => k + 1);
+              if (!prompted) { prompted = true; setPendingAssign([target]); }
             } else if (event.type === 'log') {
               setLogs((prev) => [...prev.slice(-99), event.message]);
             } else if (event.type === 'done' || event.type === 'error') {
               if (event.type === 'error') {
                 setLogs((prev) => [...prev, `⚠ ${event.message}`]);
+              } else if (!prompted) {
+                prompted = true;
+                setPendingAssign([target]);
               }
               setRunning(false);
               if (config.monitorMode !== 'watch') setWatchDetached(false);
@@ -275,7 +310,7 @@ export default function MonitorPage() {
     } finally {
       setRunning(false);
     }
-  }, [url, config]);
+  }, [url, config, running, checking]);
 
   // Stop button: for watch mode, ask the server to kill the detached
   // process; for snapshot/compare, just abort the local stream.
@@ -318,12 +353,27 @@ export default function MonitorPage() {
           <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-20">
             <MonitorInputPanel
               url={url}
-              onChange={setUrl}
+              onChange={(u) => {
+                setUrl(u);
+                forceRef.current = false;
+                setPreflight(null);
+              }}
               onRun={handleRun}
               onStop={handleStop}
               running={running}
               watchActive={watchActive}
             />
+            {(checking || preflight) && (
+              <div
+                className={`rounded-lg border px-3 py-2 text-xs ${
+                  preflight
+                    ? 'border-amber-800/60 bg-amber-950/30 text-amber-200'
+                    : 'border-slate-700 bg-slate-900 text-slate-400'
+                }`}
+              >
+                {checking ? 'Checking URL…' : preflight}
+              </div>
+            )}
             <SnapshotsManager
               url={url}
               disabled={running}
@@ -345,6 +395,10 @@ export default function MonitorPage() {
           </div>
         </div>
       </main>
+
+      {pendingAssign.length > 0 && (
+        <ProjectAssignQueue urls={pendingAssign} onDone={() => setPendingAssign([])} />
+      )}
     </div>
   );
 }

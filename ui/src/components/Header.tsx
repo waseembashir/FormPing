@@ -30,6 +30,13 @@ interface NavGroup {
 // "the client's site" rather than five unrelated tabs.
 const NAV_GROUPS: NavGroup[] = [
   {
+    label: 'Projects',
+    href: '/projects',
+    match: ['/projects'],
+    subTabs: [],
+    hint: 'Clients & their monitors',
+  },
+  {
     label: 'Forms',
     href: '/',
     match: ['/', '/form-watch'],

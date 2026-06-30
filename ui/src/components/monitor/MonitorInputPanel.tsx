@@ -1,5 +1,7 @@
 'use client';
 
+import { ProjectUrlPicker } from '../projects/ProjectUrlPicker';
+
 interface Props {
   url: string;
   onChange: (v: string) => void;
@@ -12,9 +14,12 @@ interface Props {
 export function MonitorInputPanel({ url, onChange, onRun, onStop, running, watchActive }: Props) {
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-800">
-        <h2 className="text-sm font-semibold text-slate-200">Site URL</h2>
-        <p className="text-xs text-slate-500 mt-0.5">The homepage of the site to monitor</p>
+      <div className="px-4 py-3 border-b border-slate-800 flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-200">Site URL</h2>
+          <p className="text-xs text-slate-500 mt-0.5">The homepage of the site to monitor</p>
+        </div>
+        <ProjectUrlPicker align="right" onPick={(u) => onChange(u)} />
       </div>
 
       <input

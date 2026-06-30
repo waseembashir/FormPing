@@ -4,6 +4,8 @@ import { useState, useRef, useCallback } from 'react';
 import { UrlInputPanel } from '@/components/UrlInputPanel';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { ResultsPanel } from '@/components/ResultsPanel';
+import { ProjectAssignQueue } from '@/components/projects/ProjectAssignQueue';
+import { checkUrl } from '@/lib/urlCheck';
 import type { SiteResult, RunConfig, SSEEvent, RunProgress } from '@/types';
 
 const DEFAULT_CONFIG: RunConfig = {
@@ -24,14 +26,48 @@ export default function Home() {
   const [progress, setProgress] = useState<RunProgress | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  /** Pre-flight URL check state. */
+  const [checking, setChecking] = useState(false);
+  const [preflight, setPreflight] = useState<string | null>(null);
+  /** Set after an "unreachable" warning so a second Run click proceeds anyway. */
+  const forceRef = useRef(false);
+  /** URLs to prompt "add to a project?" for, after a run completes. */
+  const [pendingAssign, setPendingAssign] = useState<string[]>([]);
 
   const handleRun = useCallback(async () => {
-    const urls = urlInput
+    if (running || checking) return;
+    const rawUrls = urlInput
       .split('\n')
       .map(u => u.trim())
       .filter(u => u && !u.startsWith('#'));
 
-    if (urls.length === 0) return;
+    if (rawUrls.length === 0) return;
+
+    // ── Pre-flight: validate format + reachability BEFORE launching the browser ──
+    setPreflight(null);
+    setChecking(true);
+    let urls: string[];
+    try {
+      const checks = await Promise.all(rawUrls.map(checkUrl));
+      const invalid = checks.filter(c => !c.ok);
+      if (invalid.length) {
+        setPreflight(`Not a valid URL: ${invalid.map(c => c.input).join(', ')}`);
+        forceRef.current = false;
+        return;
+      }
+      const unreachable = checks.filter(c => !c.reachable);
+      if (unreachable.length && !forceRef.current) {
+        setPreflight(
+          `Couldn’t reach: ${unreachable.map(c => c.input).join(', ')}. Click “Run Tests” again to test anyway.`,
+        );
+        forceRef.current = true;
+        return;
+      }
+      forceRef.current = false;
+      urls = checks.map(c => c.url); // normalized (https:// added, etc.)
+    } finally {
+      setChecking(false);
+    }
 
     setResults([]);
     setLogs([]);
@@ -87,6 +123,10 @@ export default function Home() {
             } else if (event.type === 'done' || event.type === 'error') {
               if (event.type === 'error') {
                 setLogs(prev => [...prev, `⚠ ${event.message}`]);
+              } else {
+                // Run finished — offer to file each tested URL under a project
+                // (the modal self-skips ones already grouped or dismissed).
+                setPendingAssign(urls);
               }
               setRunning(false);
               setProgress(null);
@@ -104,7 +144,7 @@ export default function Home() {
       setRunning(false);
       setProgress(prev => prev ? { ...prev, currentUrl: '' } : null);
     }
-  }, [urlInput, config]);
+  }, [urlInput, config, running, checking]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -128,11 +168,26 @@ export default function Home() {
           <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-20">
             <UrlInputPanel
               value={urlInput}
-              onChange={setUrlInput}
+              onChange={(v) => {
+                setUrlInput(v);
+                forceRef.current = false;
+                setPreflight(null);
+              }}
               onRun={handleRun}
               onStop={handleStop}
               running={running}
             />
+            {(checking || preflight) && (
+              <div
+                className={`rounded-lg border px-3 py-2 text-xs ${
+                  preflight
+                    ? 'border-amber-800/60 bg-amber-950/30 text-amber-200'
+                    : 'border-slate-700 bg-slate-900 text-slate-400'
+                }`}
+              >
+                {checking ? 'Checking URLs…' : preflight}
+              </div>
+            )}
             <ConfigPanel config={config} onChange={setConfig} disabled={running} />
           </div>
 
@@ -147,6 +202,10 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {pendingAssign.length > 0 && (
+        <ProjectAssignQueue urls={pendingAssign} onDone={() => setPendingAssign([])} />
+      )}
     </div>
   );
 }

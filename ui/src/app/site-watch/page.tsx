@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SiteCard } from '@/components/siteWatch/SiteCard';
+import { ProjectUrlPicker } from '@/components/projects/ProjectUrlPicker';
+import { AddToProjectModal } from '@/components/projects/AddToProjectModal';
 import type { SiteSchedule } from '@/lib/siteWatch/types';
 
 type Unit = 'min' | 'hour' | 'day';
@@ -24,6 +26,8 @@ export default function SiteWatchPage() {
   const [error, setError] = useState<string | null>(null);
   /** True when the URL probed as down — show a warning + "Add anyway". */
   const [needsConfirm, setNeedsConfirm] = useState(false);
+  /** URL just added — drives the non-blocking "add to a project?" nudge. */
+  const [justAdded, setJustAdded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +84,7 @@ export default function SiteWatchPage() {
         }
         setUrl('');
         setNeedsConfirm(false);
+        setJustAdded(target);
         await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Request failed');
@@ -128,9 +133,19 @@ export default function SiteWatchPage() {
               <h3 className="text-sm font-semibold text-slate-200">Add a site to monitor</h3>
 
               <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-                  Site URL
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Site URL
+                  </label>
+                  <ProjectUrlPicker
+                    align="right"
+                    onPick={(u) => {
+                      setUrl(u);
+                      setNeedsConfirm(false);
+                      setError(null);
+                    }}
+                  />
+                </div>
                 <input
                   type="text"
                   value={url}
@@ -228,6 +243,7 @@ export default function SiteWatchPage() {
                 expiry. Alerts fire only on change (down / recovered / cert expiring).
               </p>
             </form>
+
           </div>
 
           {/* Right — monitor list */}
@@ -257,6 +273,10 @@ export default function SiteWatchPage() {
           </div>
         </div>
       </main>
+
+      {justAdded && (
+        <AddToProjectModal url={justAdded} onClose={() => setJustAdded(null)} />
+      )}
     </div>
   );
 }

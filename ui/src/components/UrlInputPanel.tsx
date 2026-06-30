@@ -1,5 +1,26 @@
 'use client';
 
+import { ProjectUrlPicker } from './projects/ProjectUrlPicker';
+
+/** Append a URL to the textarea value on its own line (deduped). */
+function appendUrl(value: string, url: string): string {
+  const lines = value.split('\n').map((l) => l.trim());
+  if (lines.includes(url)) return value;
+  const trimmed = value.replace(/\s+$/, '');
+  return trimmed ? `${trimmed}\n${url}` : url;
+}
+
+/** Append several URLs at once (deduped vs existing + each other). Used by
+ *  "Add all" — appending in one call avoids the stale-state bug a per-URL loop
+ *  would hit (every loop iteration would read the same pre-update value). */
+function appendUrls(value: string, urls: string[]): string {
+  const seen = new Set(value.split('\n').map((l) => l.trim()).filter(Boolean));
+  const toAdd = urls.filter((u) => !seen.has(u));
+  if (toAdd.length === 0) return value;
+  const trimmed = value.replace(/\s+$/, '');
+  return trimmed ? [trimmed, ...toAdd].join('\n') : toAdd.join('\n');
+}
+
 interface Props {
   value: string;
   onChange: (v: string) => void;
@@ -13,16 +34,24 @@ export function UrlInputPanel({ value, onChange, onRun, onStop, running }: Props
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-200">Target URLs</h2>
           <p className="text-xs text-slate-500 mt-0.5">One URL per line · Lines starting with # are ignored</p>
         </div>
-        {urlCount > 0 && (
-          <span className="text-xs font-mono bg-slate-800 text-slate-300 px-2 py-1 rounded-md ring-1 ring-slate-700">
-            {urlCount} URL{urlCount !== 1 ? 's' : ''}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          <ProjectUrlPicker
+            keepOpen
+            align="right"
+            onPick={(u) => onChange(appendUrl(value, u))}
+            onPickMany={(urls) => onChange(appendUrls(value, urls))}
+          />
+          {urlCount > 0 && (
+            <span className="text-xs font-mono bg-slate-800 text-slate-300 px-2 py-1 rounded-md ring-1 ring-slate-700">
+              {urlCount}
+            </span>
+          )}
+        </div>
       </div>
 
       <textarea
