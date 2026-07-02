@@ -41,6 +41,8 @@ export interface UrlHealth {
     statusCode?: number | null;
     responseMs?: number | null;
     sslDaysRemaining?: number | null;
+    /** Days until domain registration expires (from Site Watch's RDAP check). */
+    domainDaysRemaining?: number | null;
     /** Check cadence, in ms. */
     intervalMs?: number;
     lastCheckedAt?: string | null;
@@ -87,6 +89,8 @@ export interface ProjectRollup {
   upState?: SiteUpState;
   /** Soonest SSL expiry (min days) across the project's URLs, or null. */
   sslSoonest: number | null;
+  /** Soonest domain-registration expiry (min days) across the project's URLs, or null. */
+  domainSoonest: number | null;
   /** Most recent check time across the project's monitors, or null. */
   lastChecked: string | null;
   /** Higher = worse; drives worst-first sorting. Unmonitored = -1 (bottom). */

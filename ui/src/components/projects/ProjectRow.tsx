@@ -272,6 +272,7 @@ export function UrlDetailRow({ h }: { h: UrlHealth }) {
   const formTone = h.form.level ? FORM_TONE[h.form.level] : 'slate';
   const upTone = h.site.upState ? UP_TONE[h.site.upState] : 'slate';
   const ssl = sslText(h.site.sslDaysRemaining);
+  const domain = sslText(h.site.domainDaysRemaining); // same day-thresholds as SSL
 
   // Content-change tone: no changes → neutral; otherwise by severity.
   const changeCount = h.change?.changesFound ?? 0;
@@ -338,6 +339,11 @@ export function UrlDetailRow({ h }: { h: UrlHealth }) {
             {ssl && (
               <span className="text-slate-500">
                 · SSL <span className={ssl.c}>{ssl.t}</span>
+              </span>
+            )}
+            {domain && (
+              <span className="text-slate-500">
+                · Domain <span className={domain.c}>{domain.t}</span>
               </span>
             )}
             <span className="text-slate-600">

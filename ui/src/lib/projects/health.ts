@@ -84,6 +84,7 @@ function buildHealth(
           statusCode: ss.lastStatusCode ?? null,
           responseMs: ss.lastResponseMs ?? null,
           sslDaysRemaining: ss.lastSslDaysRemaining ?? null,
+          domainDaysRemaining: ss.lastDomainDaysRemaining ?? null,
           intervalMs: ss.intervalMs,
           lastCheckedAt: ss.lastCheckedAt,
         }
@@ -175,6 +176,7 @@ export function rollupFromHealth(health: UrlHealth[]): ProjectRollup {
   let formLabel: string | undefined;
   let upState: ProjectRollup['upState'];
   let sslSoonest: number | null = null;
+  let domainSoonest: number | null = null;
   let lastChecked: string | null = null;
   let monitored = false;
 
@@ -198,6 +200,12 @@ export function rollupFromHealth(health: UrlHealth[]): ProjectRollup {
       if (h.site.sslDaysRemaining != null) {
         sslSoonest = sslSoonest == null ? h.site.sslDaysRemaining : Math.min(sslSoonest, h.site.sslDaysRemaining);
       }
+      if (h.site.domainDaysRemaining != null) {
+        domainSoonest =
+          domainSoonest == null
+            ? h.site.domainDaysRemaining
+            : Math.min(domainSoonest, h.site.domainDaysRemaining);
+      }
       lastChecked = newer(lastChecked, h.site.lastCheckedAt);
     }
   }
@@ -208,9 +216,11 @@ export function rollupFromHealth(health: UrlHealth[]): ProjectRollup {
   if (upState) severity = Math.max(severity, UP_RANK[upState] * 10);
   if (sslSoonest != null && sslSoonest <= 14) severity = Math.max(severity, 25);
   else if (sslSoonest != null && sslSoonest <= 30) severity = Math.max(severity, 15);
+  if (domainSoonest != null && domainSoonest <= 14) severity = Math.max(severity, 25);
+  else if (domainSoonest != null && domainSoonest <= 30) severity = Math.max(severity, 15);
   if (!monitored) severity = -1; // unmonitored sinks to the bottom
 
-  return { monitored, formLevel, formLabel, upState, sslSoonest, lastChecked, severity };
+  return { monitored, formLevel, formLabel, upState, sslSoonest, domainSoonest, lastChecked, severity };
 }
 
 /** Rollups for many projects, reading the monitor stores only ONCE. */

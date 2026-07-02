@@ -7,14 +7,19 @@
  * (for https) an SSL check, evaluates alerts, stores history, and reschedules.
  */
 
-import type { SiteSchedule, SiteCheckRecord } from './types';
+import type { SiteSchedule, SiteCheckRecord, DomainResult } from './types';
 import { listSchedules, upsertSchedule } from './scheduleStore';
 import { appendCheck } from './historyStore';
-import { checkUptime, checkSsl } from './checks';
+import { checkUptime, checkSsl, checkDomain } from './checks';
 import { evaluateAndAlert } from './alerts';
 
 /** How often the loop checks for due schedules. */
 const TICK_MS = Number(process.env.SITE_WATCH_TICK_MS) || 60_000;
+
+/** Re-query RDAP at most this often per domain. Domain expiry only changes
+ *  yearly, and public RDAP endpoints rate-limit — so between fetches we just
+ *  recompute days-remaining from the cached expiry date (no network). */
+const DOMAIN_RECHECK_MS = 12 * 60 * 60 * 1000;
 
 interface SiteTickerState {
   started: boolean;
@@ -32,11 +37,33 @@ const tickerState: SiteTickerState =
 /** Run one schedule now: probe uptime + SSL, alert, store, reschedule. */
 async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
   const checkedAt = new Date().toISOString();
+  const now = Date.now();
   const uptime = await checkUptime(schedule.url);
   // SSL only applies to https origins.
   const ssl = schedule.url.toLowerCase().startsWith('https://')
     ? await checkSsl(schedule.host)
     : null;
+
+  // Domain expiry — throttled. Only hit RDAP if it's been > DOMAIN_RECHECK_MS
+  // since the last network lookup; otherwise recompute days from the cached
+  // expiry (or report unknown if we've never got one). A failed lookup still
+  // advances the throttle so we don't hammer RDAP on unsupported TLDs.
+  const lastDomFetch = schedule.lastDomainCheckedAt ? Date.parse(schedule.lastDomainCheckedAt) : 0;
+  let domain: DomainResult | null;
+  let domainFetched = false;
+  if (now - lastDomFetch < DOMAIN_RECHECK_MS) {
+    domain = schedule.lastDomainExpiry
+      ? {
+          ok: true,
+          daysRemaining: Math.floor((Date.parse(schedule.lastDomainExpiry) - now) / 86_400_000),
+          expiryDate: schedule.lastDomainExpiry,
+          registrar: schedule.lastDomainRegistrar ?? null,
+        }
+      : null; // last lookup failed / never succeeded — don't re-hit RDAP yet
+  } else {
+    domain = await checkDomain(schedule.host);
+    domainFetched = true;
+  }
 
   const record: SiteCheckRecord = {
     scheduleId: schedule.id,
@@ -45,6 +72,7 @@ async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
     checkedAt,
     uptime,
     ssl,
+    domain,
   };
 
   let patch;
@@ -56,12 +84,12 @@ async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
       consecutiveDown: schedule.consecutiveDown,
       alertedDown: schedule.alertedDown,
       lastSslThresholdAlerted: schedule.lastSslThresholdAlerted,
+      lastDomainThresholdAlerted: schedule.lastDomainThresholdAlerted,
     };
   }
 
   await appendCheck(record);
 
-  const now = Date.now();
   const updated: SiteSchedule = {
     ...schedule,
     lastCheckedAt: checkedAt,
@@ -69,11 +97,21 @@ async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
     consecutiveDown: patch.consecutiveDown,
     alertedDown: patch.alertedDown,
     lastSslThresholdAlerted: patch.lastSslThresholdAlerted,
+    lastDomainThresholdAlerted: patch.lastDomainThresholdAlerted,
     lastClassification: uptime.classification,
     lastStatusCode: uptime.statusCode,
     lastResponseMs: uptime.responseMs,
     lastSslDaysRemaining: ssl?.daysRemaining ?? null,
     lastSslValid: ssl?.ok ?? undefined,
+    lastDomainDaysRemaining: domain?.daysRemaining ?? null,
+    lastDomainValid: domain?.ok ?? undefined,
+    // Advance the throttle timestamp whenever we actually queried; keep the
+    // cached expiry/registrar unless a fresh lookup succeeded (so a transient
+    // RDAP failure never wipes a known-good expiry).
+    lastDomainCheckedAt: domainFetched ? checkedAt : schedule.lastDomainCheckedAt,
+    lastDomainExpiry: domainFetched && domain?.ok ? domain.expiryDate : schedule.lastDomainExpiry,
+    lastDomainRegistrar:
+      domainFetched && domain?.ok ? domain.registrar : schedule.lastDomainRegistrar,
   };
   await upsertSchedule(updated);
   return record;
