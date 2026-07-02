@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
     consecutiveDown: 0,
     alertedDown: false,
     lastSslThresholdAlerted: null,
+    lastDomainThresholdAlerted: null,
   };
 
   await upsertSchedule(schedule);

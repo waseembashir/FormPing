@@ -6,7 +6,7 @@
  * No browser, no external API, no proxy. Free.
  */
 
-import type { UptimeResult, SslResult, UptimeClass } from './types';
+import type { UptimeResult, SslResult, DomainResult, UptimeClass } from './types';
 
 // Node's `tls` is loaded via webpack's runtime require (not a static import).
 // Next compiles the instrumentation hook for the Edge runtime as well, and Edge
@@ -123,4 +123,93 @@ export function checkSsl(hostname: string, port = 443): Promise<SslResult> {
       done({ ok: false, daysRemaining: null, validTo: null, issuer: null, error: 'TLS timeout' });
     });
   });
+}
+
+// ── Domain-registration expiry (RDAP) ────────────────────────────────────────
+// RDAP is the modern, free, structured replacement for WHOIS: a plain HTTPS GET
+// returning JSON. `rdap.org` is a public bootstrap that redirects to the right
+// registry. No API key. Covers most gTLDs; unsupported registries just 404 →
+// we degrade to "unknown" (never a false alert). A silently-expired *domain*
+// takes the whole site down, so this pairs naturally with the SSL check.
+
+const RDAP_TIMEOUT_MS = 10000;
+
+/** A few common multi-label public suffixes so we query the *registrable* domain
+ *  (e.g. `foo.co.uk`, not `co.uk`). Best-effort — a wrong guess just 404s → unknown. */
+const MULTI_LABEL_TLDS = new Set([
+  'co.uk', 'org.uk', 'me.uk', 'gov.uk', 'ac.uk',
+  'com.au', 'net.au', 'org.au',
+  'co.nz', 'co.za', 'com.br', 'com.mx', 'com.sg',
+  'co.in', 'net.in', 'org.in',
+  'co.jp', 'or.jp', 'ne.jp',
+]);
+
+/** Strip subdomains down to the registrable domain (best-effort). */
+export function registrableDomain(hostname: string): string {
+  const h = hostname.replace(/^www\./i, '').toLowerCase();
+  const parts = h.split('.').filter(Boolean);
+  if (parts.length <= 2) return h;
+  const lastTwo = parts.slice(-2).join('.');
+  if (MULTI_LABEL_TLDS.has(lastTwo)) return parts.slice(-3).join('.');
+  return lastTwo;
+}
+
+interface RdapEvent { eventAction?: string; eventDate?: string }
+interface RdapEntity { roles?: string[]; handle?: string; vcardArray?: unknown }
+interface RdapResponse { events?: RdapEvent[]; entities?: RdapEntity[] }
+
+/** Pull the registrar's display name out of the RDAP entity vCard (best-effort). */
+function extractRegistrar(entities: RdapEntity[] | undefined): string | null {
+  if (!Array.isArray(entities)) return null;
+  const reg = entities.find((e) => Array.isArray(e.roles) && e.roles.includes('registrar'));
+  if (!reg) return null;
+  const vcard = Array.isArray(reg.vcardArray) ? reg.vcardArray[1] : null;
+  if (Array.isArray(vcard)) {
+    const fn = (vcard as unknown[]).find((f) => Array.isArray(f) && f[0] === 'fn') as
+      | unknown[]
+      | undefined;
+    if (fn && typeof fn[3] === 'string') return fn[3];
+  }
+  return typeof reg.handle === 'string' ? reg.handle : null;
+}
+
+/**
+ * Look up domain-registration expiry via RDAP. Returns a `DomainResult`; on any
+ * failure (unsupported TLD, network, no expiry field) returns `ok:false` with an
+ * error — never throws, so a domain lookup can never break an uptime/SSL cycle.
+ */
+export async function checkDomain(hostname: string): Promise<DomainResult> {
+  const none = (error: string): DomainResult => ({
+    ok: false,
+    daysRemaining: null,
+    expiryDate: null,
+    registrar: null,
+    error,
+  });
+  const domain = registrableDomain(hostname);
+  try {
+    const res = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(RDAP_TIMEOUT_MS),
+      headers: { Accept: 'application/rdap+json', 'User-Agent': UA },
+    });
+    if (!res.ok) return none(`RDAP ${res.status}`);
+    const data = (await res.json()) as RdapResponse;
+    const events = Array.isArray(data.events) ? data.events : [];
+    const exp = events.find((e) => e.eventAction === 'expiration' && typeof e.eventDate === 'string');
+    if (!exp || !exp.eventDate) return none('no expiry in RDAP record');
+    const ms = Date.parse(exp.eventDate);
+    if (Number.isNaN(ms)) return none('unparseable expiry date');
+    const daysRemaining = Math.floor((ms - Date.now()) / 86_400_000);
+    return {
+      ok: true,
+      daysRemaining,
+      expiryDate: new Date(ms).toISOString(),
+      registrar: extractRegistrar(data.entities),
+    };
+  } catch (err) {
+    return none(
+      err instanceof Error ? (err.name === 'TimeoutError' ? 'RDAP timeout' : err.message) : 'RDAP lookup failed',
+    );
+  }
 }

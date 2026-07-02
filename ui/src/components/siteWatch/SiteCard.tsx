@@ -20,6 +20,16 @@ function sslStyle(days: number | null, valid: boolean | undefined): { text: stri
   return { text: 'text-emerald-300', label: `SSL: ${days}d left` };
 }
 
+/** Colour + label for a domain-expiry days-remaining value (mirrors SSL). */
+function domainStyle(days: number | null, valid: boolean | undefined): { text: string; label: string } {
+  if (valid === false || days == null) return { text: 'text-slate-500', label: 'Domain: n/a' };
+  if (days <= 0) return { text: 'text-red-300', label: 'Domain expired' };
+  if (days <= 7) return { text: 'text-red-300', label: `Domain expires in ${days}d` };
+  if (days <= 14) return { text: 'text-amber-300', label: `Domain: ${days}d left` };
+  if (days <= 30) return { text: 'text-amber-200', label: `Domain: ${days}d left` };
+  return { text: 'text-emerald-300', label: `Domain: ${days}d left` };
+}
+
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
   const diff = new Date(iso).getTime() - Date.now();
@@ -53,6 +63,7 @@ export function SiteCard({
   const up: UptimeClass | 'pending' = schedule.lastClassification ?? 'pending';
   const u = UPTIME_STYLE[up];
   const ssl = sslStyle(schedule.lastSslDaysRemaining ?? null, schedule.lastSslValid);
+  const domain = domainStyle(schedule.lastDomainDaysRemaining ?? null, schedule.lastDomainValid);
 
   async function loadChecks() {
     setLoading(true);
@@ -100,6 +111,7 @@ export function SiteCard({
                 <span className="text-[11px] text-slate-500">{schedule.lastResponseMs}ms</span>
               )}
               <span className={`text-[11px] font-medium ${ssl.text}`}>{ssl.label}</span>
+              <span className={`text-[11px] font-medium ${domain.text}`}>{domain.label}</span>
             </div>
             <a
               href={schedule.url}
@@ -186,6 +198,28 @@ function CheckRow({ check }: { check: SiteCheckRecord }) {
     }
   }
 
+  const domain = check.domain;
+  let domainValue = 'n/a';
+  let domainClass = 'text-slate-400';
+  if (domain) {
+    if (domain.ok && domain.daysRemaining != null) {
+      const expiry = domain.expiryDate ? new Date(domain.expiryDate).toLocaleDateString() : '?';
+      domainValue =
+        domain.daysRemaining <= 0
+          ? `EXPIRED (was valid to ${expiry})`
+          : `${domain.daysRemaining} day${domain.daysRemaining === 1 ? '' : 's'} left (expires ${expiry})`;
+      domainClass =
+        domain.daysRemaining <= 7
+          ? 'text-red-300'
+          : domain.daysRemaining <= 30
+            ? 'text-amber-300'
+            : 'text-slate-300';
+    } else {
+      domainValue = domain.error ?? 'check failed';
+      domainClass = 'text-slate-400';
+    }
+  }
+
   return (
     <div className="rounded-lg bg-slate-950/40 border border-slate-800 p-2.5">
       <div className="flex items-center justify-between gap-2">
@@ -195,10 +229,11 @@ function CheckRow({ check }: { check: SiteCheckRecord }) {
         </span>
         <span className="text-[11px] text-slate-500">{new Date(check.checkedAt).toLocaleString()}</span>
       </div>
-      <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1">
+      <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
         <Field label="HTTP status" value={httpValue} />
         <Field label="Response time" value={`${responseMs} ms`} />
         <Field label="SSL certificate" value={sslValue} valueClass={sslClass} />
+        <Field label="Domain registration" value={domainValue} valueClass={domainClass} />
       </div>
     </div>
   );

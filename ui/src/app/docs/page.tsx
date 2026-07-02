@@ -668,12 +668,14 @@ export default function DocsPage() {
             {/* ── Site Watch ──────────────────────────────────── */}
             <H2 id="site-watch">Site → Uptime &amp; SSL</H2>
             <P>
-              Site Watch monitors site **availability** and **TLS-certificate expiry** on a
-              schedule — separate from Form Watch because the data is different (no form, no
-              submission). It catches two failure modes form checks can&apos;t: a site going down
-              between (infrequent) form checks, and a cert silently expiring.
+              Site Watch monitors site <strong>availability</strong>, <strong>TLS-certificate
+              expiry</strong>, and <strong>domain-registration expiry</strong> on a schedule —
+              separate from Form Watch because the data is different (no form, no submission). It
+              catches failure modes form checks can&apos;t: a site going down between (infrequent)
+              form checks, a certificate silently expiring, and — the quiet killer — the
+              client&apos;s domain lapsing entirely.
             </P>
-            <P>Two lightweight probes per check:</P>
+            <P>Three lightweight probes per check:</P>
             <Table
               headers={['Probe', 'How', 'Result']}
               rows={[
@@ -689,12 +691,27 @@ export default function DocsPage() {
                   </span>,
                   'Days until the certificate expires.',
                 ],
+                [
+                  <Code key="0">domain</Code>,
+                  <span key="1">
+                    An <Code>RDAP</Code> lookup (the modern, structured WHOIS) — one HTTPS request,
+                    no API key.
+                  </span>,
+                  'Days until the domain registration expires.',
+                ],
               ]}
             />
             <Note>
               <strong>It&apos;s free</strong> — no browser, no external API, no proxy. Uptime is a
-              `fetch`; SSL is a TLS handshake reading the cert. Neither is bot-blocked the way form
-              submission is, so no residential proxy is needed.
+              `fetch`; SSL is a TLS handshake reading the cert; domain expiry is a single RDAP
+              request. None is bot-blocked the way form submission is, so no residential proxy is
+              needed.
+            </Note>
+            <Note>
+              <strong>Domain expiry is throttled + cached.</strong> The RDAP call runs at most every
+              ~12 hours per domain (the day-countdown is recomputed locally each cycle), so we never
+              hammer the public RDAP service. TLDs RDAP doesn&apos;t cover show as <em>n/a</em> —
+              never a false alert.
             </Note>
             <P>Alerts fire only on change (never every cycle):</P>
             <UL>
@@ -705,6 +722,10 @@ export default function DocsPage() {
               <LI>
                 <strong>SSL</strong> — once per severity threshold crossed (30 / 14 / 7 days, then
                 expired); resets when the cert is renewed.
+              </LI>
+              <LI>
+                <strong>Domain</strong> — same thresholds as SSL (30 / 14 / 7 days, then expired);
+                resets when the registration is renewed.
               </LI>
             </UL>
             <P>Storage mirrors the other features — JSON on the volume, no database:</P>

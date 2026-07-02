@@ -22,12 +22,14 @@ export interface AlertStatePatch {
   consecutiveDown: number;
   alertedDown: boolean;
   lastSslThresholdAlerted: number | null;
+  lastDomainThresholdAlerted: number | null;
 }
 
 const COLOR = { green: '#16a34a', amber: '#d97706', red: '#dc2626' };
 
-/** SSL severity bucket (days). Lower = more severe; null = healthy (>30d). */
-function sslBucket(days: number): number | null {
+/** Expiry severity bucket (days). Lower = more severe; null = healthy (>30d).
+ *  Shared by both the SSL-certificate and domain-registration checks. */
+function expiryBucket(days: number): number | null {
   if (days <= 0) return 0;
   if (days <= 7) return 7;
   if (days <= 14) return 14;
@@ -54,6 +56,17 @@ function sslText(record: SiteCheckRecord): string {
     : `${ssl.daysRemaining} day${ssl.daysRemaining === 1 ? '' : 's'} left (expires ${expiry})`;
 }
 
+/** Domain-registration summary string for the details block. */
+function domainText(record: SiteCheckRecord): string {
+  const d = record.domain;
+  if (!d) return 'n/a';
+  if (!d.ok || d.daysRemaining == null) return d.error ?? 'check failed';
+  const expiry = d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : '?';
+  return d.daysRemaining <= 0
+    ? `EXPIRED (was valid to ${expiry})`
+    : `${d.daysRemaining} day${d.daysRemaining === 1 ? '' : 's'} left (expires ${expiry})`;
+}
+
 /** Build + post one styled alert (attachment with a colored bar). Best-effort. */
 async function postAlert(opts: {
   color: string;
@@ -76,7 +89,8 @@ async function postAlert(opts: {
           `*URL:* <${record.url}|${record.url}>\n` +
           `*Status:* ${statusText(record)}\n` +
           `*Response time:* ${record.uptime.responseMs} ms\n` +
-          `*SSL certificate:* ${sslText(record)}`,
+          `*SSL certificate:* ${sslText(record)}\n` +
+          `*Domain registration:* ${domainText(record)}`,
       },
     },
   ];
@@ -129,6 +143,19 @@ function sslSuggestions(days: number, expiry: string): string[] {
   ];
 }
 
+function domainSuggestions(days: number, expiry: string): string[] {
+  if (days <= 0) {
+    return [
+      'Renew the domain registration immediately — the site will stop resolving for everyone.',
+      'Contact the registrar; the domain may still be in a grace/redemption period.',
+    ];
+  }
+  return [
+    `Renew the domain registration before ${expiry}.`,
+    'Turn on registrar auto-renew so it can’t lapse.',
+  ];
+}
+
 /**
  * Evaluate the new check, fire any styled Slack alerts, and return the updated
  * alert-state fields. `isFirstCheck` triggers the baseline notification.
@@ -141,11 +168,16 @@ export async function evaluateAndAlert(
   let consecutiveDown = schedule.consecutiveDown ?? 0;
   let alertedDown = schedule.alertedDown ?? false;
   let lastSslThresholdAlerted = schedule.lastSslThresholdAlerted ?? null;
+  let lastDomainThresholdAlerted = schedule.lastDomainThresholdAlerted ?? null;
 
   const cls = record.uptime.classification;
   const isUp = cls === 'up' || cls === 'blocked';
   const sslDays = record.ssl?.ok ? record.ssl.daysRemaining : null;
   const sslExpiry = record.ssl?.validTo ? new Date(record.ssl.validTo).toLocaleDateString() : '?';
+  const domainDays = record.domain?.ok ? record.domain.daysRemaining : null;
+  const domainExpiry = record.domain?.expiryDate
+    ? new Date(record.domain.expiryDate).toLocaleDateString()
+    : '?';
 
   // ── Baseline notification on the very first check ──
   if (isFirstCheck) {
@@ -169,7 +201,7 @@ export async function evaluateAndAlert(
       alertedDown = true; // we've announced it; don't double-alert next cycle
     }
     // Seed SSL state so we don't immediately re-announce an already-near expiry.
-    if (sslDays != null && sslDays <= 30) lastSslThresholdAlerted = sslBucket(sslDays);
+    if (sslDays != null && sslDays <= 30) lastSslThresholdAlerted = expiryBucket(sslDays);
     // SSL warning still worth saying on day one if it's already close — handled below
     if (sslDays != null && sslDays <= 30) {
       await postAlert({
@@ -181,7 +213,19 @@ export async function evaluateAndAlert(
         suggestions: sslSuggestions(sslDays, sslExpiry),
       });
     }
-    return { consecutiveDown, alertedDown, lastSslThresholdAlerted };
+    // Seed + announce a near/expired DOMAIN registration on day one, same as SSL.
+    if (domainDays != null && domainDays <= 30) {
+      lastDomainThresholdAlerted = expiryBucket(domainDays);
+      await postAlert({
+        color: domainDays <= 0 ? COLOR.red : COLOR.amber,
+        headerEmoji: domainDays <= 0 ? '🔴' : '⚠️',
+        headerText:
+          domainDays <= 0 ? `Domain EXPIRED — ${record.host}` : `Domain expiring soon — ${record.host}`,
+        record,
+        suggestions: domainSuggestions(domainDays, domainExpiry),
+      });
+    }
+    return { consecutiveDown, alertedDown, lastSslThresholdAlerted, lastDomainThresholdAlerted };
   }
 
   // ── Uptime (change-based) ──
@@ -216,7 +260,7 @@ export async function evaluateAndAlert(
     if (sslDays > 30) {
       lastSslThresholdAlerted = null; // renewed — reset
     } else {
-      const bucket = sslBucket(sslDays);
+      const bucket = expiryBucket(sslDays);
       if (bucket !== null && (lastSslThresholdAlerted === null || bucket < lastSslThresholdAlerted)) {
         await postAlert({
           color: sslDays <= 0 ? COLOR.red : COLOR.amber,
@@ -231,5 +275,25 @@ export async function evaluateAndAlert(
     }
   }
 
-  return { consecutiveDown, alertedDown, lastSslThresholdAlerted };
+  // ── Domain registration (threshold-based, mirrors SSL) ──
+  if (domainDays != null) {
+    if (domainDays > 30) {
+      lastDomainThresholdAlerted = null; // renewed — reset
+    } else {
+      const bucket = expiryBucket(domainDays);
+      if (bucket !== null && (lastDomainThresholdAlerted === null || bucket < lastDomainThresholdAlerted)) {
+        await postAlert({
+          color: domainDays <= 0 ? COLOR.red : COLOR.amber,
+          headerEmoji: domainDays <= 0 ? '🔴' : '⚠️',
+          headerText:
+            domainDays <= 0 ? `Domain EXPIRED — ${record.host}` : `Domain expiring soon — ${record.host}`,
+          record,
+          suggestions: domainSuggestions(domainDays, domainExpiry),
+        });
+        lastDomainThresholdAlerted = bucket;
+      }
+    }
+  }
+
+  return { consecutiveDown, alertedDown, lastSslThresholdAlerted, lastDomainThresholdAlerted };
 }

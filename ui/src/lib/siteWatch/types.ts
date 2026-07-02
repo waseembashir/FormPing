@@ -29,6 +29,17 @@ export interface SslResult {
   error?: string;
 }
 
+/** Result of a single domain-registration (WHOIS/RDAP) check. */
+export interface DomainResult {
+  ok: boolean;
+  /** Days until the domain registration expires (negative if already expired). */
+  daysRemaining: number | null;
+  /** ISO expiry date. */
+  expiryDate: string | null;
+  registrar: string | null;
+  error?: string;
+}
+
 /** A recurring availability/SSL monitor for one site. */
 export interface SiteSchedule {
   id: string;
@@ -47,6 +58,8 @@ export interface SiteSchedule {
   alertedDown: boolean;
   /** The most severe SSL threshold (days) we've already alerted at, or null. */
   lastSslThresholdAlerted: number | null;
+  /** The most severe DOMAIN-expiry threshold (days) we've already alerted at, or null. */
+  lastDomainThresholdAlerted: number | null;
 
   // ── Compact last-result summary (for list views) ──
   lastClassification?: UptimeClass;
@@ -54,9 +67,18 @@ export interface SiteSchedule {
   lastResponseMs?: number | null;
   lastSslDaysRemaining?: number | null;
   lastSslValid?: boolean;
+  // ── Domain-expiry (RDAP) — the network lookup is throttled (~12h) and cached
+  //    here; days-remaining is recomputed from lastDomainExpiry every cycle. ──
+  lastDomainDaysRemaining?: number | null;
+  lastDomainValid?: boolean;
+  /** ISO expiry date from the last successful RDAP lookup (cache for recompute). */
+  lastDomainExpiry?: string | null;
+  /** When we last actually queried RDAP (throttles network calls). */
+  lastDomainCheckedAt?: string | null;
+  lastDomainRegistrar?: string | null;
 }
 
-/** One recorded check (uptime + optional SSL). */
+/** One recorded check (uptime + optional SSL + optional domain). */
 export interface SiteCheckRecord {
   scheduleId: string;
   url: string;
@@ -64,4 +86,6 @@ export interface SiteCheckRecord {
   checkedAt: string;
   uptime: UptimeResult;
   ssl: SslResult | null;
+  /** Optional so older stored records (pre-domain-expiry) still parse. */
+  domain?: DomainResult | null;
 }
