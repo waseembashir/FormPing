@@ -27,14 +27,14 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
 /** PATCH /api/projects/[id] — update name / urls / notes. */
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
-  let body: { name?: unknown; urls?: unknown; notes?: unknown };
+  let body: { name?: unknown; urls?: unknown; notes?: unknown; contact?: unknown };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const patch: { name?: string; urls?: string[]; notes?: string } = {};
+  const patch: { name?: string; urls?: string[]; notes?: string; contact?: string } = {};
 
   if (typeof body.name === 'string') {
     if (!body.name.trim()) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
@@ -55,6 +55,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     patch.urls = urls;
   }
   if (typeof body.notes === 'string') patch.notes = body.notes;
+  if (typeof body.contact === 'string') patch.contact = body.contact;
 
   const updated = await projectStore.update(params.id, patch);
   if (!updated) return NextResponse.json({ error: 'Project not found' }, { status: 404 });

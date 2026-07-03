@@ -26,6 +26,9 @@ export interface FormSchedule {
   lastRunAt: string | null;
   /** ISO timestamp when the next run is due. */
   nextRunAt: string;
+  /** When true the ticker skips this schedule — paused, not stopped (keeps
+   *  history, unlike Stop which removes it). */
+  paused?: boolean;
   /** Compact summary of the most recent run (for list views). */
   lastStatus?: FormRunStatus;
   lastReasonCode?: string;

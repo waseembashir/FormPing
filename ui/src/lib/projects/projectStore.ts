@@ -16,10 +16,10 @@ import type { Project } from './types';
 export interface ProjectStore {
   list(): Promise<Project[]>;
   get(id: string): Promise<Project | null>;
-  create(input: { name: string; urls: string[]; notes?: string }): Promise<Project>;
+  create(input: { name: string; urls: string[]; notes?: string; contact?: string }): Promise<Project>;
   update(
     id: string,
-    patch: Partial<Pick<Project, 'name' | 'urls' | 'notes'>>,
+    patch: Partial<Pick<Project, 'name' | 'urls' | 'notes' | 'contact'>>,
   ): Promise<Project | null>;
   remove(id: string): Promise<boolean>;
 }
@@ -72,7 +72,7 @@ const jsonProjectStore: ProjectStore = {
     return (await readAll()).find((p) => p.id === id) ?? null;
   },
 
-  async create({ name, urls, notes }) {
+  async create({ name, urls, notes, contact }) {
     const all = await readAll();
     const now = new Date().toISOString();
     const project: Project = {
@@ -80,6 +80,7 @@ const jsonProjectStore: ProjectStore = {
       name: name.trim(),
       urls: urls.map(normalizeUrl).filter(Boolean),
       notes: notes?.trim() || undefined,
+      contact: contact?.trim() || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -98,6 +99,7 @@ const jsonProjectStore: ProjectStore = {
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       ...(patch.urls !== undefined ? { urls: patch.urls.map(normalizeUrl).filter(Boolean) } : {}),
       ...(patch.notes !== undefined ? { notes: patch.notes.trim() || undefined } : {}),
+      ...(patch.contact !== undefined ? { contact: patch.contact.trim() || undefined } : {}),
       updatedAt: new Date().toISOString(),
     };
     all[idx] = next;

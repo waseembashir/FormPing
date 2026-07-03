@@ -48,6 +48,17 @@ export default function FormWatchPage() {
     return () => clearInterval(t);
   }, [load]);
 
+  // Prefill the URL from ?url= — e.g. the "Monitor…" action on a Form Tester
+  // result. The user still picks the mode + frequency before adding.
+  useEffect(() => {
+    try {
+      const prefill = new URLSearchParams(window.location.search).get('url');
+      if (prefill) setUrl(prefill);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const handleAdd = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -96,6 +107,18 @@ export default function FormWatchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
+      });
+      await load();
+    },
+    [load],
+  );
+
+  const handleTogglePause = useCallback(
+    async (id: string, paused: boolean) => {
+      await fetch('/api/form-watch/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, paused }),
       });
       await load();
     },
@@ -240,7 +263,12 @@ export default function FormWatchPage() {
             )}
             {!loading &&
               schedules.map((s) => (
-                <ScheduleCard key={s.id} schedule={s} onStop={handleStop} />
+                <ScheduleCard
+                  key={s.id}
+                  schedule={s}
+                  onStop={handleStop}
+                  onTogglePause={handleTogglePause}
+                />
               ))}
           </div>
         </div>

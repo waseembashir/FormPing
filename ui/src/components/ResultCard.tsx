@@ -171,6 +171,13 @@ export function ResultCard({ result }: { result: SiteResult }) {
             ? `${expanded ? '▲ Hide' : '▼ Show'} ${result.notes.length} note${result.notes.length !== 1 ? 's' : ''}`
             : (expanded ? '▲ Hide details' : '▼ Show details')}
         </button>
+        <a
+          href={`/form-watch?url=${encodeURIComponent(result.normalizedUrl)}`}
+          className="px-4 py-2 text-xs text-slate-400 hover:text-indigo-300 hover:bg-slate-800/50 transition-colors whitespace-nowrap"
+          title="Set up scheduled monitoring — the Form Watch tab opens with this URL prefilled; you pick the mode + frequency"
+        >
+          👁 Monitor…
+        </a>
         <button
           onClick={() => setShowJson(!showJson)}
           className="px-4 py-2 text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800/50 transition-colors font-mono"

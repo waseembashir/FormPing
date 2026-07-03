@@ -12,6 +12,8 @@ export interface Project {
   /** The client's URLs (form pages, site roots, etc.). */
   urls: string[];
   notes?: string;
+  /** Who to notify for this client — email / Slack handle / name. Seeds routing. */
+  contact?: string;
   createdAt: string;
   updatedAt: string;
 }

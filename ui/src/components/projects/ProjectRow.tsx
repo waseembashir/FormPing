@@ -216,6 +216,11 @@ export function ProjectRow({
           {!loading && detail && (
             <div className="space-y-2">
               {project.notes && <p className="text-[11px] text-slate-500 italic">{project.notes}</p>}
+              {project.contact && (
+                <p className="text-[11px] text-slate-500">
+                  <span className="text-slate-600">Contact:</span> {project.contact}
+                </p>
+              )}
               {detail.health.length === 0 && (
                 <p className="text-xs text-slate-500">No URLs in this project yet.</p>
               )}

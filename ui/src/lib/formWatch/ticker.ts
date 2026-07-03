@@ -148,7 +148,7 @@ async function tick(): Promise<void> {
   try {
     const schedules = await listSchedules();
     const now = Date.now();
-    const due = schedules.filter((s) => new Date(s.nextRunAt).getTime() <= now);
+    const due = schedules.filter((s) => !s.paused && new Date(s.nextRunAt).getTime() <= now);
     if (due.length === 0) return;
     console.log(`[formWatch/ticker] ${due.length} schedule(s) due`);
     for (const schedule of due) {

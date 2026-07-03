@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { SiteSchedule, SiteCheckRecord, UptimeClass } from '@/lib/siteWatch/types';
+import { TrendBar, type TrendTone } from '@/components/TrendBar';
 
 const UPTIME_STYLE: Record<UptimeClass | 'pending', { dot: string; text: string; label: string }> = {
   up: { dot: 'bg-emerald-400', text: 'text-emerald-300', label: 'Up' },
@@ -51,14 +52,17 @@ function intervalLabel(ms: number): string {
 export function SiteCard({
   schedule,
   onStop,
+  onTogglePause,
 }: {
   schedule: SiteSchedule;
   onStop: (id: string) => Promise<void>;
+  onTogglePause: (id: string, paused: boolean) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [checks, setChecks] = useState<SiteCheckRecord[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [pausing, setPausing] = useState(false);
 
   const up: UptimeClass | 'pending' = schedule.lastClassification ?? 'pending';
   const u = UPTIME_STYLE[up];
@@ -83,17 +87,42 @@ export function SiteCard({
     if (next && checks === null) void loadChecks();
   }
 
+  // Load history on mount + whenever a new check lands, so the trend sparkline
+  // shows without expanding.
   useEffect(() => {
-    if (expanded) void loadChecks();
+    void loadChecks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule.lastCheckedAt]);
 
+  // Recent-history trend (oldest → newest): uptime % + a status sparkline.
+  const recent = (checks ?? []).slice(0, 12).reverse();
+  const upCount = recent.filter((c) => c.uptime.classification !== 'down').length;
+  const uptimePct = recent.length ? Math.round((upCount / recent.length) * 100) : null;
+  const trendTones: TrendTone[] = recent.map((c) =>
+    c.uptime.classification === 'up' ? 'emerald' : c.uptime.classification === 'blocked' ? 'amber' : 'red',
+  );
+
   async function handleStop() {
+    if (
+      !window.confirm(
+        'Delete this monitor? It stops all checks and removes it. Use Pause instead to keep it and resume later.',
+      )
+    )
+      return;
     setStopping(true);
     try {
       await onStop(schedule.id);
     } finally {
       setStopping(false);
+    }
+  }
+
+  async function handlePause() {
+    setPausing(true);
+    try {
+      await onTogglePause(schedule.id, !schedule.paused);
+    } finally {
+      setPausing(false);
     }
   }
 
@@ -112,6 +141,11 @@ export function SiteCard({
               )}
               <span className={`text-[11px] font-medium ${ssl.text}`}>{ssl.label}</span>
               <span className={`text-[11px] font-medium ${domain.text}`}>{domain.label}</span>
+              {schedule.paused && (
+                <span className="text-[11px] font-medium text-slate-400 bg-slate-800 rounded px-1.5 py-0.5">
+                  Paused
+                </span>
+              )}
             </div>
             <a
               href={schedule.url}
@@ -126,17 +160,34 @@ export function SiteCard({
               <span>{intervalLabel(schedule.intervalMs)}</span>
               <span>checked {relativeTime(schedule.lastCheckedAt)}</span>
               <span>next {relativeTime(schedule.nextCheckAt)}</span>
+              {uptimePct != null && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-slate-400">{uptimePct}% up</span>
+                  <TrendBar tones={trendTones} title={`last ${trendTones.length} checks`} />
+                </span>
+              )}
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleStop}
-            disabled={stopping}
-            className="shrink-0 rounded-md border border-slate-700 hover:bg-slate-800 disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium text-slate-300"
-          >
-            {stopping ? 'Stopping…' : 'Stop'}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePause}
+              disabled={pausing}
+              className="rounded-md border border-slate-700 hover:bg-slate-800 disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium text-slate-300"
+            >
+              {pausing ? '…' : schedule.paused ? 'Resume' : 'Pause'}
+            </button>
+            <button
+              type="button"
+              onClick={handleStop}
+              disabled={stopping}
+              title="Delete this monitor — stops all checks and removes it. Use Pause to keep it and resume later."
+              className="rounded-md border border-red-900/60 text-red-300 hover:bg-red-950/40 disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium"
+            >
+              {stopping ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
         </div>
 
         <button

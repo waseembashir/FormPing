@@ -123,7 +123,7 @@ async function tick(): Promise<void> {
   try {
     const schedules = await listSchedules();
     const now = Date.now();
-    const due = schedules.filter((s) => new Date(s.nextCheckAt).getTime() <= now);
+    const due = schedules.filter((s) => !s.paused && new Date(s.nextCheckAt).getTime() <= now);
     if (due.length === 0) return;
     console.log(`[siteWatch/ticker] ${due.length} site(s) due`);
     for (const schedule of due) {

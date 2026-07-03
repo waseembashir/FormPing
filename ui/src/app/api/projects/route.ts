@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
 
 /** POST /api/projects — create. Body: { name: string, urls?: string[], notes?: string } */
 export async function POST(request: NextRequest) {
-  let body: { name?: unknown; urls?: unknown; notes?: unknown };
+  let body: { name?: unknown; urls?: unknown; notes?: unknown; contact?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
   }
 
   const notes = typeof body.notes === 'string' ? body.notes : undefined;
-  const project = await projectStore.create({ name, urls, notes });
+  const contact = typeof body.contact === 'string' ? body.contact : undefined;
+  const project = await projectStore.create({ name, urls, notes, contact });
   return NextResponse.json({ project }, { status: 201 });
 }
