@@ -50,6 +50,9 @@ export interface SiteSchedule {
   createdAt: string;
   lastCheckedAt: string | null;
   nextCheckAt: string;
+  /** When true the ticker skips this monitor — paused, not stopped (keeps
+   *  history + alert state, unlike Stop which removes it). */
+  paused?: boolean;
 
   // ── Alert state (persisted so alerts fire only on change, not every cycle) ──
   /** Consecutive down probes — used for flap protection. */

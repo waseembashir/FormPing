@@ -232,6 +232,11 @@ export default function DocsPage() {
                 <strong>Deleting a project also stops and removes its monitors</strong> for those
                 URLs, so nothing keeps running in the background.
               </LI>
+              <LI>
+                A URL you dismiss (&ldquo;don&apos;t track&rdquo;) moves to a{' '}
+                <strong>Dismissed</strong> list you can un-dismiss or assign later — no silent
+                dead-ends. Each project can also hold a <strong>contact</strong> (who to notify).
+              </LI>
             </UL>
             <Note>
               Storage uses the same JSON-on-the-volume model as the rest of the app, behind a small{' '}
@@ -582,6 +587,11 @@ export default function DocsPage() {
               CAPTCHA / anti-bot is detected and reported, never bypassed. See the{' '}
               <Code>README.md</Code> in the repo for the full reason-code list.
             </P>
+            <Note>
+              Each result has a <strong>Monitor…</strong> button that opens the Form Watch tab with
+              the URL prefilled — you choose the mode (Live/Safe/Detect) and frequency, then add it.
+              After a run you&apos;re also prompted to file any new URLs under a Project.
+            </Note>
 
             {/* ── Form Watch ──────────────────────────────────── */}
             <H2 id="form-watch">Forms → Scheduled monitors</H2>
@@ -596,9 +606,14 @@ export default function DocsPage() {
               <LI>You add a URL, a check frequency (e.g. every 3 days), and a mode.</LI>
               <LI>
                 A baseline check runs immediately, then repeats on your interval — automatically —
-                until you click <strong>Stop</strong>.
+                until you <strong>Delete</strong> it (or <strong>Pause</strong> it temporarily).
               </LI>
               <LI>Each run records the result and compares it to the previous run.</LI>
+              <LI>
+                <strong>Pause/Resume</strong> a schedule any time — it keeps its history (unlike
+                Delete, which removes it). Each card shows a <strong>recent-runs trend</strong> (%
+                healthy + a sparkline).
+              </LI>
               <LI>
                 A Slack alert fires on every run (success <em>and</em> failure) with the URL,
                 status, any changes, and a suggested next action.
@@ -728,6 +743,10 @@ export default function DocsPage() {
                 resets when the registration is renewed.
               </LI>
             </UL>
+            <Note>
+              Each card shows <strong>uptime %</strong> + a recent-checks sparkline, and you can{' '}
+              <strong>Pause/Resume</strong> a monitor (keeps its history, unlike Delete).
+            </Note>
             <P>Storage mirrors the other features — JSON on the volume, no database:</P>
             <CodeBlock>{`formping/data/snapshots/
 ├── .formping-site-schedules.json     ← the monitors

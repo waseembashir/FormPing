@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ProjectRollup, ProjectWithRollup } from '@/lib/projects/types';
 import { ProjectRow } from '@/components/projects/ProjectRow';
 import { UnassignedRow } from '@/components/projects/UnassignedRow';
+import { DismissedSection } from '@/components/projects/DismissedSection';
 
 interface Unassigned {
   urls: string[];
@@ -21,6 +22,7 @@ export default function ProjectsPage() {
   const [name, setName] = useState('');
   const [urlsText, setUrlsText] = useState('');
   const [notes, setNotes] = useState('');
+  const [contact, setContact] = useState('');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,7 +65,12 @@ export default function ProjectsPage() {
         const res = await fetch(editingId ? `/api/projects/${editingId}` : '/api/projects', {
           method: editingId ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), urls, notes: notes.trim() || undefined }),
+          body: JSON.stringify({
+          name: name.trim(),
+          urls,
+          notes: notes.trim() || undefined,
+          contact: contact.trim() || undefined,
+        }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -73,6 +80,7 @@ export default function ProjectsPage() {
         setName('');
         setUrlsText('');
         setNotes('');
+        setContact('');
         setEditingId(null);
         setShowAdd(false);
         await load(query);
@@ -98,6 +106,7 @@ export default function ProjectsPage() {
     setName(p.name);
     setUrlsText(p.urls.join('\n'));
     setNotes(p.notes ?? '');
+    setContact(p.contact ?? '');
     setError(null);
     setShowAdd(true);
   }, []);
@@ -149,6 +158,7 @@ export default function ProjectsPage() {
               setName('');
               setUrlsText('');
               setNotes('');
+              setContact('');
               setError(null);
               setShowAdd((s) => !s);
             }}
@@ -187,6 +197,17 @@ export default function ProjectsPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Anything worth noting"
+              disabled={adding}
+              className={inputCls}
+            />
+            <label className={`${labelCls} mt-3`}>
+              Contact{' '}
+              <span className="text-slate-600 normal-case">(optional — email / Slack / name)</span>
+            </label>
+            <input
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              placeholder="who to notify — e.g. dev@client.com"
               disabled={adding}
               className={inputCls}
             />
@@ -273,6 +294,8 @@ export default function ProjectsPage() {
           )}
         </div>
       </div>
+
+      <DismissedSection onChanged={() => void load(query)} />
 
       <p className="text-[11px] text-slate-600 mt-3">
         Rollup = the worst status across a client&apos;s URLs. Click a row to see each URL&apos;s

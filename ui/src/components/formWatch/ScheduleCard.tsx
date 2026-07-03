@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { FormSchedule, FormRunRecord } from '@/lib/formWatch/types';
 import { runVerdict, type VerdictLevel } from '@/lib/formWatch/verdict';
+import { TrendBar, type TrendTone } from '@/components/TrendBar';
 
 const LEVEL_STYLE: Record<VerdictLevel | 'pending', { dot: string; text: string; label: string }> = {
   healthy: { dot: 'bg-emerald-400', text: 'text-emerald-300', label: 'Healthy' },
@@ -33,14 +34,17 @@ function intervalLabel(ms: number): string {
 export function ScheduleCard({
   schedule,
   onStop,
+  onTogglePause,
 }: {
   schedule: FormSchedule;
   onStop: (id: string) => Promise<void>;
+  onTogglePause: (id: string, paused: boolean) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [runs, setRuns] = useState<FormRunRecord[] | null>(null);
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [pausing, setPausing] = useState(false);
 
   // Mode-aware verdict for the most recent run (green when the form is healthy
   // for the selected mode — e.g. SAFE "filled, not submitted" is a success).
@@ -49,6 +53,18 @@ export function ScheduleCard({
     : null;
   const level: VerdictLevel | 'pending' = verdict ? verdict.level : 'pending';
   const style = LEVEL_STYLE[level];
+
+  // Recent-history trend (oldest → newest): % healthy + a status sparkline.
+  const recentRuns = (runs ?? []).slice(0, 12).reverse();
+  const levels = recentRuns.map(
+    (r) => runVerdict(r.reasonCode, r.fingerprint.formFound, r.status).level,
+  );
+  const passPct = levels.length
+    ? Math.round((levels.filter((l) => l === 'healthy').length / levels.length) * 100)
+    : null;
+  const trendTones: TrendTone[] = levels.map((l) =>
+    l === 'healthy' ? 'emerald' : l === 'failing' ? 'red' : 'amber',
+  );
 
   async function loadRuns() {
     setLoadingRuns(true);
@@ -70,17 +86,33 @@ export function ScheduleCard({
 
   // Re-fetch the run history whenever a new run completes (lastRunAt changes)
   // while the panel is open.
+  // Load history on mount + when a new run lands, so the trend shows collapsed.
   useEffect(() => {
-    if (expanded) void loadRuns();
+    void loadRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule.lastRunAt]);
 
   async function handleStop() {
+    if (
+      !window.confirm(
+        'Delete this monitor? It stops all runs and removes it. Use Pause instead to keep it and resume later.',
+      )
+    )
+      return;
     setStopping(true);
     try {
       await onStop(schedule.id);
     } finally {
       setStopping(false);
+    }
+  }
+
+  async function handlePause() {
+    setPausing(true);
+    try {
+      await onTogglePause(schedule.id, !schedule.paused);
+    } finally {
+      setPausing(false);
     }
   }
 
@@ -95,6 +127,11 @@ export function ScheduleCard({
                 {style.label}
               </span>
               {verdict && <span className="text-[11px] text-slate-400">· {verdict.label}</span>}
+              {schedule.paused && (
+                <span className="text-[11px] font-medium text-slate-400 bg-slate-800 rounded px-1.5 py-0.5">
+                  Paused
+                </span>
+              )}
             </div>
             <a
               href={schedule.url}
@@ -112,17 +149,32 @@ export function ScheduleCard({
               </span>
               <span>last run {relativeTime(schedule.lastRunAt)}</span>
               <span>next {relativeTime(schedule.nextRunAt)}</span>
+              {passPct != null && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-slate-400">{passPct}% healthy</span>
+                  <TrendBar tones={trendTones} title={`last ${trendTones.length} runs`} />
+                </span>
+              )}
             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={handleStop}
-              disabled={stopping}
+              onClick={handlePause}
+              disabled={pausing}
               className="rounded-md border border-slate-700 hover:bg-slate-800 disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium text-slate-300"
             >
-              {stopping ? 'Stopping…' : 'Stop'}
+              {pausing ? '…' : schedule.paused ? 'Resume' : 'Pause'}
+            </button>
+            <button
+              type="button"
+              onClick={handleStop}
+              disabled={stopping}
+              title="Delete this monitor — stops all runs and removes it. Use Pause to keep it and resume later."
+              className="rounded-md border border-red-900/60 text-red-300 hover:bg-red-950/40 disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium"
+            >
+              {stopping ? 'Deleting…' : 'Delete'}
             </button>
           </div>
         </div>

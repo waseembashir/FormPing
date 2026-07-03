@@ -37,6 +37,25 @@ export async function listDismissed(): Promise<Set<string>> {
   return new Set(await readAll());
 }
 
+/** Dismissed URLs as an array (readable, for the "Dismissed" UI section). */
+export async function listDismissedUrls(): Promise<string[]> {
+  return readAll();
+}
+
+/** Un-dismiss a URL (re-enables the add-to-project prompt for it). Best-effort. */
+export async function removeDismissed(url: string): Promise<void> {
+  try {
+    const all = await readAll();
+    const k = key(url);
+    const next = all.filter((x) => x !== k);
+    if (next.length === all.length) return;
+    await mkdir(path.dirname(filePath()), { recursive: true });
+    await writeFile(filePath(), JSON.stringify(next), 'utf-8');
+  } catch (err) {
+    console.warn(`[dismissedStore] removeDismissed failed: ${err}`);
+  }
+}
+
 /** True if this URL was dismissed from Projects. */
 export async function isDismissed(url: string): Promise<boolean> {
   return (await readAll()).includes(key(url));

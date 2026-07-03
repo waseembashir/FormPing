@@ -52,7 +52,7 @@ export function ProjectUrlPicker({
 
   function pick(url: string) {
     onPick(url);
-    if (!keepOpen) setOpen(false);
+    setOpen(false); // always close after selecting a URL (every tab)
   }
 
   return (
@@ -116,7 +116,11 @@ export function ProjectUrlPicker({
                     {keepOpen && p.urls.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => (onPickMany ? onPickMany(p.urls) : p.urls.forEach(onPick))}
+                        onClick={() => {
+                          if (onPickMany) onPickMany(p.urls);
+                          else p.urls.forEach(onPick);
+                          setOpen(false);
+                        }}
                         className="w-full text-left px-2.5 py-1 rounded-md text-[11px] font-medium text-indigo-300 hover:bg-slate-800"
                       >
                         + Add all {p.urls.length}

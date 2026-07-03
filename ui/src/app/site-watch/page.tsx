@@ -115,6 +115,18 @@ export default function SiteWatchPage() {
     [load],
   );
 
+  const handleTogglePause = useCallback(
+    async (id: string, paused: boolean) => {
+      await fetch('/api/site-watch/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, paused }),
+      });
+      await load();
+    },
+    [load],
+  );
+
   return (
     <div className="min-h-screen bg-slate-950">
       <main className="max-w-7xl mx-auto px-4 pb-16 pt-8">
@@ -269,7 +281,15 @@ export default function SiteWatchPage() {
               </div>
             )}
 
-            {!loading && schedules.map((s) => <SiteCard key={s.id} schedule={s} onStop={handleStop} />)}
+            {!loading &&
+              schedules.map((s) => (
+                <SiteCard
+                  key={s.id}
+                  schedule={s}
+                  onStop={handleStop}
+                  onTogglePause={handleTogglePause}
+                />
+              ))}
           </div>
         </div>
       </main>
