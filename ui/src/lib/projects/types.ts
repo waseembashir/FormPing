@@ -14,6 +14,12 @@ export interface Project {
   notes?: string;
   /** Who to notify for this client — email / Slack handle / name. Seeds routing. */
   contact?: string;
+  /**
+   * Opt-in public status-page token. When set, the client-safe status page is
+   * reachable at /status/<shareToken> WITHOUT auth (see middleware allowlist).
+   * Absent/empty = no public page. Unguessable + revocable (regenerate/clear).
+   */
+  shareToken?: string | null;
   createdAt: string;
   updatedAt: string;
 }

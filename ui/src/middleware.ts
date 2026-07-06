@@ -35,6 +35,14 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public per-client status pages (opt-in share tokens). Both the page and its
+  // data API are intentionally reachable WITHOUT a session so a client can open
+  // the link. They only ever return client-safe data for a valid, un-revoked
+  // token — an unknown/revoked token yields a 404 (see /api/status/[token]).
+  if (pathname.startsWith('/status/') || pathname.startsWith('/api/status/')) {
+    return NextResponse.next();
+  }
+
   // Public SEO/brand assets (favicon + social share images). These must be
   // reachable WITHOUT a session so external crawlers (Slackbot, Twitter,
   // Google) can fetch the Open Graph image and favicon to render link

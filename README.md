@@ -11,6 +11,7 @@ The web UI is organized around **Projects** (a client + their URLs), plus two to
 | Area | What it is |
 |------|-------|
 | **Projects** | Group a client's URLs into a project; see their form, uptime & SSL health in one place (a thin overlay over the monitors) |
+| **Status page** | Per-client health page built from the same data. **Internal** ops view (`/projects/<id>/status`, auth-gated, with technical detail) + an opt-in **public** shareable link (`/status/<token>`, no login, client-safe only). Uptime history, 24h/7d/30d, response-time trend, SSL & form status. |
 | **Forms** | *Test a form* (on-demand) · *Scheduled monitors* (recurring form tests + Slack alerts) |
 | **Site** | *Uptime & SSL* (availability + cert-expiry monitoring + Slack) · *Change tracking* (content / SEO / form / script changes over time) |
 
