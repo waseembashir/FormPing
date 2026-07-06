@@ -14,6 +14,8 @@ import { Header } from './Header';
  */
 export function AppChrome() {
   const pathname = usePathname();
-  if (pathname === '/login') return null;
+  // No app nav on the login screen or on PUBLIC client status pages — the
+  // status page is client-facing and must not show the internal tabs/sign-out.
+  if (pathname === '/login' || pathname.startsWith('/status/')) return null;
   return <Header />;
 }

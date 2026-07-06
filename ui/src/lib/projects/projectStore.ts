@@ -22,6 +22,17 @@ export interface ProjectStore {
     patch: Partial<Pick<Project, 'name' | 'urls' | 'notes' | 'contact'>>,
   ): Promise<Project | null>;
   remove(id: string): Promise<boolean>;
+  /** Generate (or regenerate) the public status-page token; returns the updated project. */
+  enableShare(id: string): Promise<Project | null>;
+  /** Revoke the public status-page token (sets it to null). */
+  disableShare(id: string): Promise<Project | null>;
+  /** Find a project by its public status-page token (constant-token match). */
+  findByToken(token: string): Promise<Project | null>;
+}
+
+/** Unguessable, URL-safe share token (256 bits of randomness, hex). */
+function newShareToken(): string {
+  return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '');
 }
 
 /** Normalize a URL for storage + matching: trim and drop trailing slashes. */
@@ -113,6 +124,40 @@ const jsonProjectStore: ProjectStore = {
     if (next.length === all.length) return false;
     await writeAll(next);
     return true;
+  },
+
+  async enableShare(id) {
+    const all = await readAll();
+    const idx = all.findIndex((p) => p.id === id);
+    if (idx < 0) return null;
+    const next: Project = {
+      ...all[idx]!,
+      shareToken: newShareToken(),
+      updatedAt: new Date().toISOString(),
+    };
+    all[idx] = next;
+    await writeAll(all);
+    return next;
+  },
+
+  async disableShare(id) {
+    const all = await readAll();
+    const idx = all.findIndex((p) => p.id === id);
+    if (idx < 0) return null;
+    const next: Project = {
+      ...all[idx]!,
+      shareToken: null,
+      updatedAt: new Date().toISOString(),
+    };
+    all[idx] = next;
+    await writeAll(all);
+    return next;
+  },
+
+  async findByToken(token) {
+    if (!token) return null;
+    const all = await readAll();
+    return all.find((p) => !!p.shareToken && p.shareToken === token) ?? null;
   },
 };
 

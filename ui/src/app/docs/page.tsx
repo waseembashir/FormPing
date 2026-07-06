@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 const SECTIONS = [
   { id: 'layout', label: 'How it is organized' },
   { id: 'projects', label: 'Projects' },
+  { id: 'status-page', label: 'Status page (public)' },
   { id: 'overview', label: 'Change tracking — overview' },
   { id: 'storage', label: 'Storage layout' },
   { id: 'snapshot-data', label: 'What gets saved' },
@@ -243,6 +244,46 @@ export default function DocsPage() {
               <Code>ProjectStore</Code> interface so it can move to a database (e.g. Supabase) later
               without a rewrite. Why this matters: the Project/client entity is the foundation that
               team-routing, a status page, and access controls will all build on.
+            </Note>
+
+            {/* ── Status page (public) ────────────────────── */}
+            <H2 id="status-page">Status page (public)</H2>
+            <P>
+              Each project can publish a <strong>public status page</strong> — a clean, client-safe
+              &ldquo;is my site healthy?&rdquo; page you can share with the client. It shows only
+              reassuring, non-technical signals: overall status, each site up/down, a{' '}
+              <strong>30-day uptime history bar</strong>, uptime % for the last 24h / 7d / 30d, a{' '}
+              <strong>response-time trend chart</strong>, check cadence (&ldquo;checked every 5
+              min&rdquo;), whether the contact form is working, and SSL validity. No reason codes, run
+              modes, notes, or full URLs ever appear.
+            </P>
+            <UL>
+              <LI>
+                Open a project, expand it, and use <strong>Public status page → Create link</strong>.
+                You get an unguessable link at <Code>/status/&lt;token&gt;</Code> that opens{' '}
+                <strong>without any login</strong> — the only auth-exempt page in the app.
+              </LI>
+              <LI>
+                <strong>Copy</strong> or <strong>Open</strong> the link, <strong>Regenerate</strong>{' '}
+                it (invalidates the old one), or <strong>Turn off</strong> to revoke it. A revoked or
+                unknown token returns a plain 404 — tokens can&apos;t be guessed or enumerated.
+              </LI>
+              <LI>
+                It&apos;s a read-only overlay on the same data Projects uses (uptime % comes from Site
+                Watch history) — nothing about your monitors changes, and only opted-in projects are
+                ever public.
+              </LI>
+              <LI>
+                <strong>Internal view</strong> — every project also has a{' '}
+                <strong>View status</strong> link (in its expanded row) that opens the same analytical
+                view <em>inside</em> the app for any signed-in team member. No share token needed and
+                it never leaves the login gate — handy for checking a client&apos;s uptime &amp;
+                response trends without publishing a public link.
+              </LI>
+            </UL>
+            <Note>
+              The page auto-refreshes and carries no app navigation or sign-out — it&apos;s built to
+              hand to a client. Only projects where you&apos;ve explicitly created a link are exposed.
             </Note>
 
             {/* ── Change tracking — overview ────────────────────── */}

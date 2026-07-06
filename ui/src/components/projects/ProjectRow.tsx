@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type {
   FormHealthLevel,
   ProjectRollup,
@@ -10,6 +11,7 @@ import type {
   UrlHealth,
 } from '@/lib/projects/types';
 import { runVerdict } from '@/lib/formWatch/verdict';
+import { ShareStatusControl } from './ShareStatusControl';
 
 type Tone = 'emerald' | 'amber' | 'red' | 'slate';
 
@@ -227,7 +229,21 @@ export function ProjectRow({
               {detail.health.map((h) => (
                 <UrlDetailRow key={h.url} h={h} />
               ))}
-              <div className="pt-1 flex items-center gap-4">
+              <div className="pt-1">
+                <ShareStatusControl projectId={project.id} initialToken={project.shareToken} />
+              </div>
+              <div className="pt-1 flex items-center gap-3">
+                <Link
+                  href={`/projects/${project.id}/status`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm shadow-indigo-900/40 ring-1 ring-indigo-400/30 transition-colors"
+                  title="Open the internal ops dashboard — uptime, response trends & technical detail"
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden>
+                    <path d="M3 3a1 1 0 011 1v11h13a1 1 0 110 2H4a2 2 0 01-2-2V4a1 1 0 011-1z" />
+                    <path d="M7.3 10.7a1 1 0 01.1-1.4l2.5-2.2a1 1 0 011.2-.1l2.1 1.3 2.6-2.9a1 1 0 111.5 1.3l-3.1 3.5a1 1 0 01-1.3.2l-2.1-1.3-1.9 1.7a1 1 0 01-1.4-.1z" />
+                  </svg>
+                  Open ops dashboard
+                </Link>
                 <button
                   type="button"
                   onClick={() => onEdit(project)}
