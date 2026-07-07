@@ -25,6 +25,11 @@ The web UI is organized around **Projects** (a client + their URLs), plus two to
 6. Optionally submits it and observes for a thank-you redirect or inline success message
 7. Returns a structured JSON result for each site
 
+**Landing-page mode** (`--landing-page`, or the "Landing page" toggle in the UI): skips steps 2–3
+and runs form detection **directly on the given URL** — for standalone landing pages that have an
+inline form and no separate `/contact` page (which would otherwise fail `CONTACT_PAGE_NOT_FOUND`).
+Off by default. Available on both the Form Tester and Form Watch (remembered per scheduled monitor).
+
 ### Website Change Monitor (new)
 
 1. Crawls a small set of important pages (homepage, about, pricing, services, contact, thank-you)

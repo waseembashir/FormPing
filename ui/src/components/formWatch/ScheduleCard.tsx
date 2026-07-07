@@ -147,6 +147,14 @@ export function ScheduleCard({
               <span className="uppercase tracking-wide rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
                 {schedule.mode}
               </span>
+              {schedule.landingPage && (
+                <span
+                  className="uppercase tracking-wide rounded bg-indigo-500/15 ring-1 ring-indigo-500/30 px-1.5 py-0.5 text-[10px] text-indigo-300"
+                  title="Landing-page mode: tested on this exact URL, no contact-page discovery"
+                >
+                  Landing
+                </span>
+              )}
               <span>last run {relativeTime(schedule.lastRunAt)}</span>
               <span>next {relativeTime(schedule.nextRunAt)}</span>
               {passPct != null && (

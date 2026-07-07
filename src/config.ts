@@ -20,6 +20,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   batchConcurrency: 2,
   aiProvider: 'off',
   residentialFallback: false,
+  landingPage: false,
   saveScreenshotOnFailure: false,
   saveHtmlSnapshotOnFailure: false,
   prettyJson: false,

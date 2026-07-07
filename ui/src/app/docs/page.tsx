@@ -629,6 +629,15 @@ export default function DocsPage() {
               <Code>README.md</Code> in the repo for the full reason-code list.
             </P>
             <Note>
+              <strong>Landing page</strong> toggle — by default the tester <em>discovers</em> a
+              separate contact page (crawling the site&apos;s links) before finding the form. Turn on{' '}
+              <strong>Landing page</strong> when the form is on the URL itself (a standalone landing
+              page with no separate <Code>/contact</Code>): it skips discovery and tests the form on
+              that exact URL, no crawling. Off by default — normal behaviour is unchanged. The same
+              toggle exists on Form Watch, and is remembered per scheduled monitor (shown as a{' '}
+              <strong>Landing</strong> badge).
+            </Note>
+            <Note>
               Each result has a <strong>Monitor…</strong> button that opens the Form Watch tab with
               the URL prefilled — you choose the mode (Live/Safe/Detect) and frequency, then add it.
               After a run you&apos;re also prompted to file any new URLs under a Project.

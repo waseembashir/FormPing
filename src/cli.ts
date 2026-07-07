@@ -50,6 +50,7 @@ program
   .option('--ai', 'Shortcut for --ai-provider auto (form-tester AI fallback)', false)
   .option('--ai-provider <id>', 'AI provider: off | auto | anthropic | gemini | groq | ollama', parseAiProvider)
   .option('--residential-fallback', 'Retry BLOCKED_BY_HOST sites once via Browserbase residential IP (requires BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID env vars; per-session billing)', false)
+  .option('--landing-page', 'Landing-page mode: test the form on the exact URL given, skipping contact-page discovery (no crawling)', false)
   .option('--email <email>', 'Test email address to use in forms')
   // ─── Monitor mode options ────────────────────────────────────────────────
   .option('--monitor <mode>', 'Run change monitor: snapshot | compare | watch')
@@ -78,6 +79,7 @@ program
     ai: boolean;
     aiProvider?: AiProviderSelection;
     residentialFallback: boolean;
+    landingPage: boolean;
     email?: string;
     monitor?: string;
     pages?: number;
@@ -106,6 +108,7 @@ program
       headless: !opts.headed,
       aiProvider,
       residentialFallback: opts.residentialFallback,
+      landingPage: opts.landingPage,
       prettyJson: opts.jsonPretty,
       outputFile: opts.output,
       ...(opts.timeout ? { timeout: opts.timeout, navigationTimeout: opts.timeout * 1.5 } : {}),

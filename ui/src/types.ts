@@ -63,6 +63,8 @@ export interface RunConfig {
   concurrency: number;
   /** Retry BLOCKED_BY_HOST sites once via Browserbase residential IP. Costs money per retry. */
   residentialFallback: boolean;
+  /** Landing-page mode: test the form on the exact URL, skipping contact-page discovery. */
+  landingPage: boolean;
 }
 
 export type SSEEvent =
