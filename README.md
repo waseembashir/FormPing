@@ -153,6 +153,25 @@ Edit `src/config.ts` to customize:
 - `saveScreenshotOnFailure` — capture screenshot on failure (wiring optional)
 - `saveHtmlSnapshotOnFailure` — save HTML snapshot on failure (wiring optional)
 
+### Where persisted data lives (`FORMPING_DATA_DIR`)
+
+All UI persistence — projects, form/site schedules, run history, change reports,
+dismissals, on-demand runs — is written under `data/snapshots/…`. By default that
+is `<repo>/data/snapshots` (on Railway this is the mounted persistent volume, so
+leave it unset in production).
+
+Set `FORMPING_DATA_DIR` (in `ui/.env.local`) to an **absolute** path to relocate
+all of it. This matters for **local dev when the repo lives inside a synced
+folder like OneDrive/Dropbox**, which continually re-syncs and reverts these
+small, frequently-written JSON files — silently wiping your schedules and
+projects. Point it at a non-synced folder, e.g.:
+
+```
+FORMPING_DATA_DIR="C:/Users/<you>/AppData/Local/FormPing/data"
+```
+
+The default (unset) behaviour is unchanged.
+
 ## AI providers (optional)
 
 AI is **off by default**. To enable, create a `.env` file in `formping/` with one or more of these keys:

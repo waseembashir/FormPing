@@ -16,6 +16,7 @@
 
 import { mkdir, readdir, readFile, unlink, writeFile } from 'fs/promises';
 import path from 'path';
+import { dataPath } from '@/lib/dataPaths';
 
 /** How many reports to keep on disk per site. User wants only the most
  * recent one visible — keep a tiny buffer so we never lose the latest if
@@ -30,8 +31,8 @@ const REPORT_ROOT = 'data/snapshots/.formping-reports';
 
 /** Resolve the absolute filesystem path for reports of a given site. */
 function reportsDir(site: string): string {
-  // Routes run with cwd = formping/ui; reports live at formping/data/reports.
-  return path.join(process.cwd(), '..', REPORT_ROOT, site);
+  // Default: formping/data/snapshots/.formping-reports/<site>; override with FORMPING_DATA_DIR.
+  return path.join(dataPath(REPORT_ROOT), site);
 }
 
 /** Sanitize a filesystem path component (extra paranoid — site comes from URL parser). */

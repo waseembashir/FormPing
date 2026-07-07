@@ -13,11 +13,12 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { normalizeUrl } from './projectStore';
+import { dataPath } from '@/lib/dataPaths';
 
 const FILE = 'data/snapshots/.formping-project-dismissed.json';
 
 function filePath(): string {
-  return path.join(process.cwd(), '..', FILE);
+  return dataPath(FILE);
 }
 function key(url: string): string {
   return normalizeUrl(url).toLowerCase();
