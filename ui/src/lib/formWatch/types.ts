@@ -20,6 +20,10 @@ export interface FormSchedule {
   intervalMs: number;
   /** Submit mode for the scheduled run. Defaults to 'live'. */
   mode: FormWatchMode;
+  /** "Landing page" mode: test the form on this exact URL, skipping contact-page
+   *  discovery (no crawling). For standalone landing pages with an inline form.
+   *  Defaults to false / undefined = normal discovery. */
+  landingPage?: boolean;
   /** ISO timestamp when the schedule was created. */
   createdAt: string;
   /** ISO timestamp of the last completed run, or null if never run. */

@@ -67,6 +67,20 @@ export function ConfigPanel({ config, onChange, disabled }: Props) {
           )}
         </div>
 
+        {/* Landing-page mode — prominent, right under Mode so it's easy to find */}
+        <div className="rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2.5">
+          <Toggle
+            label="Landing page"
+            checked={config.landingPage}
+            onChange={v => set('landingPage', v)}
+            disabled={disabled}
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            Test the form on this exact URL — skip searching for a separate contact page. Turn on for a
+            landing page that has the form on the page itself.
+          </p>
+        </div>
+
         {/* Email */}
         <div>
           <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">

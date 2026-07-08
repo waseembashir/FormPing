@@ -29,7 +29,11 @@ export interface RawSiteResult {
 /** Hard cap on a single run so a hung browser can't wedge the scheduler. */
 const RUN_TIMEOUT_MS = 4 * 60 * 1000;
 
-export function runFormTest(url: string, mode: string): Promise<RawSiteResult | null> {
+export function runFormTest(
+  url: string,
+  mode: string,
+  landingPage = false,
+): Promise<RawSiteResult | null> {
   return new Promise((resolve) => {
     const uiRoot = process.cwd();
     const formpingRoot = path.join(uiRoot, '..');
@@ -42,6 +46,7 @@ export function runFormTest(url: string, mode: string): Promise<RawSiteResult | 
     const tsxCli = path.join(formpingRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
     const args = [tsxCli, cliPath, '--stream', '--mode', mode, '--url', url];
+    if (landingPage) args.push('--landing-page');
     const child = spawn(process.execPath, args, {
       cwd: formpingRoot,
       env: { ...process.env, DEBUG: '0' },

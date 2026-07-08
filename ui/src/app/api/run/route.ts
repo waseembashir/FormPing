@@ -19,9 +19,10 @@ export async function POST(request: NextRequest) {
     aiProvider?: string;
     concurrency: number;
     residentialFallback?: boolean;
+    landingPage?: boolean;
   };
 
-  const { urls, mode, timeout, email, headed, ai, aiProvider, concurrency, residentialFallback } = body;
+  const { urls, mode, timeout, email, headed, ai, aiProvider, concurrency, residentialFallback, landingPage } = body;
 
   if (!urls || urls.length === 0) {
     return new Response(JSON.stringify({ error: 'No URLs provided' }), { status: 400 });
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
       else if (ai) args.push('--ai');
       if (concurrency > 1) args.push('--concurrency', String(concurrency));
       if (residentialFallback) args.push('--residential-fallback');
+      if (landingPage) args.push('--landing-page');
 
       if (urls.length === 1) {
         args.push('--url', urls[0]!);

@@ -25,6 +25,7 @@ export default function FormWatchPage() {
   const [url, setUrl] = useState('');
   const [days, setDays] = useState(3);
   const [mode, setMode] = useState<FormWatchMode>('live');
+  const [landingPage, setLandingPage] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** URL just added — drives the non-blocking "add to a project?" nudge. */
@@ -82,7 +83,7 @@ export default function FormWatchPage() {
         const res = await fetch('/api/form-watch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: target, intervalDays: days, mode }),
+          body: JSON.stringify({ url: target, intervalDays: days, mode, landingPage }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -90,6 +91,7 @@ export default function FormWatchPage() {
           return;
         }
         setUrl('');
+        setLandingPage(false);
         setJustAdded(target);
         await load();
       } catch (err) {
@@ -98,7 +100,7 @@ export default function FormWatchPage() {
         setAdding(false);
       }
     },
-    [url, days, mode, load],
+    [url, days, mode, landingPage, load],
   );
 
   const handleStop = useCallback(
@@ -214,6 +216,25 @@ export default function FormWatchPage() {
                 </select>
                 <p className="mt-1 text-[11px] text-slate-500">
                   {MODES.find((m) => m.value === mode)?.hint}
+                </p>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={landingPage}
+                    onChange={(e) => setLandingPage(e.target.checked)}
+                    disabled={adding}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300 group-hover:text-slate-200 transition-colors">
+                    Landing page
+                  </span>
+                </label>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Test the form on this exact URL — skip searching for a separate contact page. Turn on
+                  for landing pages with the form on the page itself.
                 </p>
               </div>
 

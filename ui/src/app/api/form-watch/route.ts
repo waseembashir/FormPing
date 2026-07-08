@@ -58,7 +58,13 @@ export async function GET() {
  * Body: { url: string, intervalMs?: number, intervalDays?: number, mode?: FormWatchMode }
  */
 export async function POST(request: NextRequest) {
-  let body: { url?: unknown; intervalMs?: unknown; intervalDays?: unknown; mode?: unknown };
+  let body: {
+    url?: unknown;
+    intervalMs?: unknown;
+    intervalDays?: unknown;
+    mode?: unknown;
+    landingPage?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -89,6 +95,8 @@ export async function POST(request: NextRequest) {
     ? (body.mode as FormWatchMode)
     : 'live';
 
+  const landingPage = body.landingPage === true;
+
   const existing = await findScheduleByUrl(url);
   if (existing) {
     return NextResponse.json(
@@ -110,6 +118,7 @@ export async function POST(request: NextRequest) {
     site: hostnameOf(url),
     intervalMs,
     mode,
+    landingPage,
     createdAt: new Date(now).toISOString(),
     lastRunAt: null,
     // Run an immediate baseline check on the next tick, then every interval.

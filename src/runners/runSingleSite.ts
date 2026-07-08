@@ -81,7 +81,24 @@ export async function runSingleSite(
   };
 
   try {
-    // ── Step 1: Find contact page ────────────────────────────────────────────
+    // ── Step 1: Resolve the page whose form we'll test ───────────────────────
+    // Landing-page mode short-circuits discovery: the URL the user gave IS the
+    // page with the form, so we test it directly (no crawling to other pages).
+    // This is the fix for standalone landing pages that have an inline form and
+    // no separate /contact page (which would otherwise fail CONTACT_PAGE_NOT_FOUND).
+    let targetUrl: string;
+    if (config.landingPage) {
+      logger.info(
+        `Landing-page mode: testing the form directly on ${normalizedUrl} (contact-page discovery skipped)`,
+      );
+      targetUrl = normalizedUrl;
+      baseResult.resolvedContactPage = normalizedUrl;
+      baseResult.contactPageFound = true;
+      baseResult.contactPageConfidence = 1;
+      baseResult.notes.push(
+        'Landing-page mode: tested the form on the given URL directly (contact-page discovery skipped)',
+      );
+    } else {
     const { candidate, allCandidates, usedAiFallback, blockedByHost, diagnostic } =
       await findContactPage(normalizedUrl, browser, config);
 
@@ -138,6 +155,8 @@ export async function runSingleSite(
     if (usedAiFallback) baseResult.notes.push('Used AI fallback for contact page selection');
 
     logger.info(`Contact page: ${candidate.url} (confidence=${baseResult.contactPageConfidence.toFixed(2)})`);
+    targetUrl = candidate.url;
+    }
 
     // Note: detect-only does NOT return here. It still loads the contact page
     // and runs form detection below (Step 2–3) so it can confirm the form
@@ -153,7 +172,7 @@ export async function runSingleSite(
       // the 'load' event past our timeout. JS-rendered forms (Elementor,
       // FluentForms, Webflow, React SPAs) are still handled by the
       // networkidle + waitForSelector waits below.
-      await page.goto(candidate.url, { waitUntil: 'domcontentloaded' });
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
 
       // Give the network a brief chance to settle so JS-rendered forms appear.
       // We don't strictly require networkidle (some sites have long-polling

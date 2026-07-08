@@ -108,7 +108,7 @@ async function runScheduleOnce(schedule: FormSchedule): Promise<FormRunRecord> {
   let record: FormRunRecord;
 
   try {
-    const raw = await runFormTest(schedule.url, schedule.mode);
+    const raw = await runFormTest(schedule.url, schedule.mode, schedule.landingPage ?? false);
     record = raw
       ? toRecord(schedule, raw, ranAt)
       : errorRecord(schedule, ranAt, 'Form test produced no result (timeout or spawn failure)');

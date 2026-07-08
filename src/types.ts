@@ -50,6 +50,11 @@ export interface AppConfig {
    * and BROWSERBASE_PROJECT_ID env vars. Defaults to false because each
    * residential session is billed. */
   residentialFallback: boolean;
+  /** "Landing page" mode. When true, skip contact-page discovery and run form
+   * detection DIRECTLY on the given URL (no crawling to other pages). For
+   * standalone landing pages whose form is inline and which have no separate
+   * /contact page. Defaults to false — normal discovery behaviour. */
+  landingPage: boolean;
   saveScreenshotOnFailure: boolean;
   saveHtmlSnapshotOnFailure: boolean;
   outputFile?: string;
