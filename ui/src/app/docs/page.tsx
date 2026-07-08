@@ -335,6 +335,14 @@ export default function DocsPage() {
                 <Code>grep</Code>, <Code>rm</Code>, or back up with normal tooling.
               </LI>
             </UL>
+            <Note>
+              <strong>Data location.</strong> Everything lives under{' '}
+              <Code>data/snapshots/</Code> (on Railway, the mounted volume). For local dev inside a
+              synced folder like OneDrive/Dropbox — which reverts these frequently-written JSON files
+              and can wipe your schedules/projects — set <Code>FORMPING_DATA_DIR</Code> in{' '}
+              <Code>ui/.env.local</Code> to an absolute path outside the synced folder. Default
+              behaviour is unchanged.
+            </Note>
 
             {/* ── What gets saved ─────────────────────────────── */}
             <H2 id="snapshot-data">What gets saved per page</H2>

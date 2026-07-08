@@ -7,6 +7,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import type { SiteCheckRecord } from './types';
+import { dataPath } from '@/lib/dataPaths';
 
 const DIR_REL = 'data/snapshots/.formping-site-runs';
 const MAX_RUNS = 200;
@@ -16,7 +17,7 @@ function safeKey(key: string): string {
 }
 
 function fileFor(scheduleId: string): string {
-  return path.join(process.cwd(), '..', DIR_REL, `${safeKey(scheduleId)}.json`);
+  return path.join(dataPath(DIR_REL), `${safeKey(scheduleId)}.json`);
 }
 
 export async function readHistory(scheduleId: string): Promise<SiteCheckRecord[]> {

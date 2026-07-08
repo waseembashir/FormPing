@@ -13,6 +13,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import type { FormSchedule } from './types';
+import { dataPath } from '@/lib/dataPaths';
 
 const FILE_REL = 'data/snapshots/.formping-form-schedules.json';
 
@@ -20,9 +21,9 @@ interface FileShape {
   schedules: FormSchedule[];
 }
 
-/** Absolute path. Routes/server modules run with cwd = formping/ui; data is one level up. */
+/** Absolute path. Default: formping/data/snapshots/…; override with FORMPING_DATA_DIR. */
 function filePath(): string {
-  return path.join(process.cwd(), '..', FILE_REL);
+  return dataPath(FILE_REL);
 }
 
 async function readAll(): Promise<FormSchedule[]> {

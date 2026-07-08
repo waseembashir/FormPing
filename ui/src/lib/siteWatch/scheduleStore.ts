@@ -7,6 +7,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import type { SiteSchedule } from './types';
+import { dataPath } from '@/lib/dataPaths';
 
 const FILE_REL = 'data/snapshots/.formping-site-schedules.json';
 
@@ -15,7 +16,7 @@ interface FileShape {
 }
 
 function filePath(): string {
-  return path.join(process.cwd(), '..', FILE_REL);
+  return dataPath(FILE_REL);
 }
 
 async function readAll(): Promise<SiteSchedule[]> {

@@ -12,6 +12,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import type { Project } from './types';
+import { dataPath } from '@/lib/dataPaths';
 
 export interface ProjectStore {
   list(): Promise<Project[]>;
@@ -47,9 +48,9 @@ interface FileShape {
   projects: Project[];
 }
 
-/** Routes/server modules run with cwd = formping/ui; data is one level up. */
+/** Default: formping/data/snapshots/…; override with FORMPING_DATA_DIR. */
 function filePath(): string {
-  return path.join(process.cwd(), '..', FILE_REL);
+  return dataPath(FILE_REL);
 }
 
 async function readAll(): Promise<Project[]> {

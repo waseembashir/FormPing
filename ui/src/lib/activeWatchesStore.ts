@@ -18,6 +18,7 @@
 
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
+import { dataPath } from '@/lib/dataPaths';
 
 // Path note: Railway's persistent volume is mounted at `data/snapshots`
 // rather than `data/`, so anything written to `data/active-watches.json`
@@ -49,10 +50,9 @@ interface FileShape {
   watches: ActiveWatchEntry[];
 }
 
-/** Absolute path to the JSON file (formping/data/active-watches.json). */
+/** Absolute path. Default: formping/data/snapshots/…; override with FORMPING_DATA_DIR. */
 function filePath(): string {
-  // Routes/server modules run with cwd = formping/ui; data lives one level up.
-  return path.join(process.cwd(), '..', FILE_REL);
+  return dataPath(FILE_REL);
 }
 
 /** Read with safe fallback to empty list. */

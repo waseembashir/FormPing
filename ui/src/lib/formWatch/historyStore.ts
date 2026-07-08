@@ -13,6 +13,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import type { FormRunRecord } from './types';
+import { dataPath } from '@/lib/dataPaths';
 
 const DIR_REL = 'data/snapshots/.formping-form-runs';
 const MAX_RUNS = 100;
@@ -23,7 +24,7 @@ function safeKey(key: string): string {
 }
 
 function fileFor(scheduleId: string): string {
-  return path.join(process.cwd(), '..', DIR_REL, `${safeKey(scheduleId)}.json`);
+  return path.join(dataPath(DIR_REL), `${safeKey(scheduleId)}.json`);
 }
 
 /** Read a schedule's run history (newest first). */
