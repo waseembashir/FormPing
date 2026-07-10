@@ -194,6 +194,21 @@ export default function MonitorPage() {
     setSnapshotsRefreshKey((k) => k + 1);
   }, []);
 
+  /** Clear the on-screen view + URL input + the saved URL. Does NOT delete the
+   *  server-stored reports/snapshots (they stay; re-entering the URL reloads
+   *  them). "Clear = wipe the view, keep the data." */
+  const handleClearView = useCallback(() => {
+    setUrl(''); // also clears reports + watchDetached via the URL effect
+    setReports([]);
+    setSnapshot(null);
+    setLogs([]);
+    try {
+      window.localStorage.removeItem(STORAGE_KEY_URL);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const handleRun = useCallback(async () => {
     if (!url.trim() || running || checking) return;
 
@@ -391,6 +406,7 @@ export default function MonitorPage() {
               logs={logs}
               running={running}
               watchActive={watchActive}
+              onClear={handleClearView}
             />
           </div>
         </div>

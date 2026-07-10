@@ -225,18 +225,21 @@ export default function DocsPage() {
                 <strong> Decide later</strong> → it waits in the Unassigned bucket.
               </LI>
               <LI>
-                The <strong>Unassigned</strong> row at the bottom of Projects lists any monitored URL
-                not yet in a project, each with an <strong>Assign to project</strong> action — so
-                nothing monitored is ever invisible.
+                The <strong>Unassigned</strong> row at the bottom of Projects lists any URL not yet in
+                a project — whether it&apos;s <strong>monitored</strong> (Form/Site Watch) or just{' '}
+                <strong>manually tested</strong> in the Form Tester — each with{' '}
+                <strong>Assign to project</strong> and <strong>Don&apos;t track</strong> (dismiss)
+                actions. So nothing you&apos;ve touched is ever invisible or a dead-end.
               </LI>
               <LI>
                 <strong>Deleting a project also stops and removes its monitors</strong> for those
                 URLs, so nothing keeps running in the background.
               </LI>
               <LI>
-                A URL you dismiss (&ldquo;don&apos;t track&rdquo;) moves to a{' '}
-                <strong>Dismissed</strong> list you can un-dismiss or assign later — no silent
-                dead-ends. Each project can also hold a <strong>contact</strong> (who to notify).
+                <strong>Don&apos;t track</strong> removes a URL from the Projects section entirely —
+                it&apos;s gone from Unassigned and won&apos;t come back on its own. If you change your
+                mind, just <strong>test it again</strong> in the Form Tester and it reappears in
+                Unassigned. Each project can also hold a <strong>contact</strong> (who to notify).
               </LI>
             </UL>
             <Note>
@@ -649,6 +652,13 @@ export default function DocsPage() {
               Each result has a <strong>Monitor…</strong> button that opens the Form Watch tab with
               the URL prefilled — you choose the mode (Live/Safe/Detect) and frequency, then add it.
               After a run you&apos;re also prompted to file any new URLs under a Project.
+            </Note>
+            <Note>
+              Results (and the URL) <strong>stay on screen</strong> when you switch tabs or refresh —
+              they&apos;re remembered in your browser. A <strong>Clear</strong> button wipes the view
+              and the URL box, but <strong>not</strong> the saved result the Projects tab uses. The
+              same Clear button is on <strong>Site → Change tracking</strong>. (&ldquo;Clear = wipe
+              the view, keep the data.&rdquo;)
             </Note>
 
             {/* ── Form Watch ──────────────────────────────────── */}

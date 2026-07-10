@@ -244,16 +244,27 @@ export async function listMonitoredUrls(): Promise<string[]> {
 }
 
 /**
- * Monitored URLs that aren't in any project — the synthetic "Unassigned" bucket.
- * Excludes URLs the user explicitly dismissed ("No, don't track in Projects"),
- * so a deliberate throwaway/test URL keeps monitoring without cluttering Projects.
+ * URLs that aren't in any project — the synthetic "Unassigned" bucket. Includes
+ * BOTH monitored URLs (Form/Site Watch schedules) AND manually-tested URLs (the
+ * on-demand run store) — so a URL you just tested in the Form Tester shows up
+ * here to assign or dismiss, not just monitored ones. Excludes URLs the user
+ * explicitly dismissed ("No, don't track"), so a deliberate throwaway stays out.
  */
 export async function listUnassignedUrls(): Promise<string[]> {
-  const [monitored, projects, dismissed] = await Promise.all([
+  const [monitored, runs, projects, dismissed] = await Promise.all([
     listMonitoredUrls(),
+    loadRuns(),
     projectStore.list(),
     listDismissed(),
   ]);
   const assigned = new Set(projects.flatMap((p) => p.urls).map(key));
-  return monitored.filter((u) => !assigned.has(key(u)) && !dismissed.has(key(u)));
+  // Union of monitored + manually-tested URLs, de-duplicated by normalized key
+  // (keep the first-seen original URL form for display).
+  const byKey = new Map<string, string>();
+  for (const u of monitored) byKey.set(key(u), u);
+  for (const r of runs.values()) {
+    const k = key(r.inputUrl);
+    if (!byKey.has(k)) byKey.set(k, r.inputUrl);
+  }
+  return [...byKey.values()].filter((u) => !assigned.has(key(u)) && !dismissed.has(key(u)));
 }

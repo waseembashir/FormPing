@@ -62,8 +62,13 @@ export function AddToProjectModal({ url, onClose }: { url: string; onClose: () =
       >
         <h3 className="text-sm font-semibold text-slate-100">Add this URL to a project?</h3>
         <p className="mt-1 text-xs text-slate-400">
-          Now monitoring <span className="font-mono text-slate-300 break-all">{url}</span>. Group it
-          under a client so it shows in Projects and its alerts route correctly.
+          Group <span className="font-mono text-slate-300 break-all">{url}</span> under a client so it
+          shows in Projects and its alerts route correctly.
+        </p>
+        <p className="mt-1.5 text-[11px] text-slate-500">
+          <strong className="text-slate-400">Decide later</strong> keeps it in{' '}
+          <strong className="text-slate-400">Unassigned</strong> (assign or dismiss it there anytime).{' '}
+          <strong className="text-slate-400">No, don&apos;t track</strong> hides it from Projects.
         </p>
 
         <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-1.5">

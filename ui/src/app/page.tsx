@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { UrlInputPanel } from '@/components/UrlInputPanel';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { ResultsPanel } from '@/components/ResultsPanel';
@@ -19,6 +19,14 @@ const DEFAULT_CONFIG: RunConfig = {
   landingPage: false,
 };
 
+// Persist the on-screen result/logs/URL so they survive tab-switches + refresh
+// (mirrors the Change-tracking tab). This is a DISPLAY cache only — the run
+// result is also saved server-side (on-demand run store) for Projects/Status;
+// Clear wipes this cache + the view, never the server data.
+const STORAGE_KEY_URL = 'fp:tester:url';
+const STORAGE_KEY_RESULTS = 'fp:tester:results';
+const STORAGE_KEY_LOGS = 'fp:tester:logs';
+
 export default function Home() {
   const [urlInput, setUrlInput] = useState('');
   const [config, setConfig] = useState<RunConfig>(DEFAULT_CONFIG);
@@ -34,6 +42,71 @@ export default function Home() {
   const forceRef = useRef(false);
   /** URLs to prompt "add to a project?" for, after a run completes. */
   const [pendingAssign, setPendingAssign] = useState<string[]>([]);
+  /** True once we've attempted to restore from localStorage — prevents the
+   *  initial empty state from clobbering the saved copy before restore runs. */
+  const [restored, setRestored] = useState(false);
+
+  // ── Restore results/logs/URL from localStorage on first mount ──────────────
+  useEffect(() => {
+    try {
+      const u = window.localStorage.getItem(STORAGE_KEY_URL);
+      if (u) setUrlInput(u);
+      const r = window.localStorage.getItem(STORAGE_KEY_RESULTS);
+      if (r) {
+        const parsed = JSON.parse(r);
+        if (Array.isArray(parsed)) setResults(parsed as SiteResult[]);
+      }
+      const l = window.localStorage.getItem(STORAGE_KEY_LOGS);
+      if (l) {
+        const parsed = JSON.parse(l);
+        if (Array.isArray(parsed)) setLogs(parsed as string[]);
+      }
+    } catch {
+      /* localStorage unavailable (private mode) — silent fallback */
+    }
+    setRestored(true);
+  }, []);
+
+  // ── Persist on change (skip until restored so we don't wipe the saved copy) ──
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      if (urlInput) window.localStorage.setItem(STORAGE_KEY_URL, urlInput);
+      else window.localStorage.removeItem(STORAGE_KEY_URL);
+    } catch { /* ignore */ }
+  }, [urlInput, restored]);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      if (results.length) window.localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(results));
+      else window.localStorage.removeItem(STORAGE_KEY_RESULTS);
+    } catch { /* ignore */ }
+  }, [results, restored]);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      if (logs.length) window.localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
+      else window.localStorage.removeItem(STORAGE_KEY_LOGS);
+    } catch { /* ignore */ }
+  }, [logs, restored]);
+
+  /** Clear the on-screen view + URL input + the localStorage cache. Does NOT
+   *  touch the server-stored run result (Projects/Status keep using it). */
+  const handleClear = useCallback(() => {
+    setResults([]);
+    setLogs([]);
+    setUrlInput('');
+    setProgress(null);
+    setPreflight(null);
+    forceRef.current = false;
+    try {
+      window.localStorage.removeItem(STORAGE_KEY_URL);
+      window.localStorage.removeItem(STORAGE_KEY_RESULTS);
+      window.localStorage.removeItem(STORAGE_KEY_LOGS);
+    } catch { /* ignore */ }
+  }, []);
 
   const handleRun = useCallback(async () => {
     if (running || checking) return;
@@ -199,6 +272,7 @@ export default function Home() {
               progress={progress}
               logs={logs}
               running={running}
+              onClear={handleClear}
             />
           </div>
         </div>
