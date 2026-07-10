@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ProjectRollup, ProjectWithRollup } from '@/lib/projects/types';
 import { ProjectRow } from '@/components/projects/ProjectRow';
 import { UnassignedRow } from '@/components/projects/UnassignedRow';
-import { DismissedSection } from '@/components/projects/DismissedSection';
 
 interface Unassigned {
   urls: string[];
@@ -294,8 +293,6 @@ export default function ProjectsPage() {
           )}
         </div>
       </div>
-
-      <DismissedSection onChanged={() => void load(query)} />
 
       <p className="text-[11px] text-slate-600 mt-3">
         Rollup = the worst status across a client&apos;s URLs. Click a row to see each URL&apos;s

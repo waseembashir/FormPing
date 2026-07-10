@@ -17,6 +17,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { normalizeUrl } from './projects/projectStore';
+import { removeDismissed } from './projects/dismissedStore';
 import { dataPath } from '@/lib/dataPaths';
 
 const FILE = 'data/snapshots/.formping-ondemand-runs.json';
@@ -93,6 +94,10 @@ export async function recordRun(raw: unknown): Promise<void> {
     all[run.url] = run;
     await mkdir(path.dirname(filePath()), { recursive: true });
     await writeFile(filePath(), JSON.stringify(all), 'utf-8');
+
+    // Re-testing a URL un-dismisses it: if it was "Don't track"-ed, testing it
+    // again means the user cares about it, so bring it back to Unassigned.
+    await removeDismissed(inputUrl);
   } catch (err) {
     console.warn(`[onDemandRunStore] recordRun failed: ${err}`);
   }

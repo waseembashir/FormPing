@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ProjectRollup, UrlHealth } from '@/lib/projects/types';
 import { StatusDot, overallStatus, TONE_TEXT, UrlDetailRow } from './ProjectRow';
 import { AssignToProject } from './AssignToProject';
+import { DismissUrlButton } from './DismissUrlButton';
 
 /**
  * The synthetic "Unassigned" bucket: monitored URLs not in any project. Mirrors
@@ -41,6 +42,14 @@ export function UnassignedRow({
     setExpanded(next);
     if (next && !health) void loadDetail();
   }
+
+  /** After assign/dismiss: refresh THIS row's expanded detail (so the changed
+   *  URL disappears from the list) AND the parent list (count/rollup). Without
+   *  the local re-fetch, the cached `health` kept showing the dismissed URL. */
+  const handleChanged = () => {
+    void loadDetail();
+    onChanged();
+  };
 
   return (
     <div className="bg-slate-950/20">
@@ -80,8 +89,9 @@ export function UnassignedRow({
             health.map((h) => (
               <div key={h.url}>
                 <UrlDetailRow h={h} />
-                <div className="mt-1 flex justify-end">
-                  <AssignToProject url={h.url} onAssigned={onChanged} />
+                <div className="mt-1 flex justify-end gap-2">
+                  <DismissUrlButton url={h.url} onDone={handleChanged} />
+                  <AssignToProject url={h.url} onAssigned={handleChanged} />
                 </div>
               </div>
             ))}
