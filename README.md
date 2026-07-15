@@ -158,12 +158,34 @@ Edit `src/config.ts` to customize:
 - `saveScreenshotOnFailure` — capture screenshot on failure (wiring optional)
 - `saveHtmlSnapshotOnFailure` — save HTML snapshot on failure (wiring optional)
 
-### Where persisted data lives (`FORMPING_DATA_DIR`)
+### Storage backend — Supabase (Postgres) or JSON files
 
-All UI persistence — projects, form/site schedules, run history, change reports,
-dismissals, on-demand runs — is written under `data/snapshots/…`. By default that
-is `<repo>/data/snapshots` (on Railway this is the mounted persistent volume, so
-leave it unset in production).
+FormPing persists to **Supabase (Postgres)** when configured, otherwise to JSON
+files (the original, still supported as a fallback). It picks the backend at
+runtime from the env — no code change needed. Check which one is live at any time
+via **`GET /api/health`** → `{"storage":"supabase" | "json"}`.
+
+To use Supabase, set these **server-only** vars in `ui/.env.local` (local) and
+Railway's Variables (prod). Never commit them:
+
+```
+SUPABASE_URL=https://<your-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<secret key>   # bypasses RLS — server-side only
+```
+
+The schema lives in `supabase/migrations/` (run it in the Supabase SQL Editor).
+Phase 1 tables (named after the app's tools): `projects`, `form_tester_runs`
+(Test a form), `form_watch_schedules` (Form Watch), `site_watch_schedules`
+(Site Watch), `dismissed_urls`. RLS is enabled on every table (the anon key can
+do nothing; the server's secret key has full access). Run history + change
+reports move to Supabase in Phase 2.
+
+### JSON fallback + where it lives (`FORMPING_DATA_DIR`)
+
+When Supabase is **not** configured, all UI persistence — projects, form/site
+schedules, run history, change reports, dismissals, on-demand runs — is written
+under `data/snapshots/…`. By default that is `<repo>/data/snapshots` (on Railway
+this is the mounted persistent volume, so leave it unset in production).
 
 Set `FORMPING_DATA_DIR` (in `ui/.env.local`) to an **absolute** path to relocate
 all of it. This matters for **local dev when the repo lives inside a synced

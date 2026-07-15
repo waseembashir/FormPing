@@ -311,8 +311,18 @@ export default function DocsPage() {
 
             {/* ── Storage layout ──────────────────────────────── */}
             <H2 id="storage">Storage layout</H2>
+            <Note>
+              <strong>Storage backend.</strong> Core data — projects, form/site monitors, dismissed
+              URLs, and manual test runs — is stored in <strong>Supabase (Postgres)</strong> when
+              configured (else JSON files, still supported). The tables are named after the app&apos;s
+              tools: <Code>projects</Code>, <Code>form_tester_runs</Code>,{' '}
+              <Code>form_watch_schedules</Code>, <Code>site_watch_schedules</Code>,{' '}
+              <Code>dismissed_urls</Code>. Check which backend is live at{' '}
+              <Code>/api/health</Code>. The change-monitor <em>snapshots</em> below are still
+              file-based (moving to Supabase in a later phase).
+            </Note>
             <P>
-              Every site you monitor gets its own folder under{' '}
+              For change tracking, every site you monitor gets its own folder under{' '}
               <Code>formping/data/snapshots/&lt;hostname&gt;/</Code>. One snapshot = one JSON file,
               ISO-timestamped:
             </P>
