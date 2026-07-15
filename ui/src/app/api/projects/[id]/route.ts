@@ -9,6 +9,7 @@ import {
   findScheduleByUrl as findSiteByUrl,
   removeSchedule as removeSiteSchedule,
 } from '@/lib/siteWatch/scheduleStore';
+import { removeRun } from '@/lib/onDemandRunStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,8 +65,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
 /**
  * DELETE /api/projects/[id] — remove a project AND cascade: stop & remove the
- * Form Watch / Site Watch monitors for this project's URLs, so deleting a
- * project fully stops its monitoring (no orphaned schedules left running).
+ * Form Watch / Site Watch monitors AND the last manual Form Tester run for this
+ * project's URLs. So deleting a project leaves NOTHING behind — its URLs don't
+ * linger in the Unassigned bucket (which surfaces monitored + manually-tested
+ * URLs). No orphaned schedules or run records.
  */
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
   const project = await projectStore.get(params.id);
@@ -83,6 +86,8 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
       await removeSiteSchedule(s.id);
       monitorsRemoved++;
     }
+    // Also clear the manual "Test a form" run so the URL doesn't reappear as Unassigned.
+    await removeRun(url);
   }
 
   await projectStore.remove(params.id);
