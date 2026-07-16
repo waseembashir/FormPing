@@ -312,14 +312,16 @@ export default function DocsPage() {
             {/* ── Storage layout ──────────────────────────────── */}
             <H2 id="storage">Storage layout</H2>
             <Note>
-              <strong>Storage backend.</strong> Core data — projects, form/site monitors, dismissed
-              URLs, and manual test runs — is stored in <strong>Supabase (Postgres)</strong> when
-              configured (else JSON files, still supported). The tables are named after the app&apos;s
-              tools: <Code>projects</Code>, <Code>form_tester_runs</Code>,{' '}
+              <strong>Storage backend.</strong> Data is stored in{' '}
+              <strong>Supabase (Postgres)</strong> when configured (else JSON files, still
+              supported). Tables are named after the app&apos;s tools — core:{' '}
+              <Code>projects</Code>, <Code>form_tester_runs</Code>,{' '}
               <Code>form_watch_schedules</Code>, <Code>site_watch_schedules</Code>,{' '}
-              <Code>dismissed_urls</Code>. Check which backend is live at{' '}
-              <Code>/api/health</Code>. The change-monitor <em>snapshots</em> below are still
-              file-based (moving to Supabase in a later phase).
+              <Code>dismissed_urls</Code>; history + reports: <Code>form_watch_runs</Code>,{' '}
+              <Code>site_watch_runs</Code>, <Code>change_reports</Code>. The two run-history tables
+              cascade-delete with their monitor (removing a monitor clears its history). Check which
+              backend is live at <Code>/api/health</Code>. The change-monitor <em>snapshots</em>{' '}
+              below remain file-based on the volume.
             </Note>
             <P>
               For change tracking, every site you monitor gets its own folder under{' '}

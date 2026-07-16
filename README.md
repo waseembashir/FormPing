@@ -173,12 +173,20 @@ SUPABASE_URL=https://<your-ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<secret key>   # bypasses RLS — server-side only
 ```
 
-The schema lives in `supabase/migrations/` (run it in the Supabase SQL Editor).
-Phase 1 tables (named after the app's tools): `projects`, `form_tester_runs`
-(Test a form), `form_watch_schedules` (Form Watch), `site_watch_schedules`
-(Site Watch), `dismissed_urls`. RLS is enabled on every table (the anon key can
-do nothing; the server's secret key has full access). Run history + change
-reports move to Supabase in Phase 2.
+The schema lives in `supabase/migrations/` (run each file in the Supabase SQL
+Editor). Tables are named after the app's tools:
+
+- **Phase 1 (core)** — `projects`, `form_tester_runs` (Test a form),
+  `form_watch_schedules` (Form Watch), `site_watch_schedules` (Site Watch),
+  `dismissed_urls` (Projects "Don't track").
+- **Phase 2 (history + reports)** — `form_watch_runs` (Form Watch run history),
+  `site_watch_runs` (Site Watch check history), `change_reports` (Change Monitor).
+  The two history tables cascade-delete with their parent schedule, so removing a
+  monitor also clears its history (no orphan rows).
+
+RLS is enabled on every table (the anon key can do nothing; the server's secret
+key bypasses it and has full access). Check the live backend at `/api/health`
+(`storage: "supabase" | "json"`).
 
 ### JSON fallback + where it lives (`FORMPING_DATA_DIR`)
 
