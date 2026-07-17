@@ -182,11 +182,44 @@ Editor). Tables are named after the app's tools:
 - **Phase 2 (history + reports)** — `form_watch_runs` (Form Watch run history),
   `site_watch_runs` (Site Watch check history), `change_reports` (Change Monitor).
   The two history tables cascade-delete with their parent schedule, so removing a
-  monitor also clears its history (no orphan rows).
+  monitor also clears its run log (no orphan rows).
+- **Phase 3 (durable results)** — `form_watch_results`, `site_watch_results`: the
+  **last known result per URL**, written on every scheduled run. Keyed by URL (not
+  by monitor), so they survive stopping/deleting a monitor — see the lifecycle
+  rules below.
 
 RLS is enabled on every table (the anon key can do nothing; the server's secret
 key bypasses it and has full access). Check the live backend at `/api/health`
 (`storage: "supabase" | "json"`).
+
+### Slack notifications (optional, free)
+
+Set `SLACK_WEBHOOK_URL` to a [Slack Incoming Webhook](https://api.slack.com/messaging/webhooks)
+and FormPing posts to your channel when a monitor finds something worth knowing:
+
+- **Change Monitor** — changes detected (watch mode *and* one-off compare runs)
+- **Form Watch** — a scheduled form run changes or breaks
+- **Site Watch** — downtime, SSL/domain expiry thresholds
+
+One webhook serves all three. Set it in `ui/.env.local` locally, or the Railway
+service variables in production. Leave it unset to disable: runs still execute
+and are stored — the Slack send is just skipped. Notifications are best-effort,
+so a Slack outage or a bad webhook never breaks a monitor.
+
+### Data lifecycle — what deleting actually deletes
+
+FormPing treats a **result as belonging to the URL**, not to the monitor that
+produced it. That gives three predictable rules, each surfaced to the user in a
+themed confirmation dialog before it happens:
+
+| Action | What happens |
+|---|---|
+| **Stop / delete a monitor** (Form Watch or Site Watch) | Future runs stop and the monitor + its run log are removed. **The last result stays** on the project's URL. Use **Pause** to keep the monitor and resume later. |
+| **Edit a project → remove a URL** | The URL leaves the project and drops to **Unassigned**. Its monitor **keeps running** and its results are **not** deleted — reassign or dismiss it there. |
+| **Delete a project** | A **complete** delete: its monitors, run history, durable per-URL results, last manual Form Tester run, and per-host change reports. Irreversible. |
+
+So only a **project delete** destroys results; everything else is recoverable or
+non-destructive.
 
 ### JSON fallback + where it lives (`FORMPING_DATA_DIR`)
 
