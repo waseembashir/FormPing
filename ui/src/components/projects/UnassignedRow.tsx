@@ -29,7 +29,7 @@ export function UnassignedRow({
   async function loadDetail() {
     setLoading(true);
     try {
-      const res = await fetch('/api/projects/unassigned').then((x) => x.json());
+      const res = await fetch('/api/projects/unassigned', { cache: 'no-store' }).then((x) => x.json());
       setHealth(Array.isArray(res?.health) ? res.health : []);
     } catch {
       setHealth([]);

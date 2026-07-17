@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { FormSchedule, FormRunRecord } from '@/lib/formWatch/types';
 import { runVerdict, type VerdictLevel } from '@/lib/formWatch/verdict';
 import { TrendBar, type TrendTone } from '@/components/TrendBar';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 const LEVEL_STYLE: Record<VerdictLevel | 'pending', { dot: string; text: string; label: string }> = {
   healthy: { dot: 'bg-emerald-400', text: 'text-emerald-300', label: 'Healthy' },
@@ -45,6 +46,7 @@ export function ScheduleCard({
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [pausing, setPausing] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
 
   // Mode-aware verdict for the most recent run (green when the form is healthy
   // for the selected mode — e.g. SAFE "filled, not submitted" is a success).
@@ -69,7 +71,9 @@ export function ScheduleCard({
   async function loadRuns() {
     setLoadingRuns(true);
     try {
-      const res = await fetch(`/api/form-watch/results?id=${encodeURIComponent(schedule.id)}`).then((r) => r.json());
+      const res = await fetch(`/api/form-watch/results?id=${encodeURIComponent(schedule.id)}`, {
+        cache: 'no-store', // never serve a stale (empty) first response from cache
+      }).then((r) => r.json());
       setRuns(Array.isArray(res?.runs) ? res.runs : []);
     } catch {
       setRuns([]);
@@ -81,7 +85,10 @@ export function ScheduleCard({
   function toggleExpand() {
     const next = !expanded;
     setExpanded(next);
-    if (next && runs === null) void loadRuns();
+    // Always refetch when opening. Fetching only when `runs === null` meant an
+    // empty first fetch (the baseline run hadn't finished yet) stuck as
+    // "No runs yet" until `lastRunAt` changed — a whole day on a daily schedule.
+    if (next) void loadRuns();
   }
 
   // Re-fetch the run history whenever a new run completes (lastRunAt changes)
@@ -92,13 +99,7 @@ export function ScheduleCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule.lastRunAt]);
 
-  async function handleStop() {
-    if (
-      !window.confirm(
-        'Delete this monitor? It stops all runs and removes it. Use Pause instead to keep it and resume later.',
-      )
-    )
-      return;
+  async function doStop() {
     setStopping(true);
     try {
       await onStop(schedule.id);
@@ -177,12 +178,12 @@ export function ScheduleCard({
             </button>
             <button
               type="button"
-              onClick={handleStop}
+              onClick={() => setConfirmStop(true)}
               disabled={stopping}
-              title="Delete this monitor — stops all runs and removes it. Use Pause to keep it and resume later."
+              title="Stops watching this URL and clears its run history. Its result stays in Projects. Use Pause to keep it."
               className="rounded-md border border-red-900/60 text-red-300 hover:bg-red-950/40 disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium"
             >
-              {stopping ? 'Deleting…' : 'Delete'}
+              {stopping ? 'Stopping…' : 'Stop'}
             </button>
           </div>
         </div>
@@ -207,6 +208,25 @@ export function ScheduleCard({
             runs.map((run, i) => <RunRow key={`${run.ranAt}-${i}`} run={run} />)}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmStop}
+        variant="danger"
+        title="Stop this form scheduler?"
+        confirmLabel="Stop scheduler"
+        message={
+          <>
+            Stops watching{' '}
+            <span className="font-mono break-all text-slate-300">{schedule.url}</span> and clears its
+            run history here.{' '}
+            <strong className="text-slate-300">Its result stays in Projects</strong> — only deleting
+            the project removes it. Want to keep it? Use{' '}
+            <strong className="text-slate-300">Pause</strong>.
+          </>
+        }
+        onConfirm={doStop}
+        onCancel={() => setConfirmStop(false)}
+      />
     </div>
   );
 }

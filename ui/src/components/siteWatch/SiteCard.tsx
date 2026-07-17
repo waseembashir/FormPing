@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { SiteSchedule, SiteCheckRecord, UptimeClass } from '@/lib/siteWatch/types';
 import { TrendBar, type TrendTone } from '@/components/TrendBar';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 const UPTIME_STYLE: Record<UptimeClass | 'pending', { dot: string; text: string; label: string }> = {
   up: { dot: 'bg-emerald-400', text: 'text-emerald-300', label: 'Up' },
@@ -63,6 +64,7 @@ export function SiteCard({
   const [loading, setLoading] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [pausing, setPausing] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
 
   const up: UptimeClass | 'pending' = schedule.lastClassification ?? 'pending';
   const u = UPTIME_STYLE[up];
@@ -72,7 +74,9 @@ export function SiteCard({
   async function loadChecks() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/site-watch/results?id=${encodeURIComponent(schedule.id)}`).then((r) => r.json());
+      const res = await fetch(`/api/site-watch/results?id=${encodeURIComponent(schedule.id)}`, {
+        cache: 'no-store', // never serve a stale (empty) first response from cache
+      }).then((r) => r.json());
       setChecks(Array.isArray(res?.checks) ? res.checks : []);
     } catch {
       setChecks([]);
@@ -84,7 +88,9 @@ export function SiteCard({
   function toggle() {
     const next = !expanded;
     setExpanded(next);
-    if (next && checks === null) void loadChecks();
+    // Always refetch when opening — see ScheduleCard: a first fetch that landed
+    // before the baseline check finished would otherwise stick as "No checks yet".
+    if (next) void loadChecks();
   }
 
   // Load history on mount + whenever a new check lands, so the trend sparkline
@@ -102,13 +108,7 @@ export function SiteCard({
     c.uptime.classification === 'up' ? 'emerald' : c.uptime.classification === 'blocked' ? 'amber' : 'red',
   );
 
-  async function handleStop() {
-    if (
-      !window.confirm(
-        'Delete this monitor? It stops all checks and removes it. Use Pause instead to keep it and resume later.',
-      )
-    )
-      return;
+  async function doStop() {
     setStopping(true);
     try {
       await onStop(schedule.id);
@@ -180,12 +180,12 @@ export function SiteCard({
             </button>
             <button
               type="button"
-              onClick={handleStop}
+              onClick={() => setConfirmStop(true)}
               disabled={stopping}
-              title="Delete this monitor — stops all checks and removes it. Use Pause to keep it and resume later."
+              title="Stops watching this URL and clears its check history. Its result stays in Projects. Use Pause to keep it."
               className="rounded-md border border-red-900/60 text-red-300 hover:bg-red-950/40 disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium"
             >
-              {stopping ? 'Deleting…' : 'Delete'}
+              {stopping ? 'Stopping…' : 'Stop'}
             </button>
           </div>
         </div>
@@ -210,6 +210,25 @@ export function SiteCard({
             checks.slice(0, 40).map((c, i) => <CheckRow key={`${c.checkedAt}-${i}`} check={c} />)}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmStop}
+        variant="danger"
+        title="Stop this uptime &amp; SSL scheduler?"
+        confirmLabel="Stop scheduler"
+        message={
+          <>
+            Stops watching{' '}
+            <span className="font-mono break-all text-slate-300">{schedule.url}</span> and clears its
+            check history here.{' '}
+            <strong className="text-slate-300">Its result stays in Projects</strong> — only deleting
+            the project removes it. Want to keep it? Use{' '}
+            <strong className="text-slate-300">Pause</strong>.
+          </>
+        }
+        onConfirm={doStop}
+        onCancel={() => setConfirmStop(false)}
+      />
     </div>
   );
 }

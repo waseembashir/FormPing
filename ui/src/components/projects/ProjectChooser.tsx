@@ -24,7 +24,7 @@ export function ProjectChooser({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/projects')
+    fetch('/api/projects', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => setProjects(Array.isArray(d?.projects) ? d.projects : []))
       .catch(() => setProjects([]))

@@ -18,7 +18,7 @@ export function AddToProjectModal({ url, onClose }: { url: string; onClose: () =
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/projects/membership?url=${encodeURIComponent(url)}`)
+    fetch(`/api/projects/membership?url=${encodeURIComponent(url)}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
