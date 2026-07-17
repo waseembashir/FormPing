@@ -10,6 +10,10 @@ import {
   removeSchedule as removeSiteSchedule,
 } from '@/lib/siteWatch/scheduleStore';
 import { removeRun } from '@/lib/onDemandRunStore';
+import { removeResult as removeFormResult } from '@/lib/formWatch/resultStore';
+import { removeResult as removeSiteResult } from '@/lib/siteWatch/resultStore';
+import { removeReports } from '@/lib/reportStore';
+import { siteKey } from '@/lib/watchRegistry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,17 +68,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 }
 
 /**
- * DELETE /api/projects/[id] — remove a project AND cascade: stop & remove the
- * Form Watch / Site Watch monitors AND the last manual Form Tester run for this
- * project's URLs. So deleting a project leaves NOTHING behind — its URLs don't
- * linger in the Unassigned bucket (which surfaces monitored + manually-tested
- * URLs). No orphaned schedules or run records.
+ * DELETE /api/projects/[id] — remove a project AND cascade everything tied to
+ * its URLs: the Form Watch / Site Watch monitors, their durable per-URL results,
+ * the last manual Form Tester run, and the per-host Change Monitor reports.
+ * Deleting a project = a COMPLETE delete (rule: only a project delete clears
+ * results — stopping a single monitor keeps them). Nothing lingers in the
+ * Unassigned bucket afterwards; no orphaned schedules, results, or reports.
  */
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
   const project = await projectStore.get(params.id);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   let monitorsRemoved = 0;
+  const hosts = new Set<string>();
   for (const url of project.urls) {
     const f = await findFormByUrl(url);
     if (f) {
@@ -86,9 +92,14 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
       await removeSiteSchedule(s.id);
       monitorsRemoved++;
     }
-    // Also clear the manual "Test a form" run so the URL doesn't reappear as Unassigned.
-    await removeRun(url);
+    // Clear every persisted result for this URL so nothing reappears as Unassigned.
+    await removeRun(url); // manual Form Tester run
+    await removeFormResult(url); // durable Form Watch result
+    await removeSiteResult(url); // durable Site Watch result
+    hosts.add(siteKey(url));
   }
+  // Change Monitor reports are per-host — clear each distinct host once.
+  for (const host of hosts) await removeReports(host);
 
   await projectStore.remove(params.id);
   return NextResponse.json({ ok: true, monitorsRemoved });

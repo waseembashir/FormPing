@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSchedules, upsertSchedule, findScheduleByUrl } from '@/lib/siteWatch/scheduleStore';
 import { kickSiteWatchTicker } from '@/lib/siteWatch/ticker';
+import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { checkUptime, hostResolves } from '@/lib/siteWatch/checks';
 import type { SiteSchedule } from '@/lib/siteWatch/types';
 
@@ -101,6 +102,9 @@ export async function POST(request: NextRequest) {
   };
 
   await upsertSchedule(schedule);
+  // Setting up a monitor means you care about this URL again — un-dismiss it
+  // (same rule as re-running a Form Tester test). See form-watch route.
+  await removeDismissed(url);
   kickSiteWatchTicker();
 
   return NextResponse.json({ schedule }, { status: 201 });

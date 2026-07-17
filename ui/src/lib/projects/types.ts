@@ -33,6 +33,9 @@ export interface UrlHealth {
   /** Contact-form health, from Form Watch (if this URL is monitored there). */
   form: {
     monitored: boolean;
+    /** True when NOT actively monitored but a persisted last result exists
+     *  (the monitor was stopped/deleted; the result stays until project delete). */
+    stopped?: boolean;
     level?: FormHealthLevel;
     /** What happened on the last run (e.g. "Form healthy — filled, not submitted"). */
     label?: string;
@@ -45,6 +48,8 @@ export interface UrlHealth {
   /** Uptime + SSL, from Site Watch (if this URL is monitored there). */
   site: {
     monitored: boolean;
+    /** True when NOT actively monitored but a persisted last result exists. */
+    stopped?: boolean;
     upState?: SiteUpState;
     statusCode?: number | null;
     responseMs?: number | null;

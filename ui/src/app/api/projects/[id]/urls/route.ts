@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { projectStore, normalizeUrl } from '@/lib/projects/projectStore';
+import { projectStore, urlKey } from '@/lib/projects/projectStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const project = await projectStore.get(params.id);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
-  const exists = project.urls.some((u) => normalizeUrl(u) === normalizeUrl(url));
+  // Dedup on the canonical key so re-adding the same URL in different casing is
+  // still a no-op (a case-sensitive compare here silently created duplicates).
+  const exists = project.urls.some((u) => urlKey(u) === urlKey(url));
   const updated = exists
     ? project
     : await projectStore.update(params.id, { urls: [...project.urls, url] });

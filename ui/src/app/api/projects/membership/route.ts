@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { projectStore, normalizeUrl } from '@/lib/projects/projectStore';
+import { projectStore, urlKey } from '@/lib/projects/projectStore';
 import { isDismissed } from '@/lib/projects/dismissedStore';
 
 export const runtime = 'nodejs';
@@ -15,8 +15,10 @@ export async function GET(request: NextRequest) {
   if (!url) return NextResponse.json({ error: 'url required' }, { status: 400 });
 
   const [projects, dismissed] = await Promise.all([projectStore.list(), isDismissed(url)]);
-  const target = normalizeUrl(url);
-  const inProject = projects.some((p) => p.urls.some((u) => normalizeUrl(u) === target));
+  // Match on the canonical key (case-insensitive) — comparing on normalizeUrl
+  // alone made this disagree with Projects and re-prompt for URLs already in one.
+  const target = urlKey(url);
+  const inProject = projects.some((p) => p.urls.some((u) => urlKey(u) === target));
 
   return NextResponse.json({ inProject, dismissed });
 }

@@ -10,6 +10,7 @@
 import type { SiteSchedule, SiteCheckRecord, DomainResult } from './types';
 import { listSchedules, upsertSchedule } from './scheduleStore';
 import { appendCheck } from './historyStore';
+import { recordResult } from './resultStore';
 import { checkUptime, checkSsl, checkDomain } from './checks';
 import { evaluateAndAlert } from './alerts';
 
@@ -89,6 +90,9 @@ async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
   }
 
   await appendCheck(record);
+  // Durable per-URL result (survives stopping/deleting this monitor; only a
+  // project delete clears it). See siteWatch/resultStore.
+  await recordResult(record);
 
   const updated: SiteSchedule = {
     ...schedule,

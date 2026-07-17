@@ -17,6 +17,7 @@
 import type { FormSchedule, FormRunRecord, FormRunStatus } from './types';
 import { listSchedules, upsertSchedule } from './scheduleStore';
 import { appendRun } from './historyStore';
+import { recordResult } from './resultStore';
 import { runFormTest, type RawSiteResult } from './runner';
 import { onRunComplete } from './notify';
 
@@ -125,6 +126,9 @@ async function runScheduleOnce(schedule: FormSchedule): Promise<FormRunRecord> {
   }
 
   await appendRun(record);
+  // Durable per-URL result (survives stopping/deleting this monitor; only a
+  // project delete clears it). See formWatch/resultStore.
+  await recordResult(record);
 
   // Reschedule from now so intervals don't drift if a run was slow.
   const now = Date.now();
