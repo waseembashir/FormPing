@@ -318,10 +318,35 @@ export default function DocsPage() {
               <Code>projects</Code>, <Code>form_tester_runs</Code>,{' '}
               <Code>form_watch_schedules</Code>, <Code>site_watch_schedules</Code>,{' '}
               <Code>dismissed_urls</Code>; history + reports: <Code>form_watch_runs</Code>,{' '}
-              <Code>site_watch_runs</Code>, <Code>change_reports</Code>. The two run-history tables
-              cascade-delete with their monitor (removing a monitor clears its history). Check which
-              backend is live at <Code>/api/health</Code>. The change-monitor <em>snapshots</em>{' '}
-              below remain file-based on the volume.
+              <Code>site_watch_runs</Code>, <Code>change_reports</Code>; durable per-URL results:{' '}
+              <Code>form_watch_results</Code>, <Code>site_watch_results</Code>. Check which backend
+              is live at <Code>/api/health</Code>. The change-monitor <em>snapshots</em> below
+              remain file-based on the volume.
+            </Note>
+            <Note>
+              <strong>What deleting actually deletes.</strong> A <em>result</em> belongs to the{' '}
+              <strong>URL</strong>, not to the monitor that produced it — so:
+              <ul className="mt-2 space-y-1.5 list-disc pl-5">
+                <li>
+                  <strong>Stop/delete a monitor</strong> — future runs stop and the monitor + its run
+                  log go away, but <strong>the last result stays</strong> on the project&apos;s URL.
+                  Use <strong>Pause</strong> to keep the monitor and resume later.
+                </li>
+                <li>
+                  <strong>Edit a project → remove a URL</strong> — the URL moves to{' '}
+                  <strong>Unassigned</strong>; its monitor <strong>keeps running</strong> and its
+                  results are <strong>not</strong> deleted.
+                </li>
+                <li>
+                  <strong>Delete a project</strong> — a <strong>complete</strong> delete: monitors,
+                  run history, per-URL results, the last manual test, and change reports.
+                  Irreversible.
+                </li>
+              </ul>
+              <span className="mt-2 block">
+                Only a project delete destroys results. Each action asks for confirmation first, and
+                the dialog spells out exactly what it will do.
+              </span>
             </Note>
             <P>
               For change tracking, every site you monitor gets its own folder under{' '}

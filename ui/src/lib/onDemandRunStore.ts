@@ -16,7 +16,7 @@
 
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
-import { normalizeUrl } from './projects/projectStore';
+import { urlKey as runKey } from './projects/projectStore';
 import { removeDismissed } from './projects/dismissedStore';
 import { dataPath } from '@/lib/dataPaths';
 import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
@@ -64,11 +64,6 @@ export interface OnDemandRun {
 /** Default: formping/data/snapshots/…; override with FORMPING_DATA_DIR. */
 function filePath(): string {
   return dataPath(FILE);
-}
-
-/** Same key shape Projects uses to match URLs to monitors. */
-function runKey(url: string): string {
-  return normalizeUrl(url).toLowerCase();
 }
 
 async function readAll(): Promise<Record<string, OnDemandRun>> {

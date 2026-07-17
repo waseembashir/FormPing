@@ -34,7 +34,7 @@ export function ProjectUrlPicker({
 
   useEffect(() => {
     if (!open || loaded) return;
-    fetch('/api/projects')
+    fetch('/api/projects', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => setProjects(Array.isArray(d?.projects) ? d.projects : []))
       .catch(() => setProjects([]))

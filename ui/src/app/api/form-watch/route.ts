@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSchedules, upsertSchedule, findScheduleByUrl } from '@/lib/formWatch/scheduleStore';
 import { kickFormWatchTicker } from '@/lib/formWatch/ticker';
+import { removeDismissed } from '@/lib/projects/dismissedStore';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 
 export const runtime = 'nodejs';
@@ -126,6 +127,11 @@ export async function POST(request: NextRequest) {
   };
 
   await upsertSchedule(schedule);
+  // Setting up a monitor means you care about this URL again — so un-dismiss it
+  // (same rule as re-running a Form Tester test). Without this, a URL you once
+  // said "don't track" about stays silently suppressed: no "add to a project?"
+  // prompt, and it never returns to Unassigned.
+  await removeDismissed(url);
   // Ensure the loop is running and run the baseline check now (single fire —
   // guarded against the interval so it can't double up).
   kickFormWatchTicker();

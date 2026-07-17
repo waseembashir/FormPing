@@ -9,13 +9,9 @@
 
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
-import { normalizeUrl } from './projectStore';
+import { urlKey as key } from './projectStore';
 import { dataPath } from '@/lib/dataPaths';
 import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
-
-function key(url: string): string {
-  return normalizeUrl(url).toLowerCase();
-}
 
 // ── JSON implementation (fallback) ───────────────────────────────────────────
 const FILE = 'data/snapshots/.formping-project-dismissed.json';

@@ -17,15 +17,11 @@ import { urlHealthFor } from '@/lib/projects/health';
 import { listSchedules as listSiteSchedules } from '@/lib/siteWatch/scheduleStore';
 import { readHistory } from '@/lib/siteWatch/historyStore';
 import type { SiteCheckRecord } from '@/lib/siteWatch/types';
-import { normalizeUrl } from '@/lib/projects/projectStore';
+import { urlKey as key } from '@/lib/projects/projectStore';
 import type { ClientStatus, OverallStatus, RespPoint, SiteUp, StatusSite, UptimeDay } from './types';
 
 const WINDOW_DAYS = 30;
 const DAY = 86_400_000;
-
-function key(url: string): string {
-  return normalizeUrl(url).toLowerCase();
-}
 
 function hostOf(url: string): string {
   try {

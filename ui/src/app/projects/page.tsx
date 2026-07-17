@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ProjectRollup, ProjectWithRollup } from '@/lib/projects/types';
 import { ProjectRow } from '@/components/projects/ProjectRow';
 import { UnassignedRow } from '@/components/projects/UnassignedRow';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+// Same canonical key the server matches URLs with (pure function, safe to import).
+import { urlKey } from '@/lib/projects/projectStore';
 
 interface Unassigned {
   urls: string[];
@@ -25,10 +28,16 @@ export default function ProjectsPage() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** The project's URLs when the edit started — to detect removals on save. */
+  const [originalUrls, setOriginalUrls] = useState<string[]>([]);
+  const [confirmEdit, setConfirmEdit] = useState(false);
 
   const load = useCallback(async (q: string) => {
     try {
-      const res = await fetch(`/api/projects?q=${encodeURIComponent(q)}`).then((r) => r.json());
+      // no-store: this list changes on every assign/dismiss/delete — a cached
+      // GET was showing the OLD Unassigned set after an action (assigned/deleted
+      // URLs appeared to "stay").
+      const res = await fetch(`/api/projects?q=${encodeURIComponent(q)}`, { cache: 'no-store' }).then((r) => r.json());
       setProjects(Array.isArray(res?.projects) ? res.projects : []);
       setUnassigned(
         res?.unassigned && Array.isArray(res.unassigned.urls) ? res.unassigned : null,
@@ -47,14 +56,8 @@ export default function ProjectsPage() {
     return () => clearTimeout(t);
   }, [query, load]);
 
-  const handleAdd = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      setError(null);
-      if (!name.trim()) {
-        setError('Enter a project name');
-        return;
-      }
+  const doSave = useCallback(
+    async () => {
       const urls = urlsText
         .split('\n')
         .map((u) => u.trim())
@@ -81,15 +84,48 @@ export default function ProjectsPage() {
         setNotes('');
         setContact('');
         setEditingId(null);
+        setOriginalUrls([]);
         setShowAdd(false);
         await load(query);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Request failed');
       } finally {
         setAdding(false);
+        setConfirmEdit(false);
       }
     },
-    [editingId, name, urlsText, notes, query, load],
+    [editingId, name, urlsText, notes, contact, query, load],
+  );
+
+  /** URLs present when the edit began but removed from the textarea now. */
+  const removedUrls = editingId
+    ? originalUrls.filter(
+        (o) =>
+          !urlsText
+            .split('\n')
+            .map((u) => u.trim())
+            .filter(Boolean)
+            .some((n) => urlKey(n) === urlKey(o)),
+      )
+    : [];
+
+  const handleAdd = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      setError(null);
+      if (!name.trim()) {
+        setError('Enter a project name');
+        return;
+      }
+      // Removing a URL is a side-effect worth calling out: the URL leaves the
+      // project but its monitor keeps running (it drops to Unassigned).
+      if (editingId && removedUrls.length > 0) {
+        setConfirmEdit(true);
+        return;
+      }
+      void doSave();
+    },
+    [name, editingId, removedUrls.length, doSave],
   );
 
   const handleDelete = useCallback(
@@ -104,6 +140,7 @@ export default function ProjectsPage() {
     setEditingId(p.id);
     setName(p.name);
     setUrlsText(p.urls.join('\n'));
+    setOriginalUrls(p.urls);
     setNotes(p.notes ?? '');
     setContact(p.contact ?? '');
     setError(null);
@@ -244,6 +281,7 @@ export default function ProjectsPage() {
               onClick={() => {
                 setShowAdd(false);
                 setEditingId(null);
+                setOriginalUrls([]);
               }}
               className="rounded-lg border border-slate-700 hover:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-300"
             >
@@ -298,6 +336,34 @@ export default function ProjectsPage() {
         Rollup = the worst status across a client&apos;s URLs. Click a row to see each URL&apos;s
         form, uptime &amp; SSL — and add a monitor.
       </p>
+
+      <ConfirmDialog
+        open={confirmEdit}
+        variant="edit"
+        title={`Remove ${removedUrls.length} URL${removedUrls.length === 1 ? '' : 's'} from this project?`}
+        confirmLabel="Save changes"
+        message={
+          <>
+            <p>
+              These leave <strong className="text-slate-300">{name.trim()}</strong>:
+            </p>
+            <ul className="mt-1.5 space-y-0.5">
+              {removedUrls.map((u) => (
+                <li key={u} className="font-mono text-[11px] break-all text-amber-200/80">
+                  {u}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              Nothing is deleted — their monitors keep running and results are kept. The URLs move to{' '}
+              <strong className="text-slate-300">Unassigned</strong>, where you can reassign or
+              dismiss them.
+            </p>
+          </>
+        }
+        onConfirm={doSave}
+        onCancel={() => setConfirmEdit(false)}
+      />
     </main>
   );
 }

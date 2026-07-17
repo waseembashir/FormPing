@@ -12,6 +12,7 @@ import type {
 } from '@/lib/projects/types';
 import { runVerdict } from '@/lib/formWatch/verdict';
 import { ShareStatusControl } from './ShareStatusControl';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 type Tone = 'emerald' | 'amber' | 'red' | 'slate';
 
@@ -62,7 +63,16 @@ export function StatusDot({ tone, pulse }: { tone: Tone; pulse: boolean }) {
 }
 
 export function overallStatus(r: ProjectRollup): { tone: Tone; word: string; pulse: boolean } {
-  if (!r.monitored) return { tone: 'slate', word: 'Not monitored', pulse: false };
+  // Nothing live. If we still hold a last result (monitors were stopped), say so
+  // rather than "Not monitored" — the row DOES show that last known data.
+  if (!r.monitored) {
+    const hasLastResult = Boolean(r.formLevel || r.upState || r.lastChecked);
+    return {
+      tone: 'slate',
+      word: hasLastResult ? 'Not monitored · last result' : 'Not monitored',
+      pulse: false,
+    };
+  }
   if (r.severity >= 30) return { tone: 'red', word: 'Failing', pulse: true };
   if (r.severity >= 15) return { tone: 'amber', word: 'Needs attention', pulse: true };
   return { tone: 'emerald', word: 'Healthy', pulse: true };
@@ -127,13 +137,14 @@ export function ProjectRow({
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<ProjectWithHealth | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const r = project.rollup;
   const st = overallStatus(r);
 
   async function loadDetail() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/projects/${project.id}`).then((x) => x.json());
+      const res = await fetch(`/api/projects/${project.id}`, { cache: 'no-store' }).then((x) => x.json());
       setDetail(res?.project ?? null);
     } catch {
       setDetail(null);
@@ -253,14 +264,7 @@ export function ProjectRow({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (
-                      confirm(
-                        `Delete project "${project.name}"? This also stops and removes its Form Watch / Site Watch monitors.`,
-                      )
-                    )
-                      void onDelete(project.id);
-                  }}
+                  onClick={() => setConfirmDelete(true)}
                   className="text-[11px] text-slate-500 hover:text-red-300 transition-colors"
                 >
                   Delete project
@@ -270,6 +274,24 @@ export function ProjectRow({
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        variant="danger"
+        title={`Delete “${project.name}”?`}
+        confirmLabel="Delete project"
+        message={
+          <>
+            Deletes <strong className="text-slate-300">{project.name}</strong> and everything for its{' '}
+            {project.urls.length} URL{project.urls.length === 1 ? '' : 's'} — its monitors, their
+            results, and change reports. Unlike stopping a single test, this{' '}
+            <strong className="text-slate-300">does remove the results from Projects</strong>.{' '}
+            <strong className="text-red-300">Can&apos;t be undone.</strong>
+          </>
+        }
+        onConfirm={() => onDelete(project.id)}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }
@@ -341,6 +363,13 @@ export function UrlDetailRow({ h }: { h: UrlHealth }) {
               · {formatInterval(h.form.intervalMs)} · {rel(h.form.lastRunAt ?? null)}
             </span>
           </>
+        ) : h.form.stopped ? (
+          <>
+            <StatusDot tone={formTone} pulse={false} />
+            <span className="font-medium text-slate-400">Last form result</span>
+            <span className={TONE_TEXT[formTone]}>— {h.form.label}</span>
+            <span className="text-slate-600">· monitor stopped · {rel(h.form.lastRunAt ?? null)}</span>
+          </>
         ) : (
           <span className="text-slate-600">Scheduled form test · not set up</span>
         )}
@@ -370,6 +399,26 @@ export function UrlDetailRow({ h }: { h: UrlHealth }) {
             <span className="text-slate-600">
               · {formatInterval(h.site.intervalMs)} · {rel(h.site.lastCheckedAt ?? null)}
             </span>
+          </>
+        ) : h.site.stopped ? (
+          <>
+            <StatusDot tone={upTone} pulse={false} />
+            <span className="font-medium text-slate-400">Last uptime &amp; SSL</span>
+            <span className={TONE_TEXT[upTone]}>
+              — {h.site.upState ? UP_LABEL[h.site.upState] : 'Unknown'}
+              {h.site.statusCode ? ` · ${h.site.statusCode}` : ''}
+            </span>
+            {ssl && (
+              <span className="text-slate-500">
+                · SSL <span className={ssl.c}>{ssl.t}</span>
+              </span>
+            )}
+            {domain && (
+              <span className="text-slate-500">
+                · Domain <span className={domain.c}>{domain.t}</span>
+              </span>
+            )}
+            <span className="text-slate-600">· monitor stopped · {rel(h.site.lastCheckedAt ?? null)}</span>
           </>
         ) : (
           <span className="text-slate-600">Uptime &amp; SSL · not set up</span>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 /**
  * Manage a project's PUBLIC status-page share link (generate / copy / revoke).
@@ -17,6 +18,7 @@ export function ShareStatusControl({
   const [token, setToken] = useState<string | null>(initialToken ?? null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
 
   const url = token && typeof window !== 'undefined' ? `${window.location.origin}/status/${token}` : '';
 
@@ -32,13 +34,13 @@ export function ShareStatusControl({
   }
 
   async function revoke() {
-    if (!confirm('Turn off the public status page? The current link will stop working immediately.')) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/projects/${projectId}/share`, { method: 'DELETE' });
       if (res.ok) setToken(null);
     } finally {
       setBusy(false);
+      setConfirmRevoke(false);
     }
   }
 
@@ -92,7 +94,7 @@ export function ShareStatusControl({
           </button>
           <button
             type="button"
-            onClick={revoke}
+            onClick={() => setConfirmRevoke(true)}
             disabled={busy}
             className="text-[11px] text-slate-500 hover:text-rose-300 disabled:opacity-40"
           >
@@ -123,6 +125,22 @@ export function ShareStatusControl({
           {copied ? 'Copied ✓' : 'Copy'}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmRevoke}
+        variant="danger"
+        title="Turn off the public status page?"
+        confirmLabel="Turn off"
+        message={
+          <>
+            The shared link stops working <strong className="text-slate-300">immediately</strong> —
+            the client will see a not-found page. Your monitoring is unaffected, and you can create a
+            new link anytime.
+          </>
+        }
+        onConfirm={revoke}
+        onCancel={() => setConfirmRevoke(false)}
+      />
     </div>
   );
 }

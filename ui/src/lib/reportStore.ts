@@ -15,7 +15,7 @@
  * the streamed stdout, keeping the CLI unchanged.
  */
 
-import { mkdir, readdir, readFile, unlink, writeFile } from 'fs/promises';
+import { mkdir, readdir, readFile, rm, unlink, writeFile } from 'fs/promises';
 import path from 'path';
 import { dataPath } from '@/lib/dataPaths';
 import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
@@ -148,6 +148,22 @@ async function pruneOldReportsSupabase(site: string): Promise<void> {
   const ids = (data as { id: string }[]).map((r) => r.id);
   const { error: delErr } = await db.from('change_reports').delete().in('id', ids);
   if (delErr) console.warn(`[reportStore] prune: ${delErr.message}`);
+}
+
+/** Delete all change reports for a site (used when a project is deleted, so
+ *  nothing lingers by hostname). Best-effort. */
+export async function removeReports(site: string): Promise<void> {
+  const key = safeSegment(site);
+  if (!supabaseEnabled()) {
+    try {
+      await rm(reportsDir(key), { recursive: true, force: true });
+    } catch (err) {
+      console.warn(`[reportStore] removeReports failed: ${err}`);
+    }
+    return;
+  }
+  const { error } = await supabaseAdmin().from('change_reports').delete().eq('site', key);
+  if (error) console.warn(`[reportStore] removeReports: ${error.message}`);
 }
 
 /** Load stored reports for a site, newest-first, up to `limit` (default 50). */

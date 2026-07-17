@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { UrlInputPanel } from '@/components/UrlInputPanel';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { ResultsPanel } from '@/components/ResultsPanel';
 import { ProjectAssignQueue } from '@/components/projects/ProjectAssignQueue';
 import { checkUrl } from '@/lib/urlCheck';
-import type { SiteResult, RunConfig, SSEEvent, RunProgress } from '@/types';
+import * as testerRun from '@/lib/testerRun';
+import type { RunConfig } from '@/types';
 
 const DEFAULT_CONFIG: RunConfig = {
   mode: 'safe',
@@ -19,55 +20,47 @@ const DEFAULT_CONFIG: RunConfig = {
   landingPage: false,
 };
 
-// Persist the on-screen result/logs/URL so they survive tab-switches + refresh
-// (mirrors the Change-tracking tab). This is a DISPLAY cache only — the run
-// result is also saved server-side (on-demand run store) for Projects/Status;
-// Clear wipes this cache + the view, never the server data.
+// The typed URL is persisted here; the run itself (results/logs/progress) lives
+// in the module-level testerRun store so it survives tab switches — see
+// lib/testerRun.ts. This is a DISPLAY cache only: the result is also saved
+// server-side (on-demand run store) for Projects/Status; Clear wipes the view,
+// never the server data.
 const STORAGE_KEY_URL = 'fp:tester:url';
-const STORAGE_KEY_RESULTS = 'fp:tester:results';
-const STORAGE_KEY_LOGS = 'fp:tester:logs';
 
 export default function Home() {
   const [urlInput, setUrlInput] = useState('');
   const [config, setConfig] = useState<RunConfig>(DEFAULT_CONFIG);
-  const [results, setResults] = useState<SiteResult[]>([]);
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<RunProgress | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const abortRef = useRef<AbortController | null>(null);
+
+  // Run state lives OUTSIDE this component so leaving the tab can't kill it.
+  const { results, running, progress, logs, pendingAssign } = useSyncExternalStore(
+    testerRun.subscribe,
+    testerRun.getSnapshot,
+    testerRun.getServerSnapshot,
+  );
+
   /** Pre-flight URL check state. */
   const [checking, setChecking] = useState(false);
   const [preflight, setPreflight] = useState<string | null>(null);
   /** Set after an "unreachable" warning so a second Run click proceeds anyway. */
   const forceRef = useRef(false);
-  /** URLs to prompt "add to a project?" for, after a run completes. */
-  const [pendingAssign, setPendingAssign] = useState<string[]>([]);
   /** True once we've attempted to restore from localStorage — prevents the
    *  initial empty state from clobbering the saved copy before restore runs. */
   const [restored, setRestored] = useState(false);
 
-  // ── Restore results/logs/URL from localStorage on first mount ──────────────
+  // ── Restore the typed URL + the cached run view on first mount ─────────────
+  // (results/logs are restored by the store, which owns that cache.)
   useEffect(() => {
+    testerRun.hydrate();
     try {
       const u = window.localStorage.getItem(STORAGE_KEY_URL);
       if (u) setUrlInput(u);
-      const r = window.localStorage.getItem(STORAGE_KEY_RESULTS);
-      if (r) {
-        const parsed = JSON.parse(r);
-        if (Array.isArray(parsed)) setResults(parsed as SiteResult[]);
-      }
-      const l = window.localStorage.getItem(STORAGE_KEY_LOGS);
-      if (l) {
-        const parsed = JSON.parse(l);
-        if (Array.isArray(parsed)) setLogs(parsed as string[]);
-      }
     } catch {
       /* localStorage unavailable (private mode) — silent fallback */
     }
     setRestored(true);
   }, []);
 
-  // ── Persist on change (skip until restored so we don't wipe the saved copy) ──
+  // ── Persist the typed URL (skip until restored so we don't wipe the copy) ──
   useEffect(() => {
     if (!restored) return;
     try {
@@ -76,35 +69,15 @@ export default function Home() {
     } catch { /* ignore */ }
   }, [urlInput, restored]);
 
-  useEffect(() => {
-    if (!restored) return;
-    try {
-      if (results.length) window.localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(results));
-      else window.localStorage.removeItem(STORAGE_KEY_RESULTS);
-    } catch { /* ignore */ }
-  }, [results, restored]);
-
-  useEffect(() => {
-    if (!restored) return;
-    try {
-      if (logs.length) window.localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
-      else window.localStorage.removeItem(STORAGE_KEY_LOGS);
-    } catch { /* ignore */ }
-  }, [logs, restored]);
-
   /** Clear the on-screen view + URL input + the localStorage cache. Does NOT
    *  touch the server-stored run result (Projects/Status keep using it). */
   const handleClear = useCallback(() => {
-    setResults([]);
-    setLogs([]);
+    testerRun.clear();
     setUrlInput('');
-    setProgress(null);
     setPreflight(null);
     forceRef.current = false;
     try {
       window.localStorage.removeItem(STORAGE_KEY_URL);
-      window.localStorage.removeItem(STORAGE_KEY_RESULTS);
-      window.localStorage.removeItem(STORAGE_KEY_LOGS);
     } catch { /* ignore */ }
   }, []);
 
@@ -143,88 +116,12 @@ export default function Home() {
       setChecking(false);
     }
 
-    setResults([]);
-    setLogs([]);
-    setRunning(true);
-    setProgress({ current: 0, total: urls.length, currentUrl: urls[0]! });
-
-    const abort = new AbortController();
-    abortRef.current = abort;
-
-    try {
-      const response = await fetch('/api/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls, ...config }),
-        signal: abort.signal,
-      });
-
-      if (!response.ok || !response.body) {
-        const text = await response.text().catch(() => '');
-        throw new Error(`Server error ${response.status}: ${text}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6)) as SSEEvent;
-
-            if (event.type === 'result') {
-              setResults(prev => [...prev, event.result]);
-              setProgress(prev =>
-                prev ? { ...prev, current: prev.current + 1, currentUrl: '' } : null,
-              );
-            } else if (event.type === 'progress') {
-              setProgress({
-                current: event.index,
-                total: event.total,
-                currentUrl: event.url,
-              });
-            } else if (event.type === 'log') {
-              setLogs(prev => [...prev.slice(-99), event.message]);
-            } else if (event.type === 'done' || event.type === 'error') {
-              if (event.type === 'error') {
-                setLogs(prev => [...prev, `⚠ ${event.message}`]);
-              } else {
-                // Run finished — offer to file each tested URL under a project
-                // (the modal self-skips ones already grouped or dismissed).
-                setPendingAssign(urls);
-              }
-              setRunning(false);
-              setProgress(null);
-            }
-          } catch {
-            // malformed SSE line — skip
-          }
-        }
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name !== 'AbortError') {
-        setLogs(prev => [...prev, `Fatal: ${err.message}`]);
-      }
-    } finally {
-      setRunning(false);
-      setProgress(prev => prev ? { ...prev, currentUrl: '' } : null);
-    }
+    // Hand off to the module-level store so the run survives leaving this tab.
+    await testerRun.startRun(urls, config);
   }, [urlInput, config, running, checking]);
 
   const handleStop = useCallback(() => {
-    abortRef.current?.abort();
-    setRunning(false);
-    setProgress(null);
-    setLogs(prev => [...prev, 'Stopped by user.']);
+    testerRun.stop();
   }, []);
 
   return (
@@ -279,7 +176,7 @@ export default function Home() {
       </main>
 
       {pendingAssign.length > 0 && (
-        <ProjectAssignQueue urls={pendingAssign} onDone={() => setPendingAssign([])} />
+        <ProjectAssignQueue urls={pendingAssign} onDone={testerRun.clearPendingAssign} />
       )}
     </div>
   );

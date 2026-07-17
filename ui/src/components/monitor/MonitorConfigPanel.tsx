@@ -132,28 +132,9 @@ export function MonitorConfigPanel({ config, onChange, disabled }: Props) {
           onChange={(v) => set('aiProvider', v)}
           disabled={disabled}
         />
-
-        {/* Slack notifications — env-var driven, just an info block */}
-        <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-          <p className="text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
-            <span aria-hidden>💬</span> Slack notifications
-          </p>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Set the{' '}
-            <span className="font-mono text-slate-400">SLACK_WEBHOOK_URL</span>{' '}
-            env var to your{' '}
-            <a
-              href="https://api.slack.com/messaging/webhooks"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-indigo-400 hover:text-indigo-300 underline decoration-dotted underline-offset-2"
-            >
-              Slack Incoming Webhook
-            </a>{' '}
-            to get a message in your channel whenever changes are detected
-            (both watch mode and one-off compare runs).
-          </p>
-        </div>
+        {/* Slack setup deliberately NOT documented here: it's a deploy-time env
+            var, not a per-run setting, so it doesn't belong among the controls.
+            It lives in .env.example, the README, and /docs instead. */}
       </div>
     </div>
   );
