@@ -260,7 +260,19 @@ export default function SiteWatchPage() {
 
           {/* Right — monitor list */}
           <div className="lg:col-span-3 space-y-3">
-            {loading && <p className="text-sm text-slate-500">Loading…</p>}
+            {loading && (
+              <div className="space-y-3">
+                {[0, 1].map((i) => (
+                  <div key={i} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1 space-y-2"><div className="fp-skeleton h-3.5 w-40 rounded" /><div className="fp-skeleton h-2.5 w-56 rounded" /></div>
+                      <div className="flex gap-2"><div className="fp-skeleton h-8 w-16 rounded-md" /><div className="fp-skeleton h-8 w-16 rounded-md" /></div>
+                    </div>
+                    <div className="fp-skeleton mt-3 h-3 w-28 rounded" />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {!loading && schedules.length > 0 && (
               <div className="flex items-center gap-2.5 rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-3 py-2">
