@@ -63,3 +63,49 @@ body {
     animation: fp-subnav-in 220ms ease-out;
   }
 }
+
+/* Content entrance — a subtle rise+fade, reused across tabs (cards, sections).
+   Stagger with an inline animation-delay. */
+@keyframes fp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fp-rise {
+  animation: fp-rise 400ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Skeleton shimmer — the common "transparent loader" while data loads. */
+@keyframes fp-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.fp-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: #0f172a; /* slate-900 */
+}
+.fp-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.09), transparent);
+  animation: fp-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-rise,
+  .fp-subnav-in {
+    animation: none;
+  }
+  .fp-skeleton::after {
+    animation: none;
+  }
+}
