@@ -199,7 +199,12 @@ export function ScheduleCard({
 
       {expanded && (
         <div className="border-t border-slate-800 p-4 space-y-3">
-          {loadingRuns && <p className="text-xs text-slate-500">Loading runs…</p>}
+          {loadingRuns && (
+            <div className="space-y-2">
+              <div className="fp-skeleton h-12 rounded-lg" />
+              <div className="fp-skeleton h-12 rounded-lg" />
+            </div>
+          )}
           {!loadingRuns && runs && runs.length === 0 && (
             <p className="text-xs text-slate-500">No runs yet — they appear here after the first check.</p>
           )}

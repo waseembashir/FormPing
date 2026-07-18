@@ -201,7 +201,12 @@ export function SiteCard({
 
       {expanded && (
         <div className="border-t border-slate-800 p-4 space-y-2">
-          {loading && <p className="text-xs text-slate-500">Loading…</p>}
+          {loading && (
+            <div className="space-y-2">
+              <div className="fp-skeleton h-11 rounded-lg" />
+              <div className="fp-skeleton h-11 rounded-lg" />
+            </div>
+          )}
           {!loading && checks && checks.length === 0 && (
             <p className="text-xs text-slate-500">No checks yet — they appear after the first run.</p>
           )}

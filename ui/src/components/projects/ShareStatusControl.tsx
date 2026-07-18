@@ -57,49 +57,29 @@ export function ShareStatusControl({
 
   if (!token) {
     return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-slate-300">Public status page</p>
-            <p className="text-[11px] text-slate-600 mt-0.5">
-              Share a live, client-safe health page — no login needed.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={generate}
-            disabled={busy}
-            className="shrink-0 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-3 py-1.5 text-[11px] font-semibold text-white"
-          >
-            {busy ? 'Creating…' : 'Create link'}
-          </button>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-3.5">
+        <p className="text-xs text-slate-500">No public link yet — create one to share this client&apos;s live health.</p>
+        <button
+          type="button"
+          onClick={generate}
+          disabled={busy}
+          className="shrink-0 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
+        >
+          {busy ? 'Creating…' : 'Create link'}
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="text-[11px] font-semibold text-emerald-300">● Public status page is live</p>
+    <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <p className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Live · anyone with the link can view
+        </p>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={generate}
-            disabled={busy}
-            className="text-[11px] text-slate-500 hover:text-slate-300 disabled:opacity-40"
-            title="Generate a new link and invalidate the old one"
-          >
-            Regenerate
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmRevoke(true)}
-            disabled={busy}
-            className="text-[11px] text-slate-500 hover:text-rose-300 disabled:opacity-40"
-          >
-            Turn off
-          </button>
+          <button type="button" onClick={generate} disabled={busy} title="Generate a new link and invalidate the old one" className="text-[11px] text-slate-500 hover:text-slate-300 disabled:opacity-40">Regenerate</button>
+          <button type="button" onClick={() => setConfirmRevoke(true)} disabled={busy} className="text-[11px] text-slate-500 hover:text-rose-300 disabled:opacity-40">Turn off</button>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -107,23 +87,10 @@ export function ShareStatusControl({
           readOnly
           value={url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1.5 text-[11px] font-mono text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="min-w-0 flex-1 rounded-md border border-slate-800 bg-slate-950 px-2.5 py-1.5 font-mono text-[11px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="shrink-0 rounded-md border border-slate-700 hover:bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-300"
-        >
-          Open
-        </a>
-        <button
-          type="button"
-          onClick={copy}
-          className="shrink-0 rounded-md bg-slate-700 hover:bg-slate-600 px-2.5 py-1.5 text-[11px] font-semibold text-white"
-        >
-          {copied ? 'Copied ✓' : 'Copy'}
-        </button>
+        <a href={url} target="_blank" rel="noreferrer" className="shrink-0 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] font-medium text-slate-300 hover:bg-slate-800">Open</a>
+        <button type="button" onClick={copy} className="shrink-0 rounded-md bg-slate-700 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-600">{copied ? 'Copied ✓' : 'Copy'}</button>
       </div>
 
       <ConfirmDialog
