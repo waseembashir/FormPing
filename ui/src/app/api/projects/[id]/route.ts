@@ -12,6 +12,7 @@ import {
 import { removeRun } from '@/lib/onDemandRunStore';
 import { removeResult as removeFormResult } from '@/lib/formWatch/resultStore';
 import { removeResult as removeSiteResult } from '@/lib/siteWatch/resultStore';
+import { removeDaily } from '@/lib/siteWatch/dailyStore';
 import { removeReports } from '@/lib/reportStore';
 import { siteKey } from '@/lib/watchRegistry';
 
@@ -96,6 +97,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     await removeRun(url); // manual Form Tester run
     await removeFormResult(url); // durable Form Watch result
     await removeSiteResult(url); // durable Site Watch result
+    await removeDaily(url); // Site Watch daily rollups
     hosts.add(siteKey(url));
   }
   // Change Monitor reports are per-host — clear each distinct host once.

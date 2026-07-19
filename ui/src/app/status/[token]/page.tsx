@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import type { ClientStatus } from '@/lib/status/types';
-import { StatusView } from '@/components/status/StatusView';
+import { StatusView, type WindowId } from '@/components/status/StatusView';
 
 /** PUBLIC per-client status page (auth-exempt via middleware). Fetches by
  *  share token; renders the shared StatusView. */
@@ -12,11 +12,12 @@ export default function PublicStatusPage() {
   const token = params?.token;
   const [data, setData] = useState<ClientStatus | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'notfound'>('loading');
+  const [win, setWin] = useState<WindowId>('30d');
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch(`/api/status/${token}`, { cache: 'no-store' });
+      const res = await fetch(`/api/status/${token}?window=${win}`, { cache: 'no-store' });
       if (!res.ok) {
         setState('notfound');
         return;
@@ -26,7 +27,7 @@ export default function PublicStatusPage() {
     } catch {
       setState('notfound');
     }
-  }, [token]);
+  }, [token, win]);
 
   useEffect(() => {
     void load();
@@ -36,14 +37,20 @@ export default function PublicStatusPage() {
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10 sm:py-14">
-      {state === 'loading' && <p className="text-sm text-slate-500 text-center py-20">Loading status…</p>}
+      {state === 'loading' && (
+        <div className="space-y-4">
+          <div className="fp-skeleton h-8 w-56 rounded" />
+          <div className="fp-skeleton h-16 rounded-2xl" />
+          <div className="fp-skeleton h-52 rounded-2xl" />
+        </div>
+      )}
       {state === 'notfound' && (
         <div className="text-center py-20">
           <h1 className="text-lg font-semibold text-slate-200">Status page not found</h1>
           <p className="text-sm text-slate-500 mt-2">This status link is invalid or has been turned off.</p>
         </div>
       )}
-      {state === 'ready' && data && <StatusView data={data} />}
+      {state === 'ready' && data && <StatusView data={data} window={win} onWindow={setWin} />}
     </main>
   );
 }

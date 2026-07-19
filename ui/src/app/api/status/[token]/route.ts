@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectStore } from '@/lib/projects/projectStore';
-import { buildClientStatus } from '@/lib/status/build';
+import { buildClientStatus, parseWindow } from '@/lib/status/build';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
  * so tokens can't be enumerated and nothing leaks. Only client-safe fields are
  * ever emitted (see lib/status/build.ts).
  */
-export async function GET(_request: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { token: string } }) {
   const token = params.token?.trim();
   if (!token) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -22,6 +22,7 @@ export async function GET(_request: NextRequest, { params }: { params: { token: 
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const data = await buildClientStatus(project);
+  const windowDays = parseWindow(request.nextUrl.searchParams.get('window'));
+  const data = await buildClientStatus(project, { windowDays });
   return NextResponse.json(data);
 }

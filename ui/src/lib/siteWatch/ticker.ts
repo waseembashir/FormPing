@@ -11,6 +11,7 @@ import type { SiteSchedule, SiteCheckRecord, DomainResult } from './types';
 import { listSchedules, upsertSchedule } from './scheduleStore';
 import { appendCheck } from './historyStore';
 import { recordResult } from './resultStore';
+import { recordDaily } from './dailyStore';
 import { checkUptime, checkSsl, checkDomain } from './checks';
 import { evaluateAndAlert } from './alerts';
 
@@ -93,6 +94,9 @@ async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
   // Durable per-URL result (survives stopping/deleting this monitor; only a
   // project delete clears it). See siteWatch/resultStore.
   await recordResult(record);
+  // Daily rollup so uptime/response over 7d/30d/all-time stay truthful (raw
+  // history is capped). See siteWatch/dailyStore.
+  await recordDaily(record);
 
   const updated: SiteSchedule = {
     ...schedule,

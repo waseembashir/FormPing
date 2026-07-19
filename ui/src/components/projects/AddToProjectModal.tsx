@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ProjectChooser } from './ProjectChooser';
 
 /**
@@ -16,13 +16,24 @@ export function AddToProjectModal({ url, onClose }: { url: string; onClose: () =
   const [phase, setPhase] = useState<'checking' | 'ask'>('checking');
   const [busy, setBusy] = useState(false);
 
+  // Keep onClose behind a ref so the membership check runs ONCE per url and
+  // isn't torn down + restarted every time the parent re-renders (which passes
+  // a fresh onClose). Without this, a caller that mounts the modal mid-stream
+  // (Change tracking, prompting while log events flood in) re-runs this effect
+  // on every render, cancels each fetch before it resolves, and the modal stays
+  // stuck on `checking` → returns null → the popup never appears.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     let alive = true;
     fetch(`/api/projects/membership?url=${encodeURIComponent(url)}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
-        if (d?.inProject || d?.dismissed) onClose();
+        if (d?.inProject || d?.dismissed) onCloseRef.current();
         else setPhase('ask');
       })
       .catch(() => {
@@ -31,7 +42,7 @@ export function AddToProjectModal({ url, onClose }: { url: string; onClose: () =
     return () => {
       alive = false;
     };
-  }, [url, onClose]);
+  }, [url]);
 
   async function dismiss() {
     setBusy(true);

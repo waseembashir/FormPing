@@ -187,10 +187,28 @@ Editor). Tables are named after the app's tools:
   **last known result per URL**, written on every scheduled run. Keyed by URL (not
   by monitor), so they survive stopping/deleting a monitor — see the lifecycle
   rules below.
+- **FR-20 (daily rollup)** — `site_watch_daily`: one summarised row per URL per
+  UTC day (checks, up/down, response sum+count, SSL min), written by the Site
+  Watch ticker each check. Powers the dashboard's **7d / 30d / All-time** uptime
+  & response charts truthfully (raw history is capped at 200 rows).
 
 RLS is enabled on every table (the anon key can do nothing; the server's secret
 key bypasses it and has full access). Check the live backend at `/api/health`
 (`storage: "supabase" | "json"`).
+
+### Client status page vs internal dashboard
+
+Two views share one `StatusView`, curated **server-side** so nothing technical
+can reach a client:
+
+- **Internal dashboard** (`/projects/[id]/status`, auth-gated) — full detail:
+  uptime + **response-time** charts, HTTP status, check frequency, domain expiry,
+  form verdict. Built with `buildClientStatus(project, { internal: true })`.
+- **Public status page** (`/status/[token]`) — client-safe only: overall status,
+  hostname, uptime %, uptime history, SSL validity, contact-form working/not.
+  **No** response times, latency, check frequency, reason codes, or full URLs.
+
+Both carry a **Today / 7 days / 30 days / All-time** filter (`?window=`).
 
 ### Slack notifications (optional, free)
 

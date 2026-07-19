@@ -319,9 +319,10 @@ export default function DocsPage() {
               <Code>form_watch_schedules</Code>, <Code>site_watch_schedules</Code>,{' '}
               <Code>dismissed_urls</Code>; history + reports: <Code>form_watch_runs</Code>,{' '}
               <Code>site_watch_runs</Code>, <Code>change_reports</Code>; durable per-URL results:{' '}
-              <Code>form_watch_results</Code>, <Code>site_watch_results</Code>. Check which backend
-              is live at <Code>/api/health</Code>. The change-monitor <em>snapshots</em> below
-              remain file-based on the volume.
+              <Code>form_watch_results</Code>, <Code>site_watch_results</Code>; daily rollup:{' '}
+              <Code>site_watch_daily</Code> (powers the dashboard&apos;s 7d/30d/all-time charts).
+              Check which backend is live at <Code>/api/health</Code>. The change-monitor{' '}
+              <em>snapshots</em> below remain file-based on the volume.
             </Note>
             <Note>
               <strong>What deleting actually deletes.</strong> A <em>result</em> belongs to the{' '}
