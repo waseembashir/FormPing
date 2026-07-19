@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectStore } from '@/lib/projects/projectStore';
-import { buildClientStatus } from '@/lib/status/build';
+import { buildClientStatus, parseWindow } from '@/lib/status/build';
 import type { InternalStatus } from '@/lib/status/types';
 
 export const runtime = 'nodejs';
@@ -13,10 +13,11 @@ export const dynamic = 'force-dynamic';
  * login wall (it's under /api/projects, not the public /api/status/ allowlist),
  * so the extra detail is safe to include.
  */
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const project = await projectStore.get(params.id);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-  const base = await buildClientStatus(project, { internal: true });
+  const windowDays = parseWindow(request.nextUrl.searchParams.get('window'));
+  const base = await buildClientStatus(project, { internal: true, windowDays });
   const data: InternalStatus = { ...base, contact: project.contact ?? null };
   return NextResponse.json(data);
 }

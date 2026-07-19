@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { ClientStatus } from '@/lib/status/types';
-import { StatusView } from '@/components/status/StatusView';
+import { StatusView, type WindowId } from '@/components/status/StatusView';
 
 /** INTERNAL, auth-gated status view for a project (by id — no share token).
  *  Any signed-in team member can open it; renders the same StatusView the
@@ -14,11 +14,12 @@ export default function InternalStatusPage() {
   const id = params?.id;
   const [data, setData] = useState<ClientStatus | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'notfound'>('loading');
+  const [win, setWin] = useState<WindowId>('30d');
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const res = await fetch(`/api/projects/${id}/status`, { cache: 'no-store' });
+      const res = await fetch(`/api/projects/${id}/status?window=${win}`, { cache: 'no-store' });
       if (!res.ok) {
         setState('notfound');
         return;
@@ -28,7 +29,7 @@ export default function InternalStatusPage() {
     } catch {
       setState('notfound');
     }
-  }, [id]);
+  }, [id, win]);
 
   useEffect(() => {
     void load();
@@ -56,7 +57,7 @@ export default function InternalStatusPage() {
             <p className="text-sm text-slate-500 mt-2">It may have been deleted.</p>
           </div>
         )}
-        {state === 'ready' && data && <StatusView data={data} internal />}
+        {state === 'ready' && data && <StatusView data={data} internal window={win} onWindow={setWin} />}
       </div>
     </main>
   );

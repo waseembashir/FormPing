@@ -1,27 +1,42 @@
 /**
- * Builds the CLIENT-SAFE status payload for a project's public status page.
+ * Builds the status payload for a project — client-safe by default, or with
+ * internal `tech` for the auth-gated team dashboard.
  *
- * Read-only overlay on existing data:
- *  - per-URL current health from Projects' `urlHealthFor` (form level, up state, SSL)
- *  - uptime %, daily uptime history, and response-time trend from Site Watch's
- *    persisted check history
- *
- * It deliberately strips everything internal (reason codes, run modes, notes,
- * full URLs) — only a hostname, coarse status, uptime numbers, a daily history,
- * a response-time trend, an SSL bucket, and a form working/not flag ever leave
- * this function.
+ * Uptime/response aggregates + charts come from the Site Watch DAILY ROLLUP
+ * (siteWatch/dailyStore), so 7d / 30d / all-time windows are truthful (the raw
+ * history is capped). Response time, latency + check frequency live ONLY in
+ * `tech` (internal). Everything else is stripped to hostname-level, client-safe
+ * facts.
  */
 
 import type { Project, UrlHealth } from '@/lib/projects/types';
 import { urlHealthFor } from '@/lib/projects/health';
 import { listSchedules as listSiteSchedules } from '@/lib/siteWatch/scheduleStore';
-import { readHistory } from '@/lib/siteWatch/historyStore';
-import type { SiteCheckRecord } from '@/lib/siteWatch/types';
+import { loadDaily, type SiteDaily } from '@/lib/siteWatch/dailyStore';
 import { urlKey as key } from '@/lib/projects/projectStore';
 import type { ClientStatus, OverallStatus, RespPoint, SiteUp, StatusSite, UptimeDay } from './types';
 
-const WINDOW_DAYS = 30;
 const DAY = 86_400_000;
+
+/** Parse the `?window=` query into windowDays (null = all-time). Default 30. */
+export function parseWindow(param: string | null | undefined): number | null {
+  switch ((param ?? '').toLowerCase()) {
+    case 'today':
+    case '1':
+    case '1d':
+      return 1;
+    case '7d':
+    case '7':
+      return 7;
+    case 'all':
+      return null;
+    case '30d':
+    case '30':
+    case '':
+    default:
+      return 30;
+  }
+}
 
 function hostOf(url: string): string {
   try {
@@ -30,83 +45,63 @@ function hostOf(url: string): string {
     return url;
   }
 }
-
-/** YYYY-MM-DD (UTC) for a timestamp. */
 function dayKey(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
-/** Uptime % over a rolling window, or null if there's no up/down signal.
- *  Only 'up' and 'down' count; 'blocked' (couldn't check — e.g. bot
- *  protection) is excluded so it never looks like an outage. */
-function uptimeOver(records: SiteCheckRecord[], windowMs: number): number | null {
-  const cutoff = Date.now() - windowMs;
-  let up = 0;
-  let down = 0;
-  for (const r of records) {
-    if (new Date(r.checkedAt).getTime() < cutoff) continue;
-    if (r.uptime.classification === 'up') up++;
-    else if (r.uptime.classification === 'down') down++;
-  }
+/** Daily rollups within the last `windowDays` (null = all). */
+function windowDailies(daily: SiteDaily[], windowDays: number | null): SiteDaily[] {
+  if (windowDays == null) return daily;
+  const cutoff = dayKey(Date.now() - (windowDays - 1) * DAY);
+  return daily.filter((d) => d.day >= cutoff);
+}
+/** Uptime % across a set of daily rollups (blocked excluded), or null. */
+function uptimePct(rows: SiteDaily[]): number | null {
+  let up = 0, down = 0;
+  for (const r of rows) { up += r.up; down += r.down; }
   const total = up + down;
-  if (total === 0) return null;
-  return Math.round((up / total) * 1000) / 10;
+  return total ? Math.round((up / total) * 1000) / 10 : null;
+}
+/** Average response (ms) across daily rollups, or null. */
+function avgResp(rows: SiteDaily[]): number | null {
+  let sum = 0, n = 0;
+  for (const r of rows) { sum += r.respSum; n += r.respN; }
+  return n ? Math.round(sum / n) : null;
+}
+/** Incidents = days with any downtime in the window. */
+function incidentDays(rows: SiteDaily[]): number {
+  return rows.filter((r) => r.down > 0).length;
 }
 
-/** Average response time (ms) of 'up' checks over a window, or null. */
-function avgResponse(records: SiteCheckRecord[], windowMs: number): number | null {
-  const cutoff = Date.now() - windowMs;
-  let sum = 0;
-  let n = 0;
-  for (const r of records) {
-    if (new Date(r.checkedAt).getTime() < cutoff) continue;
-    if (r.uptime.classification === 'up' && typeof r.uptime.responseMs === 'number') {
-      sum += r.uptime.responseMs;
-      n++;
-    }
-  }
-  return n === 0 ? null : Math.round(sum / n);
-}
-
-/** Bucket the last 30 days into daily uptime % + daily avg response time. */
-function dailySeries(records: SiteCheckRecord[]): { uptime: UptimeDay[]; response: RespPoint[] } {
+/** Contiguous per-day uptime + response series for the window (gaps → null),
+ *  so the charts have an even x-axis. */
+function series(daily: SiteDaily[], windowDays: number | null): { uptime: UptimeDay[]; response: RespPoint[] } {
+  const byDay = new Map(daily.map((d) => [d.day, d]));
   const now = Date.now();
-  const buckets = new Map<string, { up: number; down: number; rSum: number; rN: number }>();
-  for (const r of records) {
-    const t = new Date(r.checkedAt).getTime();
-    if (now - t > WINDOW_DAYS * DAY) continue;
-    const k = dayKey(t);
-    const b = buckets.get(k) ?? { up: 0, down: 0, rSum: 0, rN: 0 };
-    if (r.uptime.classification === 'up') {
-      b.up++;
-      if (typeof r.uptime.responseMs === 'number') {
-        b.rSum += r.uptime.responseMs;
-        b.rN++;
-      }
-    } else if (r.uptime.classification === 'down') {
-      b.down++;
-    }
-    buckets.set(k, b);
+  // Span: fixed window, or earliest-rollup→today for all-time (capped at 120d for the chart).
+  let span: number;
+  if (windowDays != null) span = windowDays;
+  else {
+    const earliest = daily[0]?.day;
+    span = earliest ? Math.min(120, Math.round((now - new Date(earliest + 'T00:00:00Z').getTime()) / DAY) + 1) : 1;
   }
-
   const uptime: UptimeDay[] = [];
   const response: RespPoint[] = [];
-  for (let i = WINDOW_DAYS - 1; i >= 0; i--) {
+  for (let i = span - 1; i >= 0; i--) {
     const k = dayKey(now - i * DAY);
-    const b = buckets.get(k);
+    const b = byDay.get(k);
     const total = b ? b.up + b.down : 0;
     uptime.push({ date: k, pct: total ? Math.round((b!.up / total) * 1000) / 10 : null });
-    response.push({ date: k, ms: b && b.rN ? Math.round(b.rSum / b.rN) : null });
+    response.push({ date: k, ms: b && b.respN ? Math.round(b.respSum / b.respN) : null });
   }
   return { uptime, response };
 }
 
-/** Map a Form Watch level to the client-facing working/not/unknown flag. */
 function formWorking(h: UrlHealth): boolean | null {
   if (!h.form.monitored) return null;
   if (h.form.level === 'healthy') return true;
   if (h.form.level === 'attention' || h.form.level === 'failing') return false;
-  return null; // pending / never run
+  return null;
 }
 
 function deriveOverall(sites: StatusSite[]): OverallStatus {
@@ -120,33 +115,29 @@ function deriveOverall(sites: StatusSite[]): OverallStatus {
   return degraded ? 'degraded' : 'operational';
 }
 
-/** Build a client-safe status snapshot for one project.
- *  With `{ internal: true }` each site also carries `tech` (full URL, HTTP
- *  status, exact last response/checked, domain expiry, form verdict) for the
- *  AUTH-GATED team view. Public callers omit the option, so `tech` is never
- *  emitted and nothing internal can leak. */
+/** Build a status snapshot for one project over a window (default 30 days;
+ *  null = all-time). `{ internal: true }` adds per-site `tech` (full URL, HTTP
+ *  status, response-time series, check frequency, domain expiry, form verdict). */
 export async function buildClientStatus(
   project: Project,
-  opts?: { internal?: boolean },
+  opts?: { internal?: boolean; windowDays?: number | null },
 ): Promise<ClientStatus> {
   const internal = opts?.internal === true;
-  const [health, siteSchedules] = await Promise.all([
-    urlHealthFor(project.urls),
-    listSiteSchedules(),
-  ]);
+  const windowDays = opts?.windowDays === undefined ? 30 : opts.windowDays;
+
+  const [health, siteSchedules] = await Promise.all([urlHealthFor(project.urls), listSiteSchedules()]);
   const scheduleByKey = new Map(siteSchedules.map((s) => [key(s.url), s]));
 
-  // One entry per URL we actively monitor (site OR form). Unmonitored URLs are
-  // omitted — a status page should only show what's watched.
+  // One entry per URL we actively monitor (site OR form).
   const monitored = health.filter((h) => h.site.monitored || h.form.monitored);
 
   const sites: StatusSite[] = await Promise.all(
     monitored.map(async (h) => {
       const state: SiteUp = h.site.monitored ? (h.site.upState ?? 'unknown') : 'unknown';
       const sched = h.site.monitored ? scheduleByKey.get(key(h.url)) : undefined;
-      const records = sched ? await readHistory(sched.id) : [];
-
-      const { uptime: dailyUptime, response: responseTrend } = dailySeries(records);
+      const daily = h.site.monitored ? await loadDaily(h.url) : [];
+      const win = windowDailies(daily, windowDays);
+      const { uptime: dailyUptime, response: responseTrend } = series(daily, windowDays);
 
       const ssl =
         h.site.monitored && h.site.sslDaysRemaining != null
@@ -157,14 +148,13 @@ export async function buildClientStatus(
         host: hostOf(h.url),
         state,
         uptime: {
-          d1: uptimeOver(records, DAY),
-          d7: uptimeOver(records, 7 * DAY),
-          d30: uptimeOver(records, 30 * DAY),
+          d1: uptimePct(windowDailies(daily, 1)),
+          d7: uptimePct(windowDailies(daily, 7)),
+          d30: uptimePct(windowDailies(daily, 30)),
         },
-        avgResponseMs: avgResponse(records, 7 * DAY),
-        intervalMs: sched?.intervalMs ?? null,
+        uptimeWindowPct: uptimePct(win),
         dailyUptime,
-        responseTrend,
+        incidents: incidentDays(win),
         ssl,
         formWorking: formWorking(h),
       };
@@ -176,6 +166,9 @@ export async function buildClientStatus(
           lastResponseMs: h.site.responseMs ?? null,
           lastCheckedAt: h.site.lastCheckedAt ?? null,
           domainDaysRemaining: h.site.domainDaysRemaining ?? null,
+          avgResponseMs: avgResp(win),
+          responseTrend,
+          intervalMs: sched?.intervalMs ?? null,
           ...(h.form.monitored
             ? {
                 form: {
@@ -196,7 +189,7 @@ export async function buildClientStatus(
   return {
     name: project.name,
     generatedAt: new Date().toISOString(),
-    windowDays: WINDOW_DAYS,
+    windowDays,
     overall: deriveOverall(sites),
     sites,
   };
