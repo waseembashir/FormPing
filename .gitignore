@@ -15,12 +15,13 @@ coverage/
 # Monitor runtime data (user-specific snapshots)
 data/
 
-# Environment
-.env
-.env.local
-.env.*.local
-.env.development.local
-.env.production.local
+# Environment — DENY-ALL, then allow back only the placeholder template.
+# Safer than listing variants: an unlisted name (.env.production, .env.local.bak,
+# .env.staging) was previously committable. Everything is ignored by default now;
+# `.env.example` is the single deliberate exception and must hold no real values.
+.env*
+*.env
+!.env.example
 
 # Logs
 *.log
