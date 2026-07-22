@@ -1,4 +1,19 @@
 -- FormPing — Supabase Phase 1 schema (core stores)
+--
+-- ┌─ SCHEMA-AGNOSTIC MIGRATION ────────────────────────────────────────────────
+-- │ Uses UNQUALIFIED names (no `public.` / `dev.` prefix), so it applies to
+-- │ whichever schema is first on the search_path. Apply it to BOTH environments
+-- │ — set the schema, THEN run the file:
+-- │
+-- │     set search_path to public;   -- PRODUCTION (Railway)   ← run file after
+-- │     set search_path to dev;      -- LOCAL DEVELOPMENT       ← run file after
+-- │
+-- │ This is what stops `dev` drifting from `public`: one file, no hand-editing.
+-- │ Rule 6 (Production data is sacred): migrations are ADDITIVE + FORWARD-ONLY —
+-- │ never drop/truncate/destructive-alter here. Idempotent (IF NOT EXISTS /
+-- │ OR REPLACE), so re-running in either schema is safe.
+-- └────────────────────────────────────────────────────────────────────────────
+--
 -- Table names mirror the app's tools so the DB is self-explanatory:
 --   projects              — Projects
 --   form_tester_runs      — Forms → Test a form (on-demand manual runs)
@@ -7,12 +22,12 @@
 --   dismissed_urls        — Projects "Don't track" list
 -- (Phase 2 adds form/site run history + change_reports.)
 --
--- Idempotent (IF NOT EXISTS / OR REPLACE). RLS is ENABLED with NO policies →
--- the anon/publishable key can do nothing; the app's SECRET (service-role) key
--- bypasses RLS, so the DB is locked down while server code has full access.
+-- RLS is ENABLED with NO policies → the anon/publishable key can do nothing; the
+-- app's SECRET (service-role) key bypasses Row Level Security, so the DB is
+-- locked down while server code has full access.
 
 -- ── Shared: auto-maintain updated_at on UPDATE ──────────────────────────────
-create or replace function public.set_updated_at()
+create or replace function set_updated_at()
 returns trigger
 language plpgsql
 as $$
@@ -23,7 +38,7 @@ end;
 $$;
 
 -- ── projects ─────────────────────────────────────────────────────────────────
-create table if not exists public.projects (
+create table if not exists projects (
   id           uuid primary key default gen_random_uuid(),
   name         text not null,
   urls         text[] not null default '{}',
@@ -33,14 +48,14 @@ create table if not exists public.projects (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
-create index if not exists projects_share_token_idx on public.projects (share_token);
-drop trigger if exists projects_set_updated_at on public.projects;
+create index if not exists projects_share_token_idx on projects (share_token);
+drop trigger if exists projects_set_updated_at on projects;
 create trigger projects_set_updated_at
-  before update on public.projects
-  for each row execute function public.set_updated_at();
+  before update on projects
+  for each row execute function set_updated_at();
 
 -- ── form_watch_schedules (Form Watch — one per URL) ──────────────────────────
-create table if not exists public.form_watch_schedules (
+create table if not exists form_watch_schedules (
   id               uuid primary key default gen_random_uuid(),
   url              text not null unique,
   site             text not null,
@@ -55,10 +70,10 @@ create table if not exists public.form_watch_schedules (
   last_reason_code text,
   last_form_found  boolean
 );
-create index if not exists form_watch_schedules_next_run_idx on public.form_watch_schedules (next_run_at);
+create index if not exists form_watch_schedules_next_run_idx on form_watch_schedules (next_run_at);
 
 -- ── site_watch_schedules (Site Watch — one per URL) ──────────────────────────
-create table if not exists public.site_watch_schedules (
+create table if not exists site_watch_schedules (
   id                            uuid primary key default gen_random_uuid(),
   url                           text not null unique,
   host                          text not null,
@@ -82,16 +97,16 @@ create table if not exists public.site_watch_schedules (
   last_domain_checked_at        timestamptz,
   last_domain_registrar         text
 );
-create index if not exists site_watch_schedules_next_check_idx on public.site_watch_schedules (next_check_at);
+create index if not exists site_watch_schedules_next_check_idx on site_watch_schedules (next_check_at);
 
 -- ── dismissed_urls (Projects "Don't track" list, by normalized key) ──────────
-create table if not exists public.dismissed_urls (
+create table if not exists dismissed_urls (
   url_key    text primary key,
   created_at timestamptz not null default now()
 );
 
 -- ── form_tester_runs (Form Tester — last manual run per URL) ─────────────────
-create table if not exists public.form_tester_runs (
+create table if not exists form_tester_runs (
   url_key      text primary key,
   input_url    text not null,
   final_status text not null,
@@ -103,8 +118,8 @@ create table if not exists public.form_tester_runs (
 );
 
 -- ── Lock everything down (service-role key bypasses RLS; public gets nothing) ─
-alter table public.projects             enable row level security;
-alter table public.form_watch_schedules enable row level security;
-alter table public.site_watch_schedules enable row level security;
-alter table public.dismissed_urls       enable row level security;
-alter table public.form_tester_runs     enable row level security;
+alter table projects             enable row level security;
+alter table form_watch_schedules enable row level security;
+alter table site_watch_schedules enable row level security;
+alter table dismissed_urls       enable row level security;
+alter table form_tester_runs     enable row level security;
