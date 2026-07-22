@@ -158,23 +158,42 @@ Edit `src/config.ts` to customize:
 - `saveScreenshotOnFailure` — capture screenshot on failure (wiring optional)
 - `saveHtmlSnapshotOnFailure` — save HTML snapshot on failure (wiring optional)
 
-### Storage backend — Supabase (Postgres) or JSON files
+### Storage backend — Supabase (Postgres)
 
-FormPing persists to **Supabase (Postgres)** when configured, otherwise to JSON
-files (the original, still supported as a fallback). It picks the backend at
-runtime from the env — no code change needed. Check which one is live at any time
-via **`GET /api/health`** → `{"storage":"supabase" | "json"}`.
+FormPing persists all structured data to **Supabase (Postgres)**. It is
+**required** — there is no JSON fallback (the app expects the two env vars below
+to be set). Confirm the live backend and environment any time via
+**`GET /api/health`** → `{"storage":"supabase","schema":"public"|"dev","environment":"production"|"development"}`.
 
-To use Supabase, set these **server-only** vars in `ui/.env.local` (local) and
-Railway's Variables (prod). Never commit them:
+Set these **server-only** vars in `ui/.env.local` (local) and Railway's Variables
+(prod). Never commit them:
 
 ```
 SUPABASE_URL=https://<your-ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<secret key>   # bypasses RLS — server-side only
+SUPABASE_SCHEMA=dev                      # LOCAL ONLY — see "Environments" below
 ```
 
-The schema lives in `supabase/migrations/` (run each file in the Supabase SQL
-Editor). Tables are named after the app's tools:
+#### Environments — one project, two schemas
+
+Production and local development share **one** Supabase project, isolated by
+Postgres **schema**, so development (including destructive tests) can never touch
+production data:
+
+| Schema   | Environment              | `SUPABASE_SCHEMA`         |
+| -------- | ------------------------ | ------------------------- |
+| `public` | **production** (Railway) | unset (defaults to public)|
+| `dev`    | **local development**    | `dev` (in `.env.local`)   |
+
+This is working-agreement **rule 6, "Production data is sacred."** DB scripts
+under `ui/scripts/db/` enforce it: `guard.mjs` refuses to run a mutation unless
+`SUPABASE_SCHEMA=dev`, so a smoke test can never hit `public`. Run
+`node ui/scripts/db/smoke.mjs` (CRUD round-trip on `dev`) or
+`node ui/scripts/db/compare-schemas.mjs` (read-only row counts, both schemas).
+
+The schema lives in `supabase/migrations/` — see that folder's `README.md` for
+the dual-apply process (each migration is schema-agnostic and runs against BOTH
+`public` and `dev`). Tables are named after the app's tools:
 
 - **Phase 1 (core)** — `projects`, `form_tester_runs` (Test a form),
   `form_watch_schedules` (Form Watch), `site_watch_schedules` (Site Watch),
@@ -193,8 +212,7 @@ Editor). Tables are named after the app's tools:
   & response charts truthfully (raw history is capped at 200 rows).
 
 RLS is enabled on every table (the anon key can do nothing; the server's secret
-key bypasses it and has full access). Check the live backend at `/api/health`
-(`storage: "supabase" | "json"`).
+key bypasses it and has full access).
 
 ### Client status page vs internal dashboard
 
@@ -239,18 +257,23 @@ themed confirmation dialog before it happens:
 So only a **project delete** destroys results; everything else is recoverable or
 non-destructive.
 
-### JSON fallback + where it lives (`FORMPING_DATA_DIR`)
+### The two remaining on-disk files (`FORMPING_DATA_DIR`)
 
-When Supabase is **not** configured, all UI persistence — projects, form/site
-schedules, run history, change reports, dismissals, on-demand runs — is written
-under `data/snapshots/…`. By default that is `<repo>/data/snapshots` (on Railway
-this is the mounted persistent volume, so leave it unset in production).
+Structured data lives in Supabase (above). Only **two** things stay on disk,
+because neither belongs in a relational table:
+
+- **Change Monitor snapshots** — the raw HTML captured each check to diff against
+  next time (large blobs; a move to object storage is a planned future task).
+- **activeWatches** — the PIDs of running watch processes (machine-local runtime
+  state, meaningless in a shared DB).
+
+Both live under `data/snapshots/…`; by default `<repo>/data/snapshots` (on Railway
+the mounted persistent volume, so leave `FORMPING_DATA_DIR` unset in production).
 
 Set `FORMPING_DATA_DIR` (in `ui/.env.local`) to an **absolute** path to relocate
-all of it. This matters for **local dev when the repo lives inside a synced
-folder like OneDrive/Dropbox**, which continually re-syncs and reverts these
-small, frequently-written JSON files — silently wiping your schedules and
-projects. Point it at a non-synced folder, e.g.:
+them. This matters for **local dev when the repo lives inside a synced folder
+like OneDrive/Dropbox**, which re-syncs and reverts these frequently-written
+files (snapshots are rewritten on every check). Point it at a non-synced folder:
 
 ```
 FORMPING_DATA_DIR="C:/Users/<you>/AppData/Local/FormPing/data"

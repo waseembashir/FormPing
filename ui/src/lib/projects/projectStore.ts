@@ -1,19 +1,15 @@
 /**
  * Persistence for Projects.
  *
- * Everything goes through the small `ProjectStore` interface, so the backend can
- * be swapped later (e.g. Supabase) by writing a new implementation of the same
- * interface — the API routes only ever touch `projectStore`, never the file
- * directly. The current implementation is the same JSON-on-the-Railway-volume
- * pattern used by Form Watch / Site Watch. Best-effort: disk errors are logged,
- * never thrown.
+ * Everything goes through the small `ProjectStore` interface, so the API routes
+ * only ever touch `projectStore`, never the backend directly. Backed by Supabase
+ * (`projects` table) with real row-level CRUD; `updated_at` is maintained by a DB
+ * trigger. Best-effort: errors are logged, never thrown (except create, which
+ * must surface failure to the caller).
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import path from 'path';
 import type { Project } from './types';
-import { dataPath } from '@/lib/dataPaths';
-import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export interface ProjectStore {
   list(): Promise<Project[]>;
@@ -66,130 +62,9 @@ export function urlKey(url: string): string {
   );
 }
 
-// ── JSON-file implementation ────────────────────────────────────────────────
-const FILE_REL = 'data/snapshots/.formping-projects.json';
-
-interface FileShape {
-  projects: Project[];
-}
-
-/** Default: formping/data/snapshots/…; override with FORMPING_DATA_DIR. */
-function filePath(): string {
-  return dataPath(FILE_REL);
-}
-
-async function readAll(): Promise<Project[]> {
-  try {
-    const raw = await readFile(filePath(), 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<FileShape>;
-    if (!parsed || !Array.isArray(parsed.projects)) return [];
-    return parsed.projects;
-  } catch {
-    return [];
-  }
-}
-
-async function writeAll(projects: Project[]): Promise<void> {
-  const fp = filePath();
-  try {
-    await mkdir(path.dirname(fp), { recursive: true });
-    await writeFile(fp, JSON.stringify({ projects }, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn(`[projects/store] write failed at ${fp}: ${err}`);
-  }
-}
-
-const jsonProjectStore: ProjectStore = {
-  async list() {
-    const all = await readAll();
-    return [...all].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)); // newest first
-  },
-
-  async get(id) {
-    return (await readAll()).find((p) => p.id === id) ?? null;
-  },
-
-  async create({ name, urls, notes, contact }) {
-    const all = await readAll();
-    const now = new Date().toISOString();
-    const project: Project = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      urls: urls.map(normalizeUrl).filter(Boolean),
-      notes: notes?.trim() || undefined,
-      contact: contact?.trim() || undefined,
-      createdAt: now,
-      updatedAt: now,
-    };
-    all.push(project);
-    await writeAll(all);
-    return project;
-  },
-
-  async update(id, patch) {
-    const all = await readAll();
-    const idx = all.findIndex((p) => p.id === id);
-    if (idx < 0) return null;
-    const cur = all[idx]!;
-    const next: Project = {
-      ...cur,
-      ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
-      ...(patch.urls !== undefined ? { urls: patch.urls.map(normalizeUrl).filter(Boolean) } : {}),
-      ...(patch.notes !== undefined ? { notes: patch.notes.trim() || undefined } : {}),
-      ...(patch.contact !== undefined ? { contact: patch.contact.trim() || undefined } : {}),
-      updatedAt: new Date().toISOString(),
-    };
-    all[idx] = next;
-    await writeAll(all);
-    return next;
-  },
-
-  async remove(id) {
-    const all = await readAll();
-    const next = all.filter((p) => p.id !== id);
-    if (next.length === all.length) return false;
-    await writeAll(next);
-    return true;
-  },
-
-  async enableShare(id) {
-    const all = await readAll();
-    const idx = all.findIndex((p) => p.id === id);
-    if (idx < 0) return null;
-    const next: Project = {
-      ...all[idx]!,
-      shareToken: newShareToken(),
-      updatedAt: new Date().toISOString(),
-    };
-    all[idx] = next;
-    await writeAll(all);
-    return next;
-  },
-
-  async disableShare(id) {
-    const all = await readAll();
-    const idx = all.findIndex((p) => p.id === id);
-    if (idx < 0) return null;
-    const next: Project = {
-      ...all[idx]!,
-      shareToken: null,
-      updatedAt: new Date().toISOString(),
-    };
-    all[idx] = next;
-    await writeAll(all);
-    return next;
-  },
-
-  async findByToken(token) {
-    if (!token) return null;
-    const all = await readAll();
-    return all.find((p) => !!p.shareToken && p.shareToken === token) ?? null;
-  },
-};
-
 // ── Supabase implementation ──────────────────────────────────────────────────
-// Real row-level CRUD against the `projects` table. Same interface as the JSON
-// store, so API routes are unchanged. `updated_at` is maintained by a DB trigger.
+// Real row-level CRUD against the `projects` table. `updated_at` is maintained
+// by a DB trigger.
 interface ProjectRow {
   id: string;
   name: string;
@@ -215,7 +90,8 @@ function toProject(r: ProjectRow): Project {
   };
 }
 
-const supabaseProjectStore: ProjectStore = {
+/** The active project store — Supabase (`projects` table). */
+export const projectStore: ProjectStore = {
   async list() {
     const { data, error } = await supabaseAdmin()
       .from('projects')
@@ -326,28 +202,4 @@ const supabaseProjectStore: ProjectStore = {
     }
     return data ? toProject(data as ProjectRow) : null;
   },
-};
-
-/** Pick the backend PER CALL, exactly like every other store does.
- *
- *  This used to be `supabaseEnabled() ? supabase : json` evaluated once at module
- *  load — so whichever backend was configured at first import got frozen in for
- *  the life of the process. If the env wasn't ready yet (any importer that loads
- *  this module before env is populated), Projects silently fell back to JSON
- *  while every other store used Supabase — a split-brain that's invisible until
- *  data goes missing. Dispatching per call removes the load-order dependency. */
-function active(): ProjectStore {
-  return supabaseEnabled() ? supabaseProjectStore : jsonProjectStore;
-}
-
-/** The active project store — Supabase when configured, else the JSON file store. */
-export const projectStore: ProjectStore = {
-  list: () => active().list(),
-  get: (id) => active().get(id),
-  create: (input) => active().create(input),
-  update: (id, patch) => active().update(id, patch),
-  remove: (id) => active().remove(id),
-  enableShare: (id) => active().enableShare(id),
-  disableShare: (id) => active().disableShare(id),
-  findByToken: (token) => active().findByToken(token),
 };

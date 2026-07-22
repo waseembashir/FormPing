@@ -1,24 +1,29 @@
 import path from 'path';
 
 /**
- * Resolve a path under the app's persisted-data directory.
+ * Resolve a path under the app's persisted-FILE directory.
  *
- * All FormPing persistence (projects, form/site schedules, run history, change
- * reports, dismissals, on-demand runs) lives under `data/snapshots/…`. By
- * DEFAULT that resolves to `<repo>/data/snapshots/…` — one level up from the
- * `ui/` working directory, exactly as before. On Railway the persistent volume
- * is mounted there, so the default is correct in production and this override is
- * left unset.
+ * As of the Supabase cutover, all STRUCTURED data (projects, schedules, run
+ * history, change reports, dismissals, on-demand runs, daily rollups) lives in
+ * Postgres — NOT on disk. Only two things remain file-based, because neither
+ * belongs in a relational table:
+ *   • Change Monitor SNAPSHOTS — raw HTML captured each check to diff against
+ *     next time (large blobs; an object-storage move is a separate future task).
+ *   • activeWatches — the PIDs of running watch processes (machine-local runtime
+ *     state; meaningless in a shared DB).
  *
- * Set the `FORMPING_DATA_DIR` env var to an ABSOLUTE path to relocate ALL of
- * this data. Its main use is LOCAL DEV: the repo lives inside OneDrive, and
- * OneDrive continually re-syncs / reverts these tiny, frequently-written JSON
- * files — silently wiping schedules and projects. Pointing this at a non-synced
- * folder (e.g. `%LOCALAPPDATA%\FormPing\data`) stops that data loss.
+ * Those two still live under `data/snapshots/…`, which by DEFAULT resolves to
+ * `<repo>/data/snapshots/…` — one level up from `ui/`. On Railway the persistent
+ * volume is mounted there, so the default is correct in production and the
+ * override below is left unset.
  *
- * When the override is set, it REPLACES the `data/snapshots` segment: the rest
- * of the relative path (e.g. `.formping-projects.json`, `.formping-form-runs/…`)
- * is joined onto it, so every store keeps its same sub-layout.
+ * Set `FORMPING_DATA_DIR` to an ABSOLUTE path to relocate these files. Its use
+ * is LOCAL DEV: the repo lives inside OneDrive, and OneDrive re-syncs / reverts
+ * frequently-written files (snapshots are rewritten on every check) — pointing
+ * this at a non-synced folder (e.g. `%LOCALAPPDATA%\FormPing\data`) avoids that.
+ *
+ * When set, it REPLACES the `data/snapshots` segment; the rest of the relative
+ * path is joined onto it, so the on-disk sub-layout is unchanged.
  *
  * @param rel a repo-relative path beginning with `data/snapshots/…`
  */

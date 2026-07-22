@@ -1,15 +1,19 @@
 -- FormPing — FR-20: Site Watch daily rollup.
 --
+-- SCHEMA-AGNOSTIC (see 0001's header): unqualified names, apply per-schema with
+-- `set search_path to public;` (prod) or `set search_path to dev;` (dev) first.
+-- Additive + forward-only + idempotent.
+--
 -- Charts over 7d / 30d / all-time can't come from the capped raw history
 -- (site_watch_runs is capped at 200 rows — a 5-min monitor fills that in ~17h).
 -- This table keeps ONE summarised row per URL per day, written by the Site Watch
 -- ticker on every check, so the day-window aggregates + charts are truthful.
 -- (Raw site_watch_runs stays for the fine-grained recent view.)
 --
--- Idempotent. RLS enabled, no policies (anon key does nothing; server secret
--- key bypasses). url_key = normalizeUrl(url).toLowerCase() — same key everywhere.
+-- RLS enabled, no policies (anon key does nothing; server secret key bypasses).
+-- url_key = normalizeUrl(url).toLowerCase() — same key everywhere.
 
-create table if not exists public.site_watch_daily (
+create table if not exists site_watch_daily (
   url_key   text not null,
   day       date not null,               -- UTC calendar day
   checks    int  not null default 0,     -- total probes that counted (up+down)
@@ -21,6 +25,6 @@ create table if not exists public.site_watch_daily (
   ssl_min   int,                         -- lowest SSL days-remaining seen that day
   primary key (url_key, day)
 );
-create index if not exists site_watch_daily_url_day_idx on public.site_watch_daily (url_key, day desc);
+create index if not exists site_watch_daily_url_day_idx on site_watch_daily (url_key, day desc);
 
-alter table public.site_watch_daily enable row level security;
+alter table site_watch_daily enable row level security;

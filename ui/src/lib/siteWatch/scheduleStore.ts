@@ -1,50 +1,18 @@
 /**
  * Persistence for Site Watch schedules.
  *
- * Backed by Supabase (`site_schedules` table) when configured, else the legacy
- * JSON file (fallback until the migration retires it). Exported functions
- * dispatch on `supabaseEnabled()`. Best-effort: errors logged, never thrown.
+ * Backed by Supabase (`site_watch_schedules` table). Exported functions keep the
+ * same signatures so callers are unchanged. Best-effort: errors logged, never
+ * thrown.
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import path from 'path';
 import type { SiteSchedule, UptimeClass } from './types';
-import { dataPath } from '@/lib/dataPaths';
-import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 function normKey(url: string): string {
   return url.trim().replace(/\/+$/, '').toLowerCase();
 }
 
-// ── JSON implementation (fallback) ───────────────────────────────────────────
-const FILE_REL = 'data/snapshots/.formping-site-schedules.json';
-interface FileShape {
-  schedules: SiteSchedule[];
-}
-function filePath(): string {
-  return dataPath(FILE_REL);
-}
-async function readAll(): Promise<SiteSchedule[]> {
-  try {
-    const raw = await readFile(filePath(), 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<FileShape>;
-    if (!parsed || !Array.isArray(parsed.schedules)) return [];
-    return parsed.schedules;
-  } catch {
-    return [];
-  }
-}
-async function writeAll(schedules: SiteSchedule[]): Promise<void> {
-  const fp = filePath();
-  try {
-    await mkdir(path.dirname(fp), { recursive: true });
-    await writeFile(fp, JSON.stringify({ schedules }, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn(`[siteWatch/scheduleStore] write failed at ${fp}: ${err}`);
-  }
-}
-
-// ── Supabase implementation ──────────────────────────────────────────────────
 interface SiteScheduleRow {
   id: string;
   url: string;
@@ -125,9 +93,7 @@ function toRow(s: SiteSchedule): SiteScheduleRow {
   };
 }
 
-// ── Public API (dispatches on backend) ───────────────────────────────────────
 export async function listSchedules(): Promise<SiteSchedule[]> {
-  if (!supabaseEnabled()) return readAll();
   const { data, error } = await supabaseAdmin().from('site_watch_schedules').select(SS_COLS);
   if (error) {
     console.warn(`[siteWatch/scheduleStore] list: ${error.message}`);
@@ -137,7 +103,6 @@ export async function listSchedules(): Promise<SiteSchedule[]> {
 }
 
 export async function getSchedule(id: string): Promise<SiteSchedule | undefined> {
-  if (!supabaseEnabled()) return (await readAll()).find((s) => s.id === id);
   const { data, error } = await supabaseAdmin().from('site_watch_schedules').select(SS_COLS).eq('id', id).maybeSingle();
   if (error) {
     console.warn(`[siteWatch/scheduleStore] get: ${error.message}`);
@@ -148,7 +113,6 @@ export async function getSchedule(id: string): Promise<SiteSchedule | undefined>
 
 export async function findScheduleByUrl(url: string): Promise<SiteSchedule | undefined> {
   const norm = normKey(url);
-  if (!supabaseEnabled()) return (await readAll()).find((s) => normKey(s.url) === norm);
   const { data, error } = await supabaseAdmin().from('site_watch_schedules').select(SS_COLS);
   if (error) {
     console.warn(`[siteWatch/scheduleStore] findByUrl: ${error.message}`);
@@ -159,26 +123,11 @@ export async function findScheduleByUrl(url: string): Promise<SiteSchedule | und
 }
 
 export async function upsertSchedule(entry: SiteSchedule): Promise<void> {
-  if (!supabaseEnabled()) {
-    const all = await readAll();
-    const idx = all.findIndex((s) => s.id === entry.id);
-    if (idx >= 0) all[idx] = entry;
-    else all.push(entry);
-    await writeAll(all);
-    return;
-  }
   const { error } = await supabaseAdmin().from('site_watch_schedules').upsert(toRow(entry), { onConflict: 'id' });
   if (error) console.warn(`[siteWatch/scheduleStore] upsert: ${error.message}`);
 }
 
 export async function removeSchedule(id: string): Promise<boolean> {
-  if (!supabaseEnabled()) {
-    const all = await readAll();
-    const next = all.filter((s) => s.id !== id);
-    if (next.length === all.length) return false;
-    await writeAll(next);
-    return true;
-  }
   const { data, error } = await supabaseAdmin().from('site_watch_schedules').delete().eq('id', id).select('id');
   if (error) {
     console.warn(`[siteWatch/scheduleStore] remove: ${error.message}`);

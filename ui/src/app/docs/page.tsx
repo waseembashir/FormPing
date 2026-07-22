@@ -243,10 +243,10 @@ export default function DocsPage() {
               </LI>
             </UL>
             <Note>
-              Storage uses the same JSON-on-the-volume model as the rest of the app, behind a small{' '}
-              <Code>ProjectStore</Code> interface so it can move to a database (e.g. Supabase) later
-              without a rewrite. Why this matters: the Project/client entity is the foundation that
-              team-routing, a status page, and access controls will all build on.
+              Projects are stored in <strong>Supabase (Postgres)</strong> behind a small{' '}
+              <Code>ProjectStore</Code> interface, so the API routes never touch the database
+              directly. Why this matters: the Project/client entity is the foundation that
+              team-routing, a status page, and access controls all build on.
             </Note>
 
             {/* ── Status page (public) ────────────────────── */}
@@ -312,17 +312,25 @@ export default function DocsPage() {
             {/* ── Storage layout ──────────────────────────────── */}
             <H2 id="storage">Storage layout</H2>
             <Note>
-              <strong>Storage backend.</strong> Data is stored in{' '}
-              <strong>Supabase (Postgres)</strong> when configured (else JSON files, still
-              supported). Tables are named after the app&apos;s tools — core:{' '}
-              <Code>projects</Code>, <Code>form_tester_runs</Code>,{' '}
-              <Code>form_watch_schedules</Code>, <Code>site_watch_schedules</Code>,{' '}
-              <Code>dismissed_urls</Code>; history + reports: <Code>form_watch_runs</Code>,{' '}
-              <Code>site_watch_runs</Code>, <Code>change_reports</Code>; durable per-URL results:{' '}
-              <Code>form_watch_results</Code>, <Code>site_watch_results</Code>; daily rollup:{' '}
-              <Code>site_watch_daily</Code> (powers the dashboard&apos;s 7d/30d/all-time charts).
-              Check which backend is live at <Code>/api/health</Code>. The change-monitor{' '}
-              <em>snapshots</em> below remain file-based on the volume.
+              <strong>Storage backend.</strong> All structured data lives in{' '}
+              <strong>Supabase (Postgres)</strong> — it is required, there is no JSON fallback.
+              Tables are named after the app&apos;s tools — core: <Code>projects</Code>,{' '}
+              <Code>form_tester_runs</Code>, <Code>form_watch_schedules</Code>,{' '}
+              <Code>site_watch_schedules</Code>, <Code>dismissed_urls</Code>; history + reports:{' '}
+              <Code>form_watch_runs</Code>, <Code>site_watch_runs</Code>, <Code>change_reports</Code>;
+              durable per-URL results: <Code>form_watch_results</Code>,{' '}
+              <Code>site_watch_results</Code>; daily rollup: <Code>site_watch_daily</Code> (powers the
+              dashboard&apos;s 7d/30d/all-time charts). Confirm the live backend and environment at{' '}
+              <Code>/api/health</Code> (<Code>schema</Code> is <Code>public</Code> in production,{' '}
+              <Code>dev</Code> locally). The change-monitor <em>snapshots</em> below remain file-based.
+            </Note>
+            <Note>
+              <strong>Environments — one project, two schemas.</strong> Production and local dev share
+              one Supabase project, isolated by Postgres <em>schema</em>: <Code>public</Code> is
+              production (Railway), <Code>dev</Code> is local (<Code>SUPABASE_SCHEMA=dev</Code> in{' '}
+              <Code>.env.local</Code>). Development — including destructive smoke tests — can never
+              touch production data. Scripts under <Code>ui/scripts/db/</Code> enforce it: a mutation
+              refuses to run unless the schema is <Code>dev</Code>.
             </Note>
             <Note>
               <strong>What deleting actually deletes.</strong> A <em>result</em> belongs to the{' '}
@@ -377,12 +385,13 @@ export default function DocsPage() {
               </LI>
             </UL>
             <Note>
-              <strong>Data location.</strong> Everything lives under{' '}
+              <strong>Data location.</strong> Only two things are file-based (everything else is in
+              Supabase): change-monitor <strong>snapshots</strong> (raw HTML) and{' '}
+              <strong>activeWatches</strong> (running-process PIDs). Both live under{' '}
               <Code>data/snapshots/</Code> (on Railway, the mounted volume). For local dev inside a
-              synced folder like OneDrive/Dropbox — which reverts these frequently-written JSON files
-              and can wipe your schedules/projects — set <Code>FORMPING_DATA_DIR</Code> in{' '}
-              <Code>ui/.env.local</Code> to an absolute path outside the synced folder. Default
-              behaviour is unchanged.
+              synced folder like OneDrive/Dropbox — which reverts these frequently-written files — set{' '}
+              <Code>FORMPING_DATA_DIR</Code> in <Code>ui/.env.local</Code> to an absolute path outside
+              the synced folder. Default behaviour is unchanged.
             </Note>
 
             {/* ── What gets saved ─────────────────────────────── */}
@@ -773,15 +782,16 @@ export default function DocsPage() {
               </LI>
             </UL>
 
-            <P>Storage — no database, files on the same volume as the monitor:</P>
-            <CodeBlock>{`formping/data/snapshots/
-├── .formping-form-schedules.json     ← the active schedules
-└── .formping-form-runs/
-    └── <scheduleId>.json              ← run history, newest first, capped`}</CodeBlock>
+            <P>
+              Storage — Supabase (Postgres): schedules live in{' '}
+              <Code>form_watch_schedules</Code> and each run in <Code>form_watch_runs</Code>{' '}
+              (newest-first, capped), plus the durable last result per URL in{' '}
+              <Code>form_watch_results</Code>.
+            </P>
 
             <Note>
-              The scheduler runs in-process while the server is up. Schedules persist on disk and
-              <strong> resume automatically</strong> after a restart or redeploy, so no checks are
+              The scheduler runs in-process while the server is up. Schedules persist in the database
+              and <strong>resume automatically</strong> after a restart or redeploy, so no checks are
               lost. Keep the service always-on for reliable cycles. Minimum interval is 1 hour; a
               URL is validated (must be reachable) before it can be added.
             </Note>
@@ -853,11 +863,11 @@ export default function DocsPage() {
               Each card shows <strong>uptime %</strong> + a recent-checks sparkline, and you can{' '}
               <strong>Pause/Resume</strong> a monitor (keeps its history, unlike Delete).
             </Note>
-            <P>Storage mirrors the other features — JSON on the volume, no database:</P>
-            <CodeBlock>{`formping/data/snapshots/
-├── .formping-site-schedules.json     ← the monitors
-└── .formping-site-runs/
-    └── <scheduleId>.json              ← check history, newest first`}</CodeBlock>
+            <P>
+              Storage mirrors the other features — Supabase (Postgres): the monitor lives in{' '}
+              <Code>site_watch_schedules</Code> and its checks in <Code>site_watch_runs</Code>{' '}
+              (newest-first, capped), with a per-day rollup in <Code>site_watch_daily</Code>.
+            </P>
             <Note tone="warn">
               A few heavily-protected sites may return a bot-challenge page to a datacenter IP — we
               classify that as <em>reachable (challenged)</em>, not <em>down</em>, so we don&apos;t

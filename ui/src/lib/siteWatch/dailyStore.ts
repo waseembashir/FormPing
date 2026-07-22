@@ -6,17 +6,12 @@
  * window for a frequent monitor). Read-modify-write is safe here: the ticker
  * runs checks sequentially (single writer), and writes are best-effort.
  *
- * Backed by Supabase (`site_watch_daily`) when configured, else a JSON file.
+ * Backed by Supabase (`site_watch_daily`).
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import path from 'path';
 import type { SiteCheckRecord } from './types';
 import { urlKey } from '@/lib/projects/projectStore';
-import { dataPath } from '@/lib/dataPaths';
-import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
-
-const FILE = 'data/snapshots/.formping-site-daily.json';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export interface SiteDaily {
   /** YYYY-MM-DD (UTC). */
@@ -46,12 +41,6 @@ interface DailyRow {
 }
 const COLS = 'url_key, day, checks, up, down, blocked, resp_sum, resp_n, ssl_min';
 
-function filePath(): string {
-  return dataPath(FILE);
-}
-function jsonKey(urlK: string, day: string): string {
-  return `${urlK}__${day}`;
-}
 function rowToDaily(r: DailyRow): SiteDaily {
   return {
     day: r.day,
@@ -63,14 +52,6 @@ function rowToDaily(r: DailyRow): SiteDaily {
     respN: r.resp_n ?? 0,
     sslMin: r.ssl_min,
   };
-}
-async function readAll(): Promise<Record<string, DailyRow>> {
-  try {
-    const parsed = JSON.parse(await readFile(filePath(), 'utf-8'));
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, DailyRow>) : {};
-  } catch {
-    return {};
-  }
 }
 
 /** Fold one check into today's rollup for its URL. Best-effort. */
@@ -96,25 +77,16 @@ export async function recordDaily(record: SiteCheckRecord): Promise<void> {
     });
     const empty = { checks: 0, up: 0, down: 0, blocked: 0, resp_sum: 0, resp_n: 0, ssl_min: null as number | null };
 
-    if (supabaseEnabled()) {
-      const db = supabaseAdmin();
-      const { data: existing } = await db
-        .from('site_watch_daily')
-        .select(COLS)
-        .eq('url_key', url_key)
-        .eq('day', day)
-        .maybeSingle();
-      const next = fold((existing as DailyRow) ?? empty);
-      const { error } = await db.from('site_watch_daily').upsert({ url_key, day, ...next }, { onConflict: 'url_key,day' });
-      if (error) console.warn(`[siteWatch/dailyStore] record: ${error.message}`);
-    } else {
-      const all = await readAll();
-      const k = jsonKey(url_key, day);
-      const cur = all[k] ?? { url_key, day, ...empty };
-      all[k] = { url_key, day, ...fold(cur) };
-      await mkdir(path.dirname(filePath()), { recursive: true });
-      await writeFile(filePath(), JSON.stringify(all), 'utf-8');
-    }
+    const db = supabaseAdmin();
+    const { data: existing } = await db
+      .from('site_watch_daily')
+      .select(COLS)
+      .eq('url_key', url_key)
+      .eq('day', day)
+      .maybeSingle();
+    const next = fold((existing as DailyRow) ?? empty);
+    const { error } = await db.from('site_watch_daily').upsert({ url_key, day, ...next }, { onConflict: 'url_key,day' });
+    if (error) console.warn(`[siteWatch/dailyStore] record: ${error.message}`);
   } catch (err) {
     console.warn(`[siteWatch/dailyStore] recordDaily failed: ${err}`);
   }
@@ -123,13 +95,6 @@ export async function recordDaily(record: SiteCheckRecord): Promise<void> {
 /** All daily rollups for a URL, oldest → newest. Caller windows by day. */
 export async function loadDaily(url: string): Promise<SiteDaily[]> {
   const url_key = urlKey(url);
-  if (!supabaseEnabled()) {
-    const all = await readAll();
-    return Object.values(all)
-      .filter((r) => r.url_key === url_key)
-      .map(rowToDaily)
-      .sort((a, b) => (a.day < b.day ? -1 : 1));
-  }
   const { data, error } = await supabaseAdmin()
     .from('site_watch_daily')
     .select(COLS)
@@ -145,17 +110,6 @@ export async function loadDaily(url: string): Promise<SiteDaily[]> {
 /** Delete a URL's rollups (used by project delete). Best-effort. */
 export async function removeDaily(url: string): Promise<void> {
   const url_key = urlKey(url);
-  if (!supabaseEnabled()) {
-    try {
-      const all = await readAll();
-      let changed = false;
-      for (const k of Object.keys(all)) if (all[k]!.url_key === url_key) { delete all[k]; changed = true; }
-      if (changed) { await mkdir(path.dirname(filePath()), { recursive: true }); await writeFile(filePath(), JSON.stringify(all), 'utf-8'); }
-    } catch (err) {
-      console.warn(`[siteWatch/dailyStore] removeDaily failed: ${err}`);
-    }
-    return;
-  }
   const { error } = await supabaseAdmin().from('site_watch_daily').delete().eq('url_key', url_key);
   if (error) console.warn(`[siteWatch/dailyStore] removeDaily: ${error.message}`);
 }
