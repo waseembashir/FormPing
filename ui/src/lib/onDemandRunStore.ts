@@ -6,22 +6,15 @@
  * was manually tested". This store keeps the most recent manual run per URL so
  * the Projects detail can surface it alongside the scheduled monitors.
  *
- * Writes are BEST-EFFORT: every public function swallows its own errors so a
- * disk hiccup can never break the run stream that calls it. Last-write-wins on
- * the same URL (only the latest manual run matters for the one-stop view).
- *
- * Path note: like reportStore, this lives INSIDE the snapshots dir so it
- * survives Railway redeploys (the persistent volume is mounted there).
+ * Backed by Supabase (`form_tester_runs`). Writes are BEST-EFFORT: every public
+ * function swallows its own errors so a storage hiccup can never break the run
+ * stream that calls it. Last-write-wins on the same URL (only the latest manual
+ * run matters for the one-stop view).
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import path from 'path';
 import { urlKey as runKey } from './projects/projectStore';
 import { removeDismissed } from './projects/dismissedStore';
-import { dataPath } from '@/lib/dataPaths';
-import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
-
-const FILE = 'data/snapshots/.formping-ondemand-runs.json';
+import { supabaseAdmin } from '@/lib/supabase';
 
 interface OnDemandRunRow {
   url_key: string;
@@ -61,27 +54,12 @@ export interface OnDemandRun {
   ranAt: string;
 }
 
-/** Default: formping/data/snapshots/…; override with FORMPING_DATA_DIR. */
-function filePath(): string {
-  return dataPath(FILE);
-}
-
-async function readAll(): Promise<Record<string, OnDemandRun>> {
-  try {
-    const raw = await readFile(filePath(), 'utf-8');
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, OnDemandRun>) : {};
-  } catch {
-    return {}; // file doesn't exist yet, or is malformed — start fresh
-  }
-}
-
 const STATUSES = ['pass', 'fail', 'warn', 'error'] as const;
 
 /**
  * Record a Form Tester result. Accepts the raw SiteResult as `unknown` (it comes
  * straight off the CLI's streamed stdout) and defensively extracts the fields.
- * Best-effort: never throws — a bad shape or disk error is logged and dropped.
+ * Best-effort: never throws — a bad shape or storage error is logged and dropped.
  */
 export async function recordRun(raw: unknown): Promise<void> {
   try {
@@ -110,27 +88,20 @@ export async function recordRun(raw: unknown): Promise<void> {
       ranAt: new Date().toISOString(),
     };
 
-    if (supabaseEnabled()) {
-      const { error } = await supabaseAdmin().from('form_tester_runs').upsert(
-        {
-          url_key: run.url,
-          input_url: run.inputUrl,
-          final_status: run.finalStatus,
-          reason_code: run.reasonCode || null,
-          mode: run.mode || null,
-          form_found: run.formFound,
-          duration_ms: run.durationMs,
-          ran_at: run.ranAt,
-        },
-        { onConflict: 'url_key' },
-      );
-      if (error) console.warn(`[onDemandRunStore] recordRun (supabase): ${error.message}`);
-    } else {
-      const all = await readAll();
-      all[run.url] = run;
-      await mkdir(path.dirname(filePath()), { recursive: true });
-      await writeFile(filePath(), JSON.stringify(all), 'utf-8');
-    }
+    const { error } = await supabaseAdmin().from('form_tester_runs').upsert(
+      {
+        url_key: run.url,
+        input_url: run.inputUrl,
+        final_status: run.finalStatus,
+        reason_code: run.reasonCode || null,
+        mode: run.mode || null,
+        form_found: run.formFound,
+        duration_ms: run.durationMs,
+        ran_at: run.ranAt,
+      },
+      { onConflict: 'url_key' },
+    );
+    if (error) console.warn(`[onDemandRunStore] recordRun: ${error.message}`);
 
     // Re-testing a URL un-dismisses it: if it was "Don't track"-ed, testing it
     // again means the user cares about it, so bring it back to Unassigned.
@@ -144,29 +115,12 @@ export async function recordRun(raw: unknown): Promise<void> {
  *  its URLs don't linger in the Unassigned bucket). Best-effort. */
 export async function removeRun(url: string): Promise<void> {
   const k = runKey(url);
-  if (!supabaseEnabled()) {
-    try {
-      const all = await readAll();
-      if (all[k]) {
-        delete all[k];
-        await mkdir(path.dirname(filePath()), { recursive: true });
-        await writeFile(filePath(), JSON.stringify(all), 'utf-8');
-      }
-    } catch (err) {
-      console.warn(`[onDemandRunStore] removeRun failed: ${err}`);
-    }
-    return;
-  }
   const { error } = await supabaseAdmin().from('form_tester_runs').delete().eq('url_key', k);
   if (error) console.warn(`[onDemandRunStore] removeRun: ${error.message}`);
 }
 
 /** Load all recorded runs as a Map keyed by normalized+lowercased URL. */
 export async function loadRuns(): Promise<Map<string, OnDemandRun>> {
-  if (!supabaseEnabled()) {
-    const all = await readAll();
-    return new Map(Object.entries(all));
-  }
   const { data, error } = await supabaseAdmin().from('form_tester_runs').select(RUN_COLS);
   if (error) {
     console.warn(`[onDemandRunStore] loadRuns: ${error.message}`);

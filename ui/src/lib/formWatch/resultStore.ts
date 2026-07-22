@@ -8,19 +8,13 @@
  * Mirrors the `onDemandRunStore` (manual Form Tester) pattern so Projects treats
  * scheduled and manual results consistently.
  *
- * Backed by Supabase (`form_watch_results`) when configured, else a JSON file.
- * Best-effort: every function swallows its own errors so a storage hiccup never
- * breaks the ticker that calls it.
+ * Backed by Supabase (`form_watch_results`). Best-effort: every function swallows
+ * its own errors so a storage hiccup never breaks the ticker that calls it.
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import path from 'path';
 import type { FormRunRecord, FormRunStatus } from './types';
 import { urlKey as resultKey } from '@/lib/projects/projectStore';
-import { dataPath } from '@/lib/dataPaths';
-import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
-
-const FILE = 'data/snapshots/.formping-form-watch-results.json';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export interface FormWatchResult {
   /** Normalized + lowercased URL — the map key (matches health.ts key()). */
@@ -46,9 +40,6 @@ interface FormResultRow {
 }
 const COLS = 'url_key, input_url, status, reason_code, form_found, mode, ran_at';
 
-function filePath(): string {
-  return dataPath(FILE);
-}
 function rowToResult(r: FormResultRow): FormWatchResult {
   return {
     url: r.url_key,
@@ -59,14 +50,6 @@ function rowToResult(r: FormResultRow): FormWatchResult {
     mode: r.mode ?? '',
     ranAt: r.ran_at,
   };
-}
-async function readAll(): Promise<Record<string, FormWatchResult>> {
-  try {
-    const parsed = JSON.parse(await readFile(filePath(), 'utf-8'));
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, FormWatchResult>) : {};
-  } catch {
-    return {};
-  }
 }
 
 /** Record the latest scheduled form result for a URL (upsert, last-write-wins). */
@@ -81,26 +64,19 @@ export async function recordResult(record: FormRunRecord): Promise<void> {
       mode: record.mode || '',
       ranAt: record.ranAt,
     };
-    if (supabaseEnabled()) {
-      const { error } = await supabaseAdmin().from('form_watch_results').upsert(
-        {
-          url_key: result.url,
-          input_url: result.inputUrl,
-          status: result.status,
-          reason_code: result.reasonCode || null,
-          form_found: result.formFound,
-          mode: result.mode || null,
-          ran_at: result.ranAt,
-        },
-        { onConflict: 'url_key' },
-      );
-      if (error) console.warn(`[formWatch/resultStore] record: ${error.message}`);
-    } else {
-      const all = await readAll();
-      all[result.url] = result;
-      await mkdir(path.dirname(filePath()), { recursive: true });
-      await writeFile(filePath(), JSON.stringify(all), 'utf-8');
-    }
+    const { error } = await supabaseAdmin().from('form_watch_results').upsert(
+      {
+        url_key: result.url,
+        input_url: result.inputUrl,
+        status: result.status,
+        reason_code: result.reasonCode || null,
+        form_found: result.formFound,
+        mode: result.mode || null,
+        ran_at: result.ranAt,
+      },
+      { onConflict: 'url_key' },
+    );
+    if (error) console.warn(`[formWatch/resultStore] record: ${error.message}`);
   } catch (err) {
     console.warn(`[formWatch/resultStore] recordResult failed: ${err}`);
   }
@@ -109,26 +85,12 @@ export async function recordResult(record: FormRunRecord): Promise<void> {
 /** Delete the persisted result for a URL (used when a project is deleted). */
 export async function removeResult(url: string): Promise<void> {
   const k = resultKey(url);
-  if (!supabaseEnabled()) {
-    try {
-      const all = await readAll();
-      if (all[k]) {
-        delete all[k];
-        await mkdir(path.dirname(filePath()), { recursive: true });
-        await writeFile(filePath(), JSON.stringify(all), 'utf-8');
-      }
-    } catch (err) {
-      console.warn(`[formWatch/resultStore] removeResult failed: ${err}`);
-    }
-    return;
-  }
   const { error } = await supabaseAdmin().from('form_watch_results').delete().eq('url_key', k);
   if (error) console.warn(`[formWatch/resultStore] removeResult: ${error.message}`);
 }
 
 /** All persisted results as a Map keyed by normalized+lowercased URL. */
 export async function loadResults(): Promise<Map<string, FormWatchResult>> {
-  if (!supabaseEnabled()) return new Map(Object.entries(await readAll()));
   const { data, error } = await supabaseAdmin().from('form_watch_results').select(COLS);
   if (error) {
     console.warn(`[formWatch/resultStore] loadResults: ${error.message}`);

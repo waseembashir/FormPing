@@ -6,18 +6,13 @@
  * SURVIVING monitor stop/delete — cleared only when the project is deleted.
  * (The run *history* stays monitor-scoped; this is the durable per-URL result.)
  *
- * Backed by Supabase (`site_watch_results`) when configured, else a JSON file.
- * Best-effort: errors are logged, never thrown.
+ * Backed by Supabase (`site_watch_results`). Best-effort: errors are logged,
+ * never thrown.
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import path from 'path';
 import type { SiteCheckRecord, UptimeClass } from './types';
 import { urlKey as resultKey } from '@/lib/projects/projectStore';
-import { dataPath } from '@/lib/dataPaths';
-import { supabaseAdmin, supabaseEnabled } from '@/lib/supabase';
-
-const FILE = 'data/snapshots/.formping-site-watch-results.json';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export interface SiteWatchResult {
   /** Normalized + lowercased URL — the map key. */
@@ -46,9 +41,6 @@ interface SiteResultRow {
 const COLS =
   'url_key, input_url, classification, status_code, response_ms, ssl_days_remaining, ssl_valid, domain_days_remaining, checked_at';
 
-function filePath(): string {
-  return dataPath(FILE);
-}
 function rowToResult(r: SiteResultRow): SiteWatchResult {
   return {
     url: r.url_key,
@@ -61,14 +53,6 @@ function rowToResult(r: SiteResultRow): SiteWatchResult {
     domainDaysRemaining: r.domain_days_remaining,
     checkedAt: r.checked_at,
   };
-}
-async function readAll(): Promise<Record<string, SiteWatchResult>> {
-  try {
-    const parsed = JSON.parse(await readFile(filePath(), 'utf-8'));
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, SiteWatchResult>) : {};
-  } catch {
-    return {};
-  }
 }
 
 /** Record the latest Site Watch result for a URL (upsert, last-write-wins). */
@@ -85,28 +69,21 @@ export async function recordResult(record: SiteCheckRecord): Promise<void> {
       domainDaysRemaining: record.domain?.daysRemaining ?? null,
       checkedAt: record.checkedAt,
     };
-    if (supabaseEnabled()) {
-      const { error } = await supabaseAdmin().from('site_watch_results').upsert(
-        {
-          url_key: result.url,
-          input_url: result.inputUrl,
-          classification: result.classification ?? null,
-          status_code: result.statusCode,
-          response_ms: result.responseMs,
-          ssl_days_remaining: result.sslDaysRemaining,
-          ssl_valid: result.sslValid,
-          domain_days_remaining: result.domainDaysRemaining,
-          checked_at: result.checkedAt,
-        },
-        { onConflict: 'url_key' },
-      );
-      if (error) console.warn(`[siteWatch/resultStore] record: ${error.message}`);
-    } else {
-      const all = await readAll();
-      all[result.url] = result;
-      await mkdir(path.dirname(filePath()), { recursive: true });
-      await writeFile(filePath(), JSON.stringify(all), 'utf-8');
-    }
+    const { error } = await supabaseAdmin().from('site_watch_results').upsert(
+      {
+        url_key: result.url,
+        input_url: result.inputUrl,
+        classification: result.classification ?? null,
+        status_code: result.statusCode,
+        response_ms: result.responseMs,
+        ssl_days_remaining: result.sslDaysRemaining,
+        ssl_valid: result.sslValid,
+        domain_days_remaining: result.domainDaysRemaining,
+        checked_at: result.checkedAt,
+      },
+      { onConflict: 'url_key' },
+    );
+    if (error) console.warn(`[siteWatch/resultStore] record: ${error.message}`);
   } catch (err) {
     console.warn(`[siteWatch/resultStore] recordResult failed: ${err}`);
   }
@@ -115,26 +92,12 @@ export async function recordResult(record: SiteCheckRecord): Promise<void> {
 /** Delete the persisted result for a URL (used when a project is deleted). */
 export async function removeResult(url: string): Promise<void> {
   const k = resultKey(url);
-  if (!supabaseEnabled()) {
-    try {
-      const all = await readAll();
-      if (all[k]) {
-        delete all[k];
-        await mkdir(path.dirname(filePath()), { recursive: true });
-        await writeFile(filePath(), JSON.stringify(all), 'utf-8');
-      }
-    } catch (err) {
-      console.warn(`[siteWatch/resultStore] removeResult failed: ${err}`);
-    }
-    return;
-  }
   const { error } = await supabaseAdmin().from('site_watch_results').delete().eq('url_key', k);
   if (error) console.warn(`[siteWatch/resultStore] removeResult: ${error.message}`);
 }
 
 /** All persisted results as a Map keyed by normalized+lowercased URL. */
 export async function loadResults(): Promise<Map<string, SiteWatchResult>> {
-  if (!supabaseEnabled()) return new Map(Object.entries(await readAll()));
   const { data, error } = await supabaseAdmin().from('site_watch_results').select(COLS);
   if (error) {
     console.warn(`[siteWatch/resultStore] loadResults: ${error.message}`);
