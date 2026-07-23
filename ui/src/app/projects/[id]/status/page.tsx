@@ -57,7 +57,9 @@ export default function InternalStatusPage() {
             <p className="text-sm text-slate-500 mt-2">It may have been deleted.</p>
           </div>
         )}
-        {state === 'ready' && data && <StatusView data={data} internal window={win} onWindow={setWin} />}
+        {state === 'ready' && data && (
+          <StatusView data={data} internal window={win} onWindow={setWin} projectId={id} />
+        )}
       </div>
     </main>
   );

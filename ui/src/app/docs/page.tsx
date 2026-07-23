@@ -320,9 +320,39 @@ export default function DocsPage() {
               <Code>form_watch_runs</Code>, <Code>site_watch_runs</Code>, <Code>change_reports</Code>;
               durable per-URL results: <Code>form_watch_results</Code>,{' '}
               <Code>site_watch_results</Code>; daily rollup: <Code>site_watch_daily</Code> (powers the
-              dashboard&apos;s 7d/30d/all-time charts). Confirm the live backend and environment at{' '}
+              dashboard&apos;s 7d/30d/all-time charts); change-tracking runs:{' '}
+              <Code>change_events</Code> (one slim row per snapshot/compare/watch run). Confirm the live backend and environment at{' '}
               <Code>/api/health</Code> (<Code>schema</Code> is <Code>public</Code> in production,{' '}
               <Code>dev</Code> locally). The change-monitor <em>snapshots</em> below remain file-based.
+            </Note>
+            <Note>
+              <strong>Change tracking shows up in Projects.</strong> Every Change Monitor run —{' '}
+              <Code>snapshot</Code>, <Code>compare</Code> and <Code>watch</Code> — is recorded as an
+              event, so a URL you have baselined reads{' '}
+              <em className="text-slate-400">&ldquo;Baseline captured · awaiting first compare&rdquo;</em>{' '}
+              in its project instead of looking untracked. Comparisons then show{' '}
+              <em className="text-slate-400">&ldquo;N changes on M pages&rdquo;</em>, and the internal
+              dashboard carries a full <strong>timeline</strong> of runs over the selected window.
+              Tracking is <strong>site-level</strong> (the crawler walks a whole site from its
+              homepage), so URLs sharing a hostname share one history — the UI labels it{' '}
+              <em className="text-slate-400">site-wide</em>. Content changes are{' '}
+              <strong>internal-only</strong> and never appear on a client&apos;s status page.
+            </Note>
+            <Note>
+              <strong>Seeing what actually changed.</strong> A timeline row that found changes is
+              expandable — click <em className="text-slate-400">&ldquo;what changed?&rdquo;</em> and it loads
+              that run&apos;s page-by-page breakdown (the same view the Change tracking tab shows), so you
+              never have to leave the project to answer &ldquo;84 changes — of what?&rdquo;. The heavy
+              per-page detail is kept for the most recent runs only; older rows stay in the timeline and
+              say the detail is no longer retained. The raw whole-site <em>snapshots</em> remain files on
+              disk — only the diff reports live in Postgres.
+            </Note>
+            <Note>
+              <strong>Your run survives leaving the tab.</strong> A change-tracking run lives outside the
+              page, so switching tabs (or closing the tab, for a watch) never kills it, and the result is
+              still there when you come back. Reloading the page restores it too — including a{' '}
+              <Code>snapshot</Code> baseline, which stores no report and previously vanished on refresh.
+              Only <strong>Clear</strong> wipes the view, and even that leaves the stored data untouched.
             </Note>
             <Note>
               <strong>Environments — one project, two schemas.</strong> Production and local dev share

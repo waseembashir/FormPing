@@ -13,7 +13,26 @@
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
 import { saveReport } from './reportStore';
+import { recordChangeEvent } from './changeEventStore';
 import { siteKey } from './watchRegistry';
+import type { ChangeSeverity } from '@/types';
+
+const SEV_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
+
+/** Highest severity across a report's per-page details, or null if none. */
+function topSeverity(parsed: Record<string, unknown>): ChangeSeverity | null {
+  const details = Array.isArray(parsed.details) ? parsed.details : [];
+  let top: ChangeSeverity | null = null;
+  for (const d of details) {
+    const sev = (d as { severity?: string } | null)?.severity;
+    if (sev && (top === null || (SEV_RANK[sev] ?? -1) > (SEV_RANK[top] ?? -1))) {
+      top = sev as ChangeSeverity;
+    }
+  }
+  return top;
+}
+
+const num = (v: unknown): number => (typeof v === 'number' ? v : 0);
 
 export interface SpawnMonitorOptions {
   url: string;
@@ -92,11 +111,30 @@ export function spawnMonitor(
       try {
         const parsed = JSON.parse(trimmed) as Record<string, unknown>;
         if ('snapshotPath' in parsed) {
+          // A baseline leaves no report — record an EVENT so Projects can show
+          // "baseline captured" instead of looking untracked (FR-21).
+          void recordChangeEvent({
+            site,
+            rootUrl: opts.url,
+            mode: 'snapshot',
+            pagesScanned: num(parsed.pagesScanned),
+          });
           handlers.onSnapshot?.(parsed);
         } else if ('details' in parsed && 'pagesScanned' in parsed) {
           // Persist regardless of whether a handler is attached. Fire-and-
           // forget; failures are logged inside saveReport.
           void saveReport(site, parsed);
+          void recordChangeEvent({
+            site,
+            rootUrl: opts.url,
+            mode: opts.monitorMode === 'watch' ? 'watch' : 'compare',
+            checkedAt: typeof parsed.checkedAt === 'string' ? parsed.checkedAt : undefined,
+            pagesScanned: num(parsed.pagesScanned),
+            pagesChanged: num(parsed.pagesChanged),
+            changesFound: num(parsed.changesFound),
+            severity: topSeverity(parsed),
+            summary: typeof parsed.summary === 'string' ? parsed.summary : null,
+          });
           handlers.onReport?.(parsed);
         }
       } catch {
@@ -123,9 +161,27 @@ export function spawnMonitor(
     if (stdoutBuf.trim()) {
       try {
         const parsed = JSON.parse(stdoutBuf.trim()) as Record<string, unknown>;
-        if ('snapshotPath' in parsed) handlers.onSnapshot?.(parsed);
-        else if ('details' in parsed) {
+        if ('snapshotPath' in parsed) {
+          void recordChangeEvent({
+            site,
+            rootUrl: opts.url,
+            mode: 'snapshot',
+            pagesScanned: num(parsed.pagesScanned),
+          });
+          handlers.onSnapshot?.(parsed);
+        } else if ('details' in parsed) {
           void saveReport(site, parsed);
+          void recordChangeEvent({
+            site,
+            rootUrl: opts.url,
+            mode: opts.monitorMode === 'watch' ? 'watch' : 'compare',
+            checkedAt: typeof parsed.checkedAt === 'string' ? parsed.checkedAt : undefined,
+            pagesScanned: num(parsed.pagesScanned),
+            pagesChanged: num(parsed.pagesChanged),
+            changesFound: num(parsed.changesFound),
+            severity: topSeverity(parsed),
+            summary: typeof parsed.summary === 'string' ? parsed.summary : null,
+          });
           handlers.onReport?.(parsed);
         }
       } catch { /* ignore */ }

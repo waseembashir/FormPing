@@ -14,7 +14,10 @@ import { removeResult as removeFormResult } from '@/lib/formWatch/resultStore';
 import { removeResult as removeSiteResult } from '@/lib/siteWatch/resultStore';
 import { removeDaily } from '@/lib/siteWatch/dailyStore';
 import { removeReports } from '@/lib/reportStore';
-import { siteKey } from '@/lib/watchRegistry';
+import { removeChangeEvents } from '@/lib/changeEventStore';
+import { siteKey, stopWatch } from '@/lib/watchRegistry';
+import { removeActiveWatch } from '@/lib/activeWatchesStore';
+import { removeSnapshotsForHost } from '@/lib/snapshotFiles';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,12 +72,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 }
 
 /**
- * DELETE /api/projects/[id] — remove a project AND cascade everything tied to
- * its URLs: the Form Watch / Site Watch monitors, their durable per-URL results,
- * the last manual Form Tester run, and the per-host Change Monitor reports.
- * Deleting a project = a COMPLETE delete (rule: only a project delete clears
- * results — stopping a single monitor keeps them). Nothing lingers in the
- * Unassigned bucket afterwards; no orphaned schedules, results, or reports.
+ * DELETE /api/projects/[id] — remove a project AND everything tied to it.
+ *
+ * Deleting a project is a COMPLETE delete: no monitoring keeps running and no
+ * data survives. (Rule: ONLY a project delete clears results — stopping a single
+ * monitor keeps them.) An orphan here is not just untidy, it is harmful: a
+ * scheduler left running keeps crawling and submitting forms on a site you no
+ * longer track, burning quota and alerting about a client who isn't in the system.
+ *
+ * The cascade covers, per URL:
+ *   - Form Watch + Site Watch schedules (their run history goes via FK cascade)
+ *   - the durable per-URL results, daily uptime rollups, last manual test
+ * and per HOST:
+ *   - a RUNNING Change Monitor watch subprocess (+ its persisted resume entry)
+ *   - change reports + change events
+ *   - the snapshot FILES on disk
+ *
+ * NOTE: this policy lives in application code, not the database — projects are
+ * linked to monitors by URL string, not a foreign key (deliberately: monitors
+ * can exist without a project, which is what the Unassigned bucket is for). So
+ * deleting a project row directly in the database will NOT run any of this.
+ * Always delete through the app.
  */
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
   const project = await projectStore.get(params.id);
@@ -100,9 +118,18 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     await removeDaily(url); // Site Watch daily rollups
     hosts.add(siteKey(url));
   }
-  // Change Monitor reports are per-host — clear each distinct host once.
-  for (const host of hosts) await removeReports(host);
+
+  // Per-host Change Monitor teardown. Order matters: STOP the watch first, so it
+  // cannot write new events/reports in between and resurrect what we delete.
+  let watchesStopped = 0;
+  for (const host of hosts) {
+    if (stopWatch(host)) watchesStopped++; // kill the running subprocess
+    await removeActiveWatch(host); // and don't let it resume after a redeploy
+    await removeReports(host);
+    await removeChangeEvents(host);
+    await removeSnapshotsForHost(host); // the baseline files on disk
+  }
 
   await projectStore.remove(params.id);
-  return NextResponse.json({ ok: true, monitorsRemoved });
+  return NextResponse.json({ ok: true, monitorsRemoved, watchesStopped });
 }

@@ -134,7 +134,13 @@ export interface ChangeReport {
 }
 
 export interface SnapshotResult {
-  snapshotPath: string;
+  /**
+   * Absolute path of the snapshot file on the SERVER. Optional because the UI no
+   * longer displays it (it's a path inside the container — meaningless to a user)
+   * and because a result rehydrated after a page reload comes from the change
+   * event, which doesn't carry the path. Live runs still emit it.
+   */
+  snapshotPath?: string;
   site: string;
   pagesScanned: number;
 }

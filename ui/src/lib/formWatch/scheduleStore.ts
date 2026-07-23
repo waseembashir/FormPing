@@ -9,10 +9,21 @@
 
 import type { FormSchedule } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
+import { urlKey } from '@/lib/projects/projectStore';
 
-function normKey(url: string): string {
-  return url.trim().replace(/\/+$/, '').toLowerCase();
-}
+/**
+ * Canonical URL match key — delegates to the app-wide `urlKey`, so a schedule is
+ * matched the SAME way Projects matches URLs, including treating `www.` and
+ * non-`www` as the same site.
+ *
+ * This was previously a local trim/lowercase-only key that did NOT strip `www.`,
+ * while Projects did. The consequence: a project holding
+ * `https://www.site.com` could not find a monitor stored as `https://site.com`,
+ * so deleting the project silently left its monitor running (an orphan still
+ * crawling a client's site). Same class of bug as FR-17's urlKey fix — this was
+ * the last place it survived.
+ */
+const normKey = urlKey;
 
 interface FormScheduleRow {
   id: string;

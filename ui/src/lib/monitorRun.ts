@@ -67,6 +67,12 @@ export function isRunning(): boolean {
 export function setReports(reports: ChangeReport[]): void {
   set({ reports });
 }
+/** Restore a baseline result after a page reload (see the monitor page's
+ *  hydration effect). A `snapshot` run stores no report, so without this a
+ *  refresh showed an empty panel for a baseline that was recorded fine. */
+export function setSnapshot(snapshot: SnapshotResult | null): void {
+  set({ snapshot });
+}
 export function setWatchDetached(v: boolean): void {
   set({ watchDetached: v });
 }

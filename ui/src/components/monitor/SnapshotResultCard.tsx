@@ -12,12 +12,15 @@ export function SnapshotResultCard({ result }: { result: SnapshotResult }) {
           <p className="text-xs text-slate-400 mt-1">
             Crawled <strong className="text-slate-200">{result.pagesScanned}</strong> page{result.pagesScanned !== 1 ? 's' : ''} for <strong className="text-slate-200">{result.site}</strong>
           </p>
-          <div className="mt-3 rounded-lg bg-slate-800/60 ring-1 ring-slate-700 px-3 py-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">File</p>
-            <p className="text-xs font-mono text-slate-300 break-all">{result.snapshotPath}</p>
-          </div>
+          {/* The snapshot's absolute path used to be printed here. It is a path
+              INSIDE the server container (e.g. /app/data/snapshots/…) — not
+              openable and meaningless to the user, a leftover from when this
+              tool was file-first. The baseline is now recorded against the
+              project instead, which is the useful signal. */}
           <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-            Run <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">compare</span> later to see what changed since this baseline.
+            This is now the baseline for <strong className="text-slate-300">{result.site}</strong>. Run{' '}
+            <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">compare</span> later to see
+            what changed since it — the project shows it as <em className="text-slate-400">Baseline captured</em>.
           </p>
         </div>
       </div>
