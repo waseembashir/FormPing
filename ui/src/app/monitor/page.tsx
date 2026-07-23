@@ -119,9 +119,12 @@ export default function MonitorPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [watchesRes, reportsRes] = await Promise.all([
+        const [watchesRes, reportsRes, lastEventRes] = await Promise.all([
           fetch('/api/monitor/watches').then((r) => r.json()),
           fetch(`/api/monitor/reports?url=${encodeURIComponent(trimmed)}&limit=1`, { cache: 'no-store' }).then((r) => r.json()),
+          fetch(`/api/monitor/last-event?url=${encodeURIComponent(trimmed)}`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .catch(() => null),
         ]);
         if (cancelled) return;
         const watches = Array.isArray(watchesRes?.watches) ? watchesRes.watches : [];
@@ -132,6 +135,21 @@ export default function MonitorPage() {
           const hydrated: ChangeReport[] = stored.map((r: { report: ChangeReport }) => r.report).filter(Boolean);
           hydrated.reverse();
           monitorRun.setReports(hydrated);
+
+          // A `snapshot` run produces no report, so a page RELOAD used to show an
+          // empty panel even though the baseline was recorded. Restore it from the
+          // change event instead. Only when there is no report to show and nothing
+          // already on screen — never overwrite a live/held result.
+          const ev = lastEventRes?.event as
+            | { mode?: string; site?: string; pagesScanned?: number }
+            | null
+            | undefined;
+          if (hydrated.length === 0 && ev?.mode === 'snapshot' && !monitorRun.getSnapshot().snapshot) {
+            monitorRun.setSnapshot({
+              site: ev.site ?? ourSite,
+              pagesScanned: typeof ev.pagesScanned === 'number' ? ev.pagesScanned : 0,
+            });
+          }
         }
       } catch {
         /* best-effort */
