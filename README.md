@@ -210,6 +210,13 @@ the dual-apply process (each migration is schema-agnostic and runs against BOTH
   UTC day (checks, up/down, response sum+count, SSL min), written by the Site
   Watch ticker each check. Powers the dashboard's **7d / 30d / All-time** uptime
   & response charts truthfully (raw history is capped at 200 rows).
+- **FR-21 (change events)** — `change_events`: one **slim row per Change Monitor
+  run**, for all three modes (`snapshot` | `compare` | `watch`). Deliberately
+  separate from `change_reports`: events are small and kept long (they power the
+  Projects status line + the dashboard timeline), while the heavy `details`
+  payload in `change_reports` is pruned to the recent few. A `snapshot` writes an
+  event but no report — which is how a freshly-baselined URL now shows up in its
+  project instead of looking untracked.
 
 RLS is enabled on every table (the anon key can do nothing; the server's secret
 key bypasses it and has full access).
@@ -221,10 +228,20 @@ can reach a client:
 
 - **Internal dashboard** (`/projects/[id]/status`, auth-gated) — full detail:
   uptime + **response-time** charts, HTTP status, check frequency, domain expiry,
-  form verdict. Built with `buildClientStatus(project, { internal: true })`.
+  form verdict, and the **content-change timeline** (every Change Monitor run in
+  the window). Timeline rows that found changes **expand** to show that run's
+  page-by-page breakdown, fetched on demand from
+  `/api/projects/[id]/changes?site=&at=` (auth-gated). Built with
+  `buildClientStatus(project, { internal: true })`.
 - **Public status page** (`/status/[token]`) — client-safe only: overall status,
   hostname, uptime %, uptime history, SSL validity, contact-form working/not.
-  **No** response times, latency, check frequency, reason codes, or full URLs.
+  **No** response times, latency, check frequency, reason codes, full URLs, or
+  content-change detail.
+
+Content changes are internal-only by design: a diff is a technical QA signal, and
+"84 changes detected" would alarm a client about what is often their own team's
+intentional edits. It is enforced by types — `changes` exists only on
+`InternalStatus`, and the public route returns `ClientStatus`, so it cannot leak.
 
 Both carry a **Today / 7 days / 30 days / All-time** filter (`?window=`).
 
