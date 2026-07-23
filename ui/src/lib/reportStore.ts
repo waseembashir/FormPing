@@ -13,9 +13,19 @@
 
 import { supabaseAdmin } from '@/lib/supabase';
 
-/** How many reports to keep per site (user wants only the most recent visible;
- *  a tiny buffer guards against losing the latest if a write races a prune). */
-const KEEP_REPORTS_PER_SITE = 1;
+/**
+ * How many reports to keep per site.
+ *
+ * Was 1 — only the newest survived, which meant the "on this date, N things
+ * changed" history was deleted on every run and no timeline could be built
+ * (FR-21). Keeping a recent window lets you drill into past comparisons while
+ * the heavy `details` payload still ages out; the slim per-run history lives in
+ * `change_events` (see changeEventStore), which is what the timeline reads.
+ *
+ * Raising this is a RELAXATION — it only ever preserves more rows than before,
+ * so it cannot delete existing data (working-agreement rule 6).
+ */
+const KEEP_REPORTS_PER_SITE = 20;
 
 export interface StoredReport {
   /** ISO timestamp string (the report's checkedAt; used as key + sort). */
