@@ -14,6 +14,7 @@ import { loadResults as loadFormResults, type FormWatchResult } from '@/lib/form
 import { loadResults as loadSiteResults, type SiteWatchResult } from '@/lib/siteWatch/resultStore';
 import { rollupFromHealth } from './rollup';
 import { loadReports } from '@/lib/reportStore';
+import { latestEventsForSites, listTrackedUrls } from '@/lib/changeEventStore';
 import { loadRuns, type OnDemandRun } from '@/lib/onDemandRunStore';
 import { listDismissed } from './dismissedStore';
 import { runVerdict } from '@/lib/formWatch/verdict';
@@ -39,9 +40,11 @@ type FormResultMap = Map<string, FormWatchResult>;
 type SiteResultMap = Map<string, SiteWatchResult>;
 
 interface ChangeSummary {
+  mode?: 'snapshot' | 'compare' | 'watch';
   lastCheckedAt: string | null;
   changesFound: number;
   pagesChanged: number;
+  pagesScanned?: number;
   severity?: ChangeSeverity;
   summary: string;
 }
@@ -123,9 +126,11 @@ function buildHealth(
     const change: UrlHealth['change'] = cs
       ? {
           tracked: true,
+          mode: cs.mode,
           lastCheckedAt: cs.lastCheckedAt,
           changesFound: cs.changesFound,
           pagesChanged: cs.pagesChanged,
+          pagesScanned: cs.pagesScanned,
           severity: cs.severity,
           summary: cs.summary,
         }
@@ -154,12 +159,38 @@ async function loadMaps(): Promise<{ forms: FormMap; sites: SiteMap }> {
   };
 }
 
-/** Newest change report per distinct hostname among the given URLs. */
+/**
+ * Newest change-tracking status per distinct hostname among the given URLs.
+ *
+ * Primary source is the EVENT stream (`change_events`), because it records all
+ * three modes — including a `snapshot` that produces no report, which is why a
+ * freshly-baselined URL used to look untracked in Projects (FR-21).
+ *
+ * Hosts with no event yet FALL BACK to the newest persisted report, so tracking
+ * recorded before the event stream existed never disappears from the UI.
+ */
 async function loadChanges(urls: string[]): Promise<ChangeMap> {
   const hosts = Array.from(new Set(urls.map(hostKey))).filter((h) => h !== 'unknown');
   const map: ChangeMap = new Map();
+  if (hosts.length === 0) return map;
+
+  const events = await latestEventsForSites(hosts);
+  for (const [host, ev] of events) {
+    map.set(host, {
+      mode: ev.mode,
+      lastCheckedAt: ev.checkedAt,
+      changesFound: ev.changesFound,
+      pagesChanged: ev.pagesChanged,
+      pagesScanned: ev.pagesScanned,
+      severity: ev.severity ?? undefined,
+      summary: ev.summary ?? '',
+    });
+  }
+
+  // Legacy fallback: hosts tracked before change_events existed.
+  const missing = hosts.filter((h) => !map.has(h));
   await Promise.all(
-    hosts.map(async (host) => {
+    missing.map(async (host) => {
       const reports = await loadReports(host, 1);
       if (reports.length === 0) return;
       const rep = reports[0]!.report as Partial<ChangeReport> | null;
@@ -173,9 +204,11 @@ async function loadChanges(urls: string[]): Promise<ChangeMap> {
       }
 
       map.set(host, {
+        mode: 'compare', // a stored report always came from a compare/watch run
         lastCheckedAt: typeof rep.checkedAt === 'string' ? rep.checkedAt : reports[0]!.timestamp,
         changesFound: typeof rep.changesFound === 'number' ? rep.changesFound : 0,
         pagesChanged: typeof rep.pagesChanged === 'number' ? rep.pagesChanged : 0,
+        pagesScanned: typeof rep.pagesScanned === 'number' ? rep.pagesScanned : undefined,
         severity,
         summary: typeof rep.summary === 'string' ? rep.summary : '',
       });
@@ -239,13 +272,14 @@ export async function listMonitoredUrls(): Promise<string[]> {
  * explicitly dismissed ("No, don't track"), so a deliberate throwaway stays out.
  */
 export async function listUnassignedUrls(): Promise<string[]> {
-  const [monitored, runs, projects, dismissed, formResults, siteResults] = await Promise.all([
+  const [monitored, runs, projects, dismissed, formResults, siteResults, tracked] = await Promise.all([
     listMonitoredUrls(),
     loadRuns(),
     projectStore.list(),
     listDismissed(),
     loadFormResults(),
     loadSiteResults(),
+    listTrackedUrls(), // Change-tracked URLs (snapshot/compare/watch) — FR-21
   ]);
   const assigned = new Set(projects.flatMap((p) => p.urls).map(key));
   // Union of monitored + manually-tested + persisted-result URLs (the last covers
@@ -258,6 +292,12 @@ export async function listUnassignedUrls(): Promise<string[]> {
   }
   for (const r of [...formResults.values(), ...siteResults.values()]) {
     if (!byKey.has(key(r.inputUrl))) byKey.set(key(r.inputUrl), r.inputUrl);
+  }
+  // Change-tracked URLs count too: running a snapshot/compare on a URL is just
+  // as clear a signal of interest as testing its form, so it must be offerable
+  // to a project rather than vanishing (FR-21).
+  for (const u of tracked) {
+    if (!byKey.has(key(u))) byKey.set(key(u), u);
   }
   return [...byKey.values()].filter((u) => !assigned.has(key(u)) && !dismissed.has(key(u)));
 }

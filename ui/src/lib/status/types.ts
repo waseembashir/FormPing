@@ -87,7 +87,27 @@ export interface ClientStatus {
   sites: StatusSite[];
 }
 
+/**
+ * One change-tracking run, for the internal timeline (FR-21).
+ *
+ * INTERNAL-ONLY, deliberately: content diffs are a technical QA signal, and a
+ * client seeing "84 changes detected" would be alarmed by what is often their
+ * own team's intentional edits. Same contract as response times.
+ */
+export interface ChangePoint {
+  /** Hostname the run covered (change tracking is site-level, not per-URL). */
+  site: string;
+  mode: 'snapshot' | 'compare' | 'watch';
+  checkedAt: string;
+  changesFound: number;
+  pagesChanged: number;
+  severity: 'low' | 'medium' | 'high' | null;
+  summary: string | null;
+}
+
 /** The internal, auth-gated payload — client-safe PLUS team-only context. */
 export interface InternalStatus extends ClientStatus {
   contact?: string | null;
+  /** Change-tracking timeline over the selected window (newest first). */
+  changes?: ChangePoint[];
 }

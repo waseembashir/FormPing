@@ -1,8 +1,11 @@
 'use client';
 
-import type { ClientStatus, OverallStatus, RespPoint, StatusSite, UptimeDay } from '@/lib/status/types';
+import { useState } from 'react';
+import type { ChangePoint, ClientStatus, OverallStatus, RespPoint, StatusSite, UptimeDay } from '@/lib/status/types';
+import type { PageChange } from '@/types';
+import { PageChangeCard } from '@/components/monitor/PageChangeCard';
 
-type StatusData = ClientStatus & { contact?: string | null };
+type StatusData = ClientStatus & { contact?: string | null; changes?: ChangePoint[] };
 
 const WINDOWS = [
   { id: 'today', label: 'Today' },
@@ -247,16 +250,181 @@ function SiteCard({ s, windowDays }: { s: StatusSite; windowDays: number | null 
  * latency + check frequency render ONLY when `tech` is present (internal), so
  * the public view never shows them.
  */
+/**
+ * One run in the change timeline. Expands to show WHAT changed, fetched on
+ * demand from the auth-gated drill-in endpoint so the heavy per-page detail is
+ * never loaded until asked for. Reuses `PageChangeCard` — the same renderer the
+ * Change tracking tab uses — so there is one implementation, not two.
+ */
+function ChangeRow({ c, busiest, projectId }: { c: ChangePoint; busiest: number; projectId?: string }) {
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'gone' | 'error'>('idle');
+  const [details, setDetails] = useState<PageChange[]>([]);
+
+  const tone =
+    c.mode === 'snapshot'
+      ? 'bg-slate-500'
+      : c.changesFound === 0
+        ? 'bg-emerald-500'
+        : c.severity === 'high'
+          ? 'bg-red-500'
+          : c.severity === 'medium'
+            ? 'bg-amber-500'
+            : 'bg-emerald-500';
+  const pct = c.mode === 'snapshot' ? 0 : Math.round((c.changesFound / busiest) * 100);
+  // Only runs that actually found something have detail worth opening.
+  const canExpand = Boolean(projectId) && c.mode !== 'snapshot' && c.changesFound > 0;
+
+  async function toggle() {
+    if (!canExpand) return;
+    const next = !open;
+    setOpen(next);
+    if (!next || state !== 'idle') return;
+    setState('loading');
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/changes?site=${encodeURIComponent(c.site)}&at=${encodeURIComponent(c.checkedAt)}`,
+        { cache: 'no-store' },
+      );
+      const d = await res.json();
+      if (!res.ok) return setState('error');
+      if (!d.found) return setState('gone');
+      setDetails(Array.isArray(d.details) ? d.details : []);
+      setState('ready');
+    } catch {
+      setState('error');
+    }
+  }
+
+  const label =
+    c.mode === 'snapshot'
+      ? 'baseline captured'
+      : c.changesFound === 0
+        ? 'no changes'
+        : `${c.changesFound} change${c.changesFound === 1 ? '' : 's'} on ${c.pagesChanged} page${c.pagesChanged === 1 ? '' : 's'}`;
+
+  return (
+    <li className="rounded-lg ring-1 ring-slate-800/80">
+      <div
+        role={canExpand ? 'button' : undefined}
+        tabIndex={canExpand ? 0 : undefined}
+        onClick={toggle}
+        onKeyDown={(e) => {
+          if (canExpand && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            void toggle();
+          }
+        }}
+        className={`px-3 py-2 ${canExpand ? 'cursor-pointer hover:bg-slate-800/40' : ''}`}
+      >
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${tone}`} />
+          <span className="font-medium text-slate-300">{rel(c.checkedAt)}</span>
+          <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-slate-400">
+            {c.mode}
+          </span>
+          <span className="text-slate-400">{label}</span>
+          {canExpand && (
+            <span className="text-[10px] font-medium text-indigo-400">
+              {open ? '▾ hide detail' : '▸ what changed?'}
+            </span>
+          )}
+          <span className="ml-auto font-mono text-[10px] text-slate-600">{c.site}</span>
+        </div>
+        {pct > 0 && (
+          <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+            <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        {c.summary && <p className="mt-1.5 line-clamp-2 text-[11px] text-slate-500">{c.summary}</p>}
+      </div>
+
+      {open && (
+        <div className="border-t border-slate-800 px-3 py-3">
+          {state === 'loading' && <div className="fp-skeleton h-16 rounded-lg" />}
+          {state === 'error' && <p className="text-[11px] text-red-400">Could not load the detail for this run.</p>}
+          {state === 'gone' && (
+            <p className="text-[11px] text-slate-500">
+              Full detail is no longer kept for this run — only the most recent runs retain their page-by-page
+              breakdown. The run itself stays in the timeline.
+            </p>
+          )}
+          {state === 'ready' &&
+            (details.length === 0 ? (
+              <p className="text-[11px] text-slate-500">No per-page detail was recorded for this run.</p>
+            ) : (
+              <div className="space-y-2">
+                {details.map((d, i) => (
+                  <PageChangeCard key={`${d.url}-${i}`} change={d} />
+                ))}
+              </div>
+            ))}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * Change-tracking timeline — INTERNAL ONLY.
+ *
+ * Content diffs are a technical QA signal (and a client seeing "84 changes"
+ * would be alarmed by what is often their own team's edits), so this is never
+ * rendered on the public status page. Tracking is site-level: the crawler walks
+ * a whole site from its homepage, so rows are per HOST, not per URL.
+ */
+function ChangeTimeline({
+  changes,
+  windowDays,
+  projectId,
+}: {
+  changes: ChangePoint[];
+  windowDays: number | null;
+  projectId?: string;
+}) {
+  const withChanges = changes.filter((c) => c.mode !== 'snapshot');
+  const busiest = Math.max(1, ...withChanges.map((c) => c.changesFound));
+  const totalChanges = withChanges.reduce((n, c) => n + c.changesFound, 0);
+
+  return (
+    <section className="mt-5 rounded-2xl bg-slate-900/60 p-5 ring-1 ring-slate-800">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-200">Content changes</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Tracked per site (whole-site crawl) · {windowLabel(windowDays)}
+          </p>
+        </div>
+        <p className="text-xs text-slate-500">
+          <span className="font-semibold text-slate-300">{changes.length}</span> run
+          {changes.length === 1 ? '' : 's'} ·{' '}
+          <span className="font-semibold text-slate-300">{totalChanges}</span> change
+          {totalChanges === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      <ol className="mt-4 space-y-1.5">
+        {changes.map((c, i) => (
+          <ChangeRow key={`${c.site}-${c.checkedAt}-${i}`} c={c} busiest={busiest} projectId={projectId} />
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export function StatusView({
   data,
   internal = false,
   window,
   onWindow,
+  projectId,
 }: {
   data: StatusData;
   internal?: boolean;
   window?: WindowId;
   onWindow?: (w: WindowId) => void;
+  /** Enables the change-timeline drill-in (internal dashboard only). */
+  projectId?: string;
 }) {
   const o = OVERALL[data.overall];
   const monitors = data.sites.length;
@@ -294,6 +462,11 @@ export function StatusView({
           data.sites.map((s, i) => <SiteCard key={`${s.host}-${i}`} s={s} windowDays={data.windowDays} />)
         )}
       </div>
+
+      {/* Internal-only: never rendered on the public client page. */}
+      {internal && data.changes && data.changes.length > 0 && (
+        <ChangeTimeline changes={data.changes} windowDays={data.windowDays} projectId={projectId} />
+      )}
 
       <p className="mt-6 text-center text-[11px] text-slate-600">Uptime over {windowLabel(data.windowDays)} · updated {rel(data.generatedAt)} · refreshes automatically</p>
     </>

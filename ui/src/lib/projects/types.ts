@@ -61,15 +61,20 @@ export interface UrlHealth {
     lastCheckedAt?: string | null;
   };
   /**
-   * Content-change tracking, from the Change Monitor. Tracking is per-hostname
-   * (the monitor crawls a whole site), so URLs sharing a host share this. Reads
-   * the newest persisted report; undefined when the host has never been monitored.
+   * Content-change tracking, from the Change Monitor. Tracking is per-HOSTNAME
+   * (the monitor crawls a whole site from its homepage), so URLs sharing a host
+   * share this — the UI labels it as site-level. Reads the newest change EVENT,
+   * which covers all three modes including a `snapshot` that produced no report.
+   * Undefined when the host has never been tracked.
    */
   change?: {
     tracked: boolean;
+    /** How the most recent run was performed. */
+    mode?: 'snapshot' | 'compare' | 'watch';
     lastCheckedAt?: string | null;
     changesFound?: number;
     pagesChanged?: number;
+    pagesScanned?: number;
     severity?: 'low' | 'medium' | 'high';
     summary?: string;
   };

@@ -298,21 +298,36 @@ export function UrlHealthDetail({ h }: { h: UrlHealth }) {
         )}
       </div>
 
-      {/* Change Monitor */}
-      {h.change?.tracked && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-          <SourceTag label="Change Monitor" />
-          <StatusDot tone={changeTone} pulse={false} />
-          <span className="font-medium text-slate-300">Content changes</span>
-          <span className={TONE_TEXT[changeTone]}>
-            —{' '}
-            {changeCount
-              ? `${changeCount} change${changeCount === 1 ? '' : 's'} on ${h.change.pagesChanged} page${h.change.pagesChanged === 1 ? '' : 's'}`
-              : 'no changes last check'}
-          </span>
-          <span className="text-slate-600">· {rel(h.change.lastCheckedAt)}</span>
-        </div>
-      )}
+      {/* Change Monitor — tracked per SITE (hostname), so URLs sharing a host
+          share this line. Always rendered, like Form/Site Watch above, so an
+          untracked URL reads as "not set up" rather than silently missing. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+        <SourceTag label="Change Monitor" dim={!h.change?.tracked} />
+        {!h.change?.tracked ? (
+          <span className="text-slate-600">Content changes · not set up</span>
+        ) : h.change.mode === 'snapshot' ? (
+          <>
+            <StatusDot tone="slate" pulse={false} />
+            <span className="font-medium text-slate-300">Baseline captured</span>
+            <span className="text-slate-500">— awaiting first compare</span>
+            <span className="text-slate-600">· site-wide · {rel(h.change.lastCheckedAt)}</span>
+          </>
+        ) : (
+          <>
+            <StatusDot tone={changeTone} pulse={h.change.mode === 'watch'} />
+            <span className="font-medium text-slate-300">Content changes</span>
+            <span className={TONE_TEXT[changeTone]}>
+              —{' '}
+              {changeCount
+                ? `${changeCount} change${changeCount === 1 ? '' : 's'} on ${h.change.pagesChanged} page${h.change.pagesChanged === 1 ? '' : 's'}`
+                : 'no changes last check'}
+            </span>
+            <span className="text-slate-600">
+              · site-wide{h.change.mode === 'watch' ? ' · watching' : ''} · {rel(h.change.lastCheckedAt)}
+            </span>
+          </>
+        )}
+      </div>
 
       {/* Form Tester */}
       {h.lastRun && (
