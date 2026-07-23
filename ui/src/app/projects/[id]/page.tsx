@@ -177,9 +177,20 @@ export default function ProjectDetailPage() {
         confirmLabel="Delete project"
         message={
           <>
-            Deletes <strong className="text-slate-300">{project.name}</strong> and everything for its {count} URL{count === 1 ? '' : 's'} —
-            its monitors, their results, and change reports. Unlike stopping a single test, this{' '}
-            <strong className="text-slate-300">does remove the results from Projects</strong>. <strong className="text-red-300">Can&apos;t be undone.</strong>
+            Deletes <strong className="text-slate-300">{project.name}</strong> and everything for its {count} URL
+            {count === 1 ? '' : 's'}:
+            <ul className="mt-2 space-y-1 list-disc pl-5 text-slate-400">
+              <li>
+                <strong className="text-slate-300">Stops</strong> its Form Watch, Site Watch and any running change watch
+              </li>
+              <li>Deletes their run history, last results and uptime history</li>
+              <li>Deletes change tracking — reports, timeline and saved snapshots</li>
+            </ul>
+            <span className="mt-2 block">
+              Unlike stopping a single test, this{' '}
+              <strong className="text-slate-300">does remove the results from Projects</strong>.{' '}
+              <strong className="text-red-300">Can&apos;t be undone.</strong>
+            </span>
           </>
         }
         onConfirm={doDelete}

@@ -8,10 +8,16 @@
 
 import type { SiteSchedule, UptimeClass } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
+import { urlKey } from '@/lib/projects/projectStore';
 
-function normKey(url: string): string {
-  return url.trim().replace(/\/+$/, '').toLowerCase();
-}
+/**
+ * Canonical URL match key — delegates to the app-wide `urlKey`, so a schedule is
+ * matched the SAME way Projects matches URLs, including treating `www.` and
+ * non-`www` as the same site. See the note in formWatch/scheduleStore: a local
+ * key that ignored `www.` meant a project delete could silently miss its monitor
+ * and leave it running.
+ */
+const normKey = urlKey;
 
 interface SiteScheduleRow {
   id: string;
