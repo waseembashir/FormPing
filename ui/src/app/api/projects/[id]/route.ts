@@ -15,6 +15,7 @@ import { removeResult as removeSiteResult } from '@/lib/siteWatch/resultStore';
 import { removeDaily } from '@/lib/siteWatch/dailyStore';
 import { removeReports } from '@/lib/reportStore';
 import { removeChangeEvents } from '@/lib/changeEventStore';
+import { removeAlertsForSite } from '@/lib/alerts/store';
 import { siteKey, stopWatch } from '@/lib/watchRegistry';
 import { removeActiveWatch } from '@/lib/activeWatchesStore';
 import { removeSnapshotsForHost } from '@/lib/snapshotFiles';
@@ -127,6 +128,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     await removeActiveWatch(host); // and don't let it resume after a redeploy
     await removeReports(host);
     await removeChangeEvents(host);
+    await removeAlertsForSite(host); // the alert delivery log
     await removeSnapshotsForHost(host); // the baseline files on disk
   }
 
