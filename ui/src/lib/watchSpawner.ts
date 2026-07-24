@@ -15,6 +15,9 @@ import path from 'path';
 import { saveReport } from './reportStore';
 import { recordChangeEvent } from './changeEventStore';
 import { siteKey } from './watchRegistry';
+import { dispatchAlert } from './alerts/dispatch';
+import { detailPathFor } from './alerts/link';
+import type { AlertSeverity } from './alerts/types';
 import type { ChangeSeverity } from '@/types';
 
 const SEV_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
@@ -33,6 +36,49 @@ function topSeverity(parsed: Record<string, unknown>): ChangeSeverity | null {
 }
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : 0);
+
+/**
+ * Raise the change alert for a finished compare/watch run.
+ *
+ * This lives here, not in the engine, because the engine is a separate CLI
+ * subprocess with no database access. It used to POST to Slack itself with no
+ * coordination; routing it through the shared dispatcher means change alerts are
+ * deduped, rate-limited and logged alongside Form Watch and Site Watch.
+ *
+ * Only fires when something actually changed — a clean compare is not news.
+ */
+async function alertOnChanges(site: string, rootUrl: string, parsed: Record<string, unknown>): Promise<void> {
+  const changesFound = num(parsed.changesFound);
+  if (changesFound <= 0) return;
+
+  const pagesChanged = num(parsed.pagesChanged);
+  const top = topSeverity(parsed);
+  const severity: AlertSeverity = top === 'high' ? 'critical' : top === 'medium' ? 'warning' : 'info';
+  const checkedAt = typeof parsed.checkedAt === 'string' ? parsed.checkedAt : new Date().toISOString();
+  const changeWord = changesFound === 1 ? 'change' : 'changes';
+  const pageWord = pagesChanged === 1 ? 'page' : 'pages';
+
+  await dispatchAlert(
+    {
+      kind: 'change',
+      event: 'changes_detected',
+      severity,
+      title: `${changesFound} ${changeWord} detected on ${site}`,
+      summary: typeof parsed.summary === 'string' ? parsed.summary : undefined,
+      site,
+      url: rootUrl,
+      dedupeKey: `change:${site}:${checkedAt}`,
+      occurredAt: checkedAt,
+    },
+    {
+      // The old message dropped everything past the first few changes with a bare
+      // "+39 more". Now we state the real total and link to the view that shows
+      // all of it, so nothing is silently lost.
+      moreNote: `${changesFound} ${changeWord} across ${pagesChanged} ${pageWord}`,
+      detailPath: await detailPathFor('change', rootUrl),
+    },
+  );
+}
 
 export interface SpawnMonitorOptions {
   url: string;
@@ -135,6 +181,8 @@ export function spawnMonitor(
             severity: topSeverity(parsed),
             summary: typeof parsed.summary === 'string' ? parsed.summary : null,
           });
+          void alertOnChanges(site, opts.url, parsed);
+
           handlers.onReport?.(parsed);
         }
       } catch {
@@ -182,6 +230,8 @@ export function spawnMonitor(
             severity: topSeverity(parsed),
             summary: typeof parsed.summary === 'string' ? parsed.summary : null,
           });
+          void alertOnChanges(site, opts.url, parsed);
+
           handlers.onReport?.(parsed);
         }
       } catch { /* ignore */ }

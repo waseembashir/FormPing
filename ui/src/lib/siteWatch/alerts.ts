@@ -8,8 +8,8 @@
  *   - Ongoing: DOWN (after 2 consecutive fails — flap protection) and RECOVERED
  *     ("all good again"); SSL warnings once per threshold (30/14/7/expired).
  *
- * Styling uses Slack attachments with a `color` bar (green / amber / red) plus
- * Block Kit blocks. Reuses SLACK_WEBHOOK_URL. Best-effort — never throws.
+ * Delivery goes through the shared alert dispatcher (deduped, rate-limited,
+ * backed off on 429, logged). Best-effort — never throws.
  *
  * Cadence is change-based, not every cycle — checks run every few minutes, so
  * a ping per check would be spam. The "all fine" signal is the baseline +
@@ -17,6 +17,9 @@
  */
 
 import type { SiteSchedule, SiteCheckRecord } from './types';
+import { dispatchAlert } from '@/lib/alerts/dispatch';
+import { detailPathFor } from '@/lib/alerts/link';
+import type { AlertSeverity } from '@/lib/alerts/types';
 
 export interface AlertStatePatch {
   consecutiveDown: number;
@@ -67,55 +70,49 @@ function domainText(record: SiteCheckRecord): string {
     : `${d.daysRemaining} day${d.daysRemaining === 1 ? '' : 's'} left (expires ${expiry})`;
 }
 
-/** Build + post one styled alert (attachment with a colored bar). Best-effort. */
+/**
+ * Hand one alert to the shared dispatcher. Best-effort — never throws.
+ *
+ * This used to POST straight to the Slack webhook itself. It now goes through
+ * `dispatchAlert`, so it is deduped, rate-limited, backed off on 429 and logged
+ * like every other alert. The DECISIONS about when to alert (the state machine
+ * in `evaluateAndAlert` below — consecutive-down counting, threshold buckets)
+ * are deliberately unchanged: this function only changes delivery.
+ *
+ * `headerEmoji` is retained on the signature so call sites stay untouched; the
+ * dispatcher now picks the emoji from `severity`.
+ */
 async function postAlert(opts: {
   color: string;
   headerEmoji: string;
   headerText: string;
+  /** Machine-readable event name for the alert log + dedupe key. */
+  event: string;
   record: SiteCheckRecord;
   suggestions?: string[];
 }): Promise<void> {
-  const webhook = process.env.SLACK_WEBHOOK_URL;
-  if (!webhook) return;
+  const { color, headerText, event, record, suggestions } = opts;
+  const severity: AlertSeverity =
+    color === COLOR.red ? 'critical' : color === COLOR.amber ? 'warning' : 'info';
 
-  const { color, headerEmoji, headerText, record, suggestions } = opts;
-  const blocks: Array<Record<string, unknown>> = [
-    { type: 'header', text: { type: 'plain_text', text: `${headerEmoji} ${headerText}`, emoji: true } },
+  await dispatchAlert(
     {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text:
-          `*URL:* <${record.url}|${record.url}>\n` +
-          `*Status:* ${statusText(record)}\n` +
-          `*Response time:* ${record.uptime.responseMs} ms\n` +
-          `*SSL certificate:* ${sslText(record)}\n` +
-          `*Domain registration:* ${domainText(record)}`,
-      },
+      kind: 'site',
+      event,
+      severity,
+      title: headerText,
+      summary:
+        `${statusText(record)} · ${record.uptime.responseMs} ms · ` +
+        `SSL ${sslText(record)} · Domain ${domainText(record)}`,
+      site: record.host,
+      url: record.url,
+      suggestions,
+      // One occurrence == this event for this schedule at this check time.
+      dedupeKey: `site:${event}:${record.scheduleId}:${record.checkedAt}`,
+      occurredAt: record.checkedAt,
     },
-  ];
-
-  if (suggestions && suggestions.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*Suggestions:*\n${suggestions.map((s) => `• ${s}`).join('\n')}` },
-    });
-  }
-
-  blocks.push({
-    type: 'context',
-    elements: [{ type: 'mrkdwn', text: `Checked at ${record.checkedAt}` }],
-  });
-
-  try {
-    await fetch(webhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ attachments: [{ color, blocks }] }),
-    });
-  } catch (err) {
-    console.warn(`[siteWatch/alerts] Slack post failed: ${err}`);
-  }
+    { detailPath: await detailPathFor('site', record.url) },
+  );
 }
 
 /** Suggestions for an outage, tuned to the kind of failure. */
@@ -186,6 +183,7 @@ export async function evaluateAndAlert(
         color: COLOR.green,
         headerEmoji: '✅',
         headerText: `Monitoring started — ${record.host} is healthy`,
+        event: 'monitoring_started',
         record,
         suggestions: ['We’ll alert you here if it goes down or the SSL certificate nears expiry.'],
       });
@@ -194,6 +192,7 @@ export async function evaluateAndAlert(
         color: COLOR.red,
         headerEmoji: '🔴',
         headerText: `Monitoring started — ${record.host} is DOWN`,
+        event: 'monitoring_started_down',
         record,
         suggestions: downSuggestions(record),
       });
@@ -209,6 +208,7 @@ export async function evaluateAndAlert(
         headerEmoji: sslDays <= 0 ? '🔴' : '⚠️',
         headerText:
           sslDays <= 0 ? `SSL EXPIRED — ${record.host}` : `SSL expiring soon — ${record.host}`,
+        event: 'ssl_expiring',
         record,
         suggestions: sslSuggestions(sslDays, sslExpiry),
       });
@@ -221,6 +221,7 @@ export async function evaluateAndAlert(
         headerEmoji: domainDays <= 0 ? '🔴' : '⚠️',
         headerText:
           domainDays <= 0 ? `Domain EXPIRED — ${record.host}` : `Domain expiring soon — ${record.host}`,
+        event: 'domain_expiring',
         record,
         suggestions: domainSuggestions(domainDays, domainExpiry),
       });
@@ -236,6 +237,7 @@ export async function evaluateAndAlert(
         color: COLOR.red,
         headerEmoji: '🔴',
         headerText: `Site DOWN — ${record.host}`,
+        event: 'down',
         record,
         suggestions: downSuggestions(record),
       });
@@ -247,6 +249,7 @@ export async function evaluateAndAlert(
         color: COLOR.green,
         headerEmoji: '✅',
         headerText: `Site back UP — ${record.host}`,
+        event: 'recovered',
         record,
         suggestions: ['Recovered. Confirm the root cause so it doesn’t recur.'],
       });
@@ -267,6 +270,7 @@ export async function evaluateAndAlert(
           headerEmoji: sslDays <= 0 ? '🔴' : '⚠️',
           headerText:
             sslDays <= 0 ? `SSL EXPIRED — ${record.host}` : `SSL expiring soon — ${record.host}`,
+          event: 'ssl_expiring',
           record,
           suggestions: sslSuggestions(sslDays, sslExpiry),
         });
@@ -287,6 +291,7 @@ export async function evaluateAndAlert(
           headerEmoji: domainDays <= 0 ? '🔴' : '⚠️',
           headerText:
             domainDays <= 0 ? `Domain EXPIRED — ${record.host}` : `Domain expiring soon — ${record.host}`,
+          event: 'domain_expiring',
           record,
           suggestions: domainSuggestions(domainDays, domainExpiry),
         });
