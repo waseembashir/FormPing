@@ -210,6 +210,11 @@ the dual-apply process (each migration is schema-agnostic and runs against BOTH
   UTC day (checks, up/down, response sum+count, SSL min), written by the Site
   Watch ticker each check. Powers the dashboard's **7d / 30d / All-time** uptime
   & response charts truthfully (raw history is capped at 200 rows).
+- **FR-22 (alerts)** — `alerts`: the alert **delivery log**. Plumbing, not a
+  feature — nothing in the UI reads it. It exists so the dispatcher can dedupe
+  across restarts (unique `dedupe_key`) and answer "why didn't I get an alert for
+  X?" (`delivery`). The alert's full detail is deliberately *not* copied here —
+  it already lives in `change_reports` / the run-history tables.
 - **FR-21 (change events)** — `change_events`: one **slim row per Change Monitor
   run**, for all three modes (`snapshot` | `compare` | `watch`). Deliberately
   separate from `change_reports`: events are small and kept long (they power the
@@ -258,6 +263,35 @@ One webhook serves all three. Set it in `ui/.env.local` locally, or the Railway
 service variables in production. Leave it unset to disable: runs still execute
 and are stored — the Slack send is just skipped. Notifications are best-effort,
 so a Slack outage or a bad webhook never breaks a monitor.
+
+**Alerts are INTERNAL-ONLY.** They carry full technical detail (reason codes,
+full URLs, what changed) and go to your team — never to a client. A client's view
+is the status page, which is curated separately.
+
+#### How alerting works
+
+Every alert — from all three tools — goes through **one dispatcher**
+(`ui/src/lib/alerts/`). Previously each tool POSTed to the webhook on its own,
+which meant no rate limiting, no dedupe and no retry; three tickers firing at
+once risked getting the webhook throttled or disabled. Now:
+
+- **Logged first.** Each alert is written to the `alerts` table before anything
+  is sent. That row is the record of *what was sent and how it went* — it exists
+  so a missing alert is diagnosable, not so you can browse it (there is no
+  inbox UI; the detail already lives in the dashboards).
+- **Deduped across restarts.** `dedupe_key` is unique per occurrence, so a retry
+  — or a watch that resumes after a redeploy — cannot ping you twice.
+- **Sent safely.** Sends are serialised and spaced ~1s apart per channel, honour
+  `429`/`Retry-After` with exponential backoff, and a circuit breaker rests a
+  channel after repeated failures.
+- **Slack stays small on purpose** — a headline, the URL, a few next steps, and
+  a **link to the full detail** in the app. The old behaviour trimmed a big
+  change report to a handful of lines and appended `+39 more`, silently dropping
+  the rest; now the message states the real total and links to the project
+  dashboard, whose change timeline expands to show every change.
+
+The Change Monitor's alert is raised by the UI (`watchSpawner`), not the CLI —
+the engine is a pure producer that detects changes and reports them.
 
 ### Data lifecycle — what deleting actually deletes
 

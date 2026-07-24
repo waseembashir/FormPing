@@ -4,7 +4,6 @@ import type { ChangeReport, MonitorOptions, SiteSnapshot } from './types.js';
 import { snapshotSite } from './snapshotSite.js';
 import { diffSnapshots, totalChanges } from './diffEngine.js';
 import { summarizeChanges } from './summarizeChanges.js';
-import { sendSlackChangeNotification } from '../notifications/slack.js';
 import { normalizeUrl } from '../utils/url.js';
 import { logger } from '../utils/logger.js';
 import { readdir, readFile } from 'fs/promises';
@@ -125,11 +124,13 @@ export async function runCompare(
     hashStatus,
   };
 
-  // Fire Slack notification if SLACK_WEBHOOK_URL is set and any changes
-  // were detected. No-op otherwise. Errors are logged but never thrown so
-  // a misconfigured webhook can't break the monitor loop.
-  await sendSlackChangeNotification(report);
-
+  // NOTE: this used to POST to Slack from here. Alerting now happens in the UI
+  // process (lib/watchSpawner), which receives this report on stdout and hands
+  // it to the shared alert dispatcher — so change alerts are deduped,
+  // rate-limited and logged alongside Form Watch and Site Watch instead of this
+  // subprocess sending on its own with no coordination.
+  //
+  // The engine stays a pure producer: it detects changes and reports them.
   return report;
 }
 

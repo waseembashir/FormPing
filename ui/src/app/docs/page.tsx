@@ -812,6 +812,24 @@ export default function DocsPage() {
               </LI>
             </UL>
 
+            <Note>
+              <strong>How alerting works (all three tools).</strong> Every alert goes through one
+              dispatcher. Each is <strong>logged before it is sent</strong>, so a missing alert is
+              diagnosable; <strong>deduped</strong> by a per-occurrence key, so a retry — or a watch
+              resuming after a redeploy — can&apos;t ping you twice; and sent <strong>safely</strong>:
+              serialised and spaced ~1s apart, backing off on <Code>429</Code>, with a circuit breaker
+              that rests a channel after repeated failures. Slack&apos;s incoming webhooks allow roughly
+              one message per second and can be disabled if abused, which is what these protect.
+            </Note>
+            <Note>
+              <strong>Slack is a ping, not the record.</strong> A message carries the headline, the URL
+              and a few next steps, then <strong>links to the full detail in the app</strong>. A big
+              change report used to be trimmed to a few lines with <Code>+39 more</Code> appended —
+              silently dropping the rest. Now the message states the real total and links to the
+              project dashboard, whose change timeline expands to show every change. Alerts are{' '}
+              <strong>internal-only</strong> and never sent to a client.
+            </Note>
+
             <P>
               Storage — Supabase (Postgres): schedules live in{' '}
               <Code>form_watch_schedules</Code> and each run in <Code>form_watch_runs</Code>{' '}
