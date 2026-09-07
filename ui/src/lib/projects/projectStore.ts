@@ -22,9 +22,9 @@ export interface ProjectStore {
   ): Promise<Project | null>;
   remove(id: string): Promise<boolean>;
   /** Generate (or regenerate) the public status-page token; returns the updated project. */
-  enableShare(id: string): Promise<Project | null>;
+  enableShare(id: string, updatedBy?: string | null): Promise<Project | null>;
   /** Revoke the public status-page token (sets it to null). */
-  disableShare(id: string): Promise<Project | null>;
+  disableShare(id: string, updatedBy?: string | null): Promise<Project | null>;
   /** Find a project by its public status-page token (constant-token match). */
   findByToken(token: string): Promise<Project | null>;
 }
@@ -191,7 +191,14 @@ export const projectStore: ProjectStore = {
     // Nothing actually changed → don't touch updated_at/updated_by.
     if (Object.keys(upd).length === 0) return this.get(id);
     // A real field changed → stamp who did it (attribution, FR-30).
-    if (updatedBy !== undefined) upd.updated_by = updatedBy;
+    //
+    // Only when we actually KNOW who. `actorName()` returns null for an
+    // unidentified write (an expired session, or local open-gate dev), and
+    // writing that null erased the previous editor's name — an anonymous edit
+    // didn't just fail to record itself, it destroyed the record that was
+    // there. The event log is the real history now; this column stays the
+    // at-a-glance summary and keeps its last known value. FR-66.
+    if (updatedBy) upd.updated_by = updatedBy;
     const { data, error } = await supabaseAdmin()
       .from('projects')
       .update(upd)
@@ -214,10 +221,16 @@ export const projectStore: ProjectStore = {
     return (data?.length ?? 0) > 0;
   },
 
-  async enableShare(id) {
+  async enableShare(id, updatedBy) {
+    // Sharing a project with a client is a real change to it, so it stamps who
+    // did it like every other mutation. It used to set the token alone, which
+    // left the trigger bumping `updated_at` while `updated_by` still named the
+    // PREVIOUS editor — crediting the change to the wrong person. FR-66.
+    const upd: Record<string, unknown> = { share_token: newShareToken() };
+    if (updatedBy) upd.updated_by = updatedBy;
     const { data, error } = await supabaseAdmin()
       .from('projects')
-      .update({ share_token: newShareToken() })
+      .update(upd)
       .eq('id', id)
       .select(PROJECT_COLS)
       .maybeSingle();
@@ -228,10 +241,12 @@ export const projectStore: ProjectStore = {
     return data ? toProject(data as ProjectRow) : null;
   },
 
-  async disableShare(id) {
+  async disableShare(id, updatedBy) {
+    const upd: Record<string, unknown> = { share_token: null };
+    if (updatedBy) upd.updated_by = updatedBy;
     const { data, error } = await supabaseAdmin()
       .from('projects')
-      .update({ share_token: null })
+      .update(upd)
       .eq('id', id)
       .select(PROJECT_COLS)
       .maybeSingle();
