@@ -460,12 +460,12 @@ function FormRunDetails({ form }: { form: NonNullable<NonNullable<StatusSite['te
         </p>
       )}
 
-      {/* The detail below comes from the last full Form Tester run, which for a
-          MONITORED url is usually a different moment than the monitor's last
-          check shown above. Say which, rather than let it read as one event. FR-73. */}
-      {d && form.detailRanAt && form.lastRunAt && form.detailRanAt !== form.lastRunAt && (
+      {/* Say WHICH run the detail below describes. A URL can carry both a manual
+          Form Tester run and a monitor's last check; we show whichever is newer,
+          and naming it stops the panel reading as one merged event. FR-67. */}
+      {d && form.detailRanAt && form.detailRanAt !== form.lastRunAt && (
         <p className="text-xs text-ink-faint">
-          Detail below is from the last full Form Tester run · {rel(form.detailRanAt)}
+          Detail below is from {form.detailSource === 'monitor' ? 'the monitor’s last check' : 'the last full Form Tester run'} · {rel(form.detailRanAt)}
         </p>
       )}
 
@@ -668,7 +668,21 @@ function SiteCard({
               ) : ssl ? (
                 <div className="flex items-baseline justify-between gap-3"><span className="text-ink-faint">SSL certificate</span><span className={`font-medium ${ssl.valid ? 'text-ok' : 'text-danger'}`}>{ssl.valid ? 'valid' : 'expired'}</span></div>
               ) : null}
+              {/* Who issued it, and the registrar behind the domain. The check
+                  reads both on every run; until FR-67 the panel showed only a
+                  day count, which tells you WHEN to worry but never who to ask. */}
+              {internal && tech?.check?.sslIssuer && (
+                <Detail k="Issued by" v={<span className="truncate" title={tech.check.sslIssuer}>{tech.check.sslIssuer}</span>} />
+              )}
               {internal && tech?.domainDaysRemaining != null && <ExpiryRow label="Domain registration" days={tech.domainDaysRemaining} valid={tech.domainDaysRemaining > 0} />}
+              {internal && tech?.check?.domainRegistrar && (
+                <Detail k="Registrar" v={<span className="truncate" title={tech.check.domainRegistrar}>{tech.check.domainRegistrar}</span>} />
+              )}
+              {internal && (tech?.check?.sslError || tech?.check?.domainError) && (
+                <p className="pt-1 text-[11px] leading-relaxed text-warn">
+                  {tech.check.sslError ?? tech.check.domainError}
+                </p>
+              )}
             </div>
           </Panel>
         )}
@@ -683,6 +697,13 @@ function SiteCard({
               <Detail k="Checked every" v={cadence(tech.intervalMs) ?? '—'} />
               {tech.form && <Detail k="Form test" v={`${modeLabel(tech.form.mode)}${tech.form.label ? ` · ${tech.form.label}` : ''}`} />}
             </div>
+            {/* Why a failing check failed. The reason was measured and thrown
+                away, leaving a red status with no explanation. FR-67. */}
+            {tech.check?.uptimeError && (
+              <p className="mt-2 border-t border-line pt-2 text-[11px] leading-relaxed text-danger">
+                <span className="font-semibold">Last error:</span> {tech.check.uptimeError}
+              </p>
+            )}
           </Panel>
         )}
 
@@ -848,6 +869,20 @@ function ChangeBlock({
     sev.low ? `${sev.low} low` : null,
   ].filter(Boolean);
 
+  // Baselines vs comparisons. "7 runs" alone can't tell you whether this URL has
+  // ever actually been COMPARED against anything — a site that only ever took
+  // snapshots has never been checked for changes, and read as healthy. Each run
+  // has always carried its mode; nothing was showing it. FR-67.
+  const snapshots = changes.filter((c) => c.mode === 'snapshot').length;
+  const compares = changes.filter((c) => c.mode === 'compare').length;
+  const watches = changes.filter((c) => c.mode === 'watch').length;
+  const runParts = [
+    snapshots ? `${snapshots} baseline${snapshots === 1 ? '' : 's'}` : null,
+    compares ? `${compares} comparison${compares === 1 ? '' : 's'}` : null,
+    watches ? `${watches} watch check${watches === 1 ? '' : 's'}` : null,
+  ].filter(Boolean);
+  const neverCompared = changes.length > 0 && compares + watches === 0;
+
   return (
     <div className="rounded-xl bg-ground/40 p-4 ring-1 ring-line sm:col-span-2">
       <button
@@ -876,9 +911,18 @@ function ChangeBlock({
         </div>
       </button>
 
+      {/* What those runs WERE — baselines captured vs actual comparisons. */}
+      {runParts.length > 0 && (
+        <p className="mt-2 text-[11px] text-ink-faint">{runParts.join(' · ')}</p>
+      )}
+
       {/* One-line insight — stays visible even when collapsed. */}
       <p className="mt-2 text-[11px] text-ink-muted">
-        {totalChanges === 0 ? (
+        {neverCompared ? (
+          <span className="text-warn">
+            Baseline only — this site has been snapshotted but never compared, so nothing has been checked for changes yet.
+          </span>
+        ) : totalChanges === 0 ? (
           'Stable — no changes detected across the window.'
         ) : (
           <>
