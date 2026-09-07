@@ -15,6 +15,7 @@ import { listSchedules as listSiteSchedules } from '@/lib/siteWatch/scheduleStor
 import { loadDaily, type SiteDaily } from '@/lib/siteWatch/dailyStore';
 import { urlKey as key } from '@/lib/projects/projectStore';
 import type { ClientStatus, OverallStatus, RespPoint, SiteUp, StatusSite, UptimeDay } from './types';
+import { pickDetailSource } from './detailSource';
 
 const DAY = 86_400_000;
 
@@ -155,23 +156,37 @@ function formWorking(h: UrlHealth, internal: boolean): boolean | null {
 
 /** Internal `tech.form` block from whichever form signal exists (monitor or manual run). */
 function formTech(h: UrlHealth): Pick<NonNullable<StatusSite['tech']>, 'form'> | Record<string, never> {
-  // The last full Form Tester run's rich facts (FR-67). Attached WHETHER OR NOT
-  // the URL also has a scheduled monitor.
-  //
-  // This used to live only in the unmonitored branch, so adding a Form Scheduler
-  // monitor to a URL silently STRIPPED its dashboard back to one line — the
-  // richest page in the app got poorer the more you monitored the URL, which is
-  // exactly backwards. Monitoring state and test detail are different facts; the
-  // page shows both. FR-73.
+  // A URL can carry TWO accounts of its form: a manual Form Tester run, and a
+  // Form Scheduler monitor's last check. Both come from the same engine, so
+  // rather than privileging one, show whichever ran MOST RECENTLY and say which
+  // it was — a panel that silently mixes two moments is how a dashboard starts
+  // disagreeing with the tab it came from. FR-67.
   const run = h.lastRun;
-  const runDetail = run
+  const monitorDetail = h.form.detail;
+
+  const source = pickDetailSource({
+    hasMonitorDetail: Boolean(monitorDetail),
+    hasRunDetail: Boolean(run?.detail),
+    monitorAt: h.form.lastRunAt,
+    runAt: run?.ranAt,
+  });
+
+  const detailPart = source === 'monitor'
     ? {
-        reasonCode: run.reasonCode ?? null,
-        durationMs: run.durationMs ?? null,
-        detail: run.detail,
-        detailRanAt: run.ranAt ?? null,
+        detail: monitorDetail,
+        detailRanAt: h.form.lastRunAt ?? null,
+        detailSource: 'monitor' as const,
+        reasonCode: h.form.reasonCode ?? null,
       }
-    : {};
+    : run
+      ? {
+          detail: run.detail,
+          detailRanAt: run.ranAt ?? null,
+          detailSource: 'tester' as const,
+          reasonCode: run.reasonCode ?? null,
+          durationMs: run.durationMs ?? null,
+        }
+      : {};
 
   if (h.form.monitored || h.form.stopped) {
     return {
@@ -180,7 +195,7 @@ function formTech(h: UrlHealth): Pick<NonNullable<StatusSite['tech']>, 'form'> |
         level: h.form.level ?? null,
         label: h.form.label ?? null,
         lastRunAt: h.form.lastRunAt ?? null,
-        ...runDetail,
+        ...detailPart,
       },
     };
   }
@@ -191,7 +206,7 @@ function formTech(h: UrlHealth): Pick<NonNullable<StatusSite['tech']>, 'form'> |
         level: null,
         label: null,
         lastRunAt: run.ranAt ?? null,
-        ...runDetail,
+        ...detailPart,
       },
     };
   }
@@ -296,6 +311,8 @@ export async function buildClientStatus(
           avgResponsePrevMs: hasPrev ? avgResp(prev!) : null,
           responseTrend,
           intervalMs: sched?.intervalMs ?? null,
+          // What the last check learned about the certificate + domain. FR-67.
+          ...(h.site.detail ? { check: h.site.detail } : {}),
           ...formTech(h),
         };
       }

@@ -87,10 +87,23 @@ function buildHealth(
         mode: fs.mode,
         intervalMs: fs.intervalMs,
         lastRunAt: fs.lastRunAt,
+        // The schedule row carries the verdict; the durable result row carries
+        // what the check actually found. Both describe the same monitor. FR-67.
+        ...(fr?.detail ? { detail: fr.detail } : {}),
       };
     } else if (fr) {
       const v = runVerdict(fr.reasonCode, fr.formFound, fr.status === 'error' ? 'error' : undefined);
-      form = { monitored: false, stopped: true, level: v.level, reasonCode: fr.reasonCode, label: v.label, mode: fr.mode, lastRunAt: fr.ranAt };
+      form = {
+        monitored: false,
+        stopped: true,
+        level: v.level,
+        reasonCode: fr.reasonCode,
+        label: v.label,
+        mode: fr.mode,
+        lastRunAt: fr.ranAt,
+        // A stopped monitor keeps its last result, detail included. FR-67.
+        ...(fr.detail ? { detail: fr.detail } : {}),
+      };
     } else {
       form = { monitored: false };
     }
@@ -107,6 +120,9 @@ function buildHealth(
         domainDaysRemaining: ss.lastDomainDaysRemaining ?? null,
         intervalMs: ss.intervalMs,
         lastCheckedAt: ss.lastCheckedAt,
+        // The schedule row holds the numbers; the durable result row holds what
+        // the check learned about the certificate and the domain. FR-67.
+        ...(sr?.detail ? { detail: sr.detail } : {}),
       };
     } else if (sr) {
       site = {
@@ -118,6 +134,8 @@ function buildHealth(
         sslDaysRemaining: sr.sslDaysRemaining,
         domainDaysRemaining: sr.domainDaysRemaining,
         lastCheckedAt: sr.checkedAt,
+        // A stopped monitor keeps its last result, findings included. FR-67.
+        ...(sr.detail ? { detail: sr.detail } : {}),
       };
     } else {
       site = { monitored: false };

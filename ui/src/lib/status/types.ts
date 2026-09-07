@@ -9,6 +9,7 @@
  */
 
 import type { FormRunDetail } from '../formRunDetail';
+import type { SiteCheckDetail } from '../siteWatch/resultStore';
 
 export type OverallStatus = 'operational' | 'degraded' | 'down';
 export type SiteUp = 'up' | 'down' | 'blocked' | 'unknown';
@@ -52,6 +53,10 @@ export interface SiteTech {
   responseTrend: RespPoint[];
   /** How often this site is checked, in ms. */
   intervalMs: number | null;
+  /** FR-67 — what the uptime check learned beyond the day counts: the
+   *  certificate's issuer and expiry date, the domain's registrar and expiry,
+   *  and why a failing check failed. Internal-only, like the rest of `tech`. */
+  check?: SiteCheckDetail;
   /** Contact-form monitor detail, when this URL has Form Watch. */
   form?: {
     mode: string | null;
@@ -70,6 +75,9 @@ export interface SiteTech {
      *  full Form Tester run — often a different moment. Captioned rather than
      *  quietly presented under the wrong timestamp. FR-73. */
     detailRanAt?: string | null;
+    /** Which tool produced `detail` — the manual Form Tester, or the scheduled
+     *  monitor. A URL can have both; the newer one is shown, and named. FR-67. */
+    detailSource?: 'tester' | 'monitor';
   };
 }
 

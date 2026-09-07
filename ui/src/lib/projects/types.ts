@@ -6,6 +6,7 @@
  */
 
 import type { FormRunDetail } from '../formRunDetail';
+import type { SiteCheckDetail } from '../siteWatch/resultStore';
 
 export interface Project {
   id: string;
@@ -53,6 +54,11 @@ export interface UrlHealth {
     /** Check cadence, in ms. */
     intervalMs?: number;
     lastRunAt?: string | null;
+    /** FR-67 — what the monitor's last check actually found: which form, its
+     *  type, fields, confidence, and the other forms on the site. The scheduler
+     *  runs the same engine as the manual tester, so its dashboard shows the
+     *  same depth. Absent for checks recorded before the column existed. */
+    detail?: FormRunDetail;
   };
   /** Uptime + SSL, from Site Watch (if this URL is monitored there). */
   site: {
@@ -68,6 +74,10 @@ export interface UrlHealth {
     /** Check cadence, in ms. */
     intervalMs?: number;
     lastCheckedAt?: string | null;
+    /** FR-67 — who issued the certificate and when it expires, who the domain is
+     *  registered with and when that lapses, and why a failing check failed.
+     *  Measured on every check; previously discarded. */
+    detail?: SiteCheckDetail;
   };
   /**
    * Content-change tracking, from the Change Monitor. Tracking is per-HOSTNAME
