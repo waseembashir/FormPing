@@ -232,6 +232,13 @@ export default function ProjectDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canEdit && <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
+          {/* Owners and admins only — the log records what colleagues have done
+              on this project, so it sits with team administration. FR-66. */}
+          {canRole(me.role, 'admin') && (
+            <Link href={`/projects/${project.id}/log`}>
+              <Button variant="secondary">Log</Button>
+            </Link>
+          )}
           {canDelete && (
             <Button variant="secondary" onClick={() => setConfirmDelete(true)} className="hover:border-danger/60 hover:text-danger">Delete</Button>
           )}
