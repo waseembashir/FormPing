@@ -18,6 +18,7 @@ import type { FormSchedule, FormRunRecord, FormRunStatus } from './types';
 import { listSchedules, upsertSchedule } from './scheduleStore';
 import { appendRun } from './historyStore';
 import { recordResult } from './resultStore';
+import { hostFormShots } from '@/lib/formShots';
 import { runFormTest, type RawSiteResult } from './runner';
 import { onRunComplete } from './notify';
 
@@ -123,9 +124,20 @@ function errorRecord(schedule: FormSchedule, ranAt: string, reason: string): For
 async function runScheduleOnce(schedule: FormSchedule): Promise<FormRunRecord> {
   const ranAt = new Date().toISOString();
   let record: FormRunRecord;
+  // The raw engine result, kept so the durable per-URL row can store the SAME
+  // rich detail a manual test does. The scheduler runs the identical engine;
+  // only its storage was thinner. FR-67.
+  let raw: RawSiteResult | null = null;
 
   try {
-    const raw = await runFormTest(schedule.url, schedule.mode, schedule.landingPage ?? false);
+    raw = await runFormTest(schedule.url, schedule.mode, schedule.landingPage ?? false);
+    if (raw) {
+      // Screenshots arrive as inline `data:` URLs. Host them before anything is
+      // stored, exactly as /api/run does — base64 in a database row would bloat
+      // every read of it. Bounded: images are keyed per URL and replaced, so a
+      // monitor checking every 3 days does not accumulate them. FR-73.
+      await hostFormShots(raw);
+    }
     record = raw
       ? toRecord(schedule, raw, ranAt)
       : errorRecord(schedule, ranAt, 'Form test produced no result (timeout or spawn failure)');
@@ -144,7 +156,7 @@ async function runScheduleOnce(schedule: FormSchedule): Promise<FormRunRecord> {
   await appendRun(record);
   // Durable per-URL result (survives stopping/deleting this monitor; only a
   // project delete clears it). See formWatch/resultStore.
-  await recordResult(record);
+  await recordResult(record, raw);
 
   // Reschedule from now so intervals don't drift if a run was slow.
   const now = Date.now();

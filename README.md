@@ -120,7 +120,7 @@ Counts and claims are scoped to the form itself: a **CAPTCHA is only reported on
 - **`MULTI_STEP_FORM_DETECTED`** — a multi-step ("Next"-style wizard) contact form was found but couldn't be filled this run (its steps/fields weren't reachable). Detected, not broken. When the wizard *can* be walked, the run reports `SAFE_MODE_NO_SUBMIT` (safe) or a submit outcome (live) instead.
 - **`SUBMIT_HELD_INCOMPLETE`** — a multi-step form was filled through its steps, but the Live submission was deliberately held because the run didn't cleanly reach the final step or fill an email.
 
-The same facts, in the same words, appear on the Form Tester result card, each Form Scheduler run, and the per-URL dashboard — one engine, one story.
+The same facts, in the same words, appear on the Form Tester result card, each Form Scheduler run, and the per-URL dashboard — one engine, one story. A scheduled check stores exactly what a manual test stores, so watching a URL makes its dashboard richer, never thinner; when a URL has both, the page shows the more recent one and says which it was.
 
 ---
 

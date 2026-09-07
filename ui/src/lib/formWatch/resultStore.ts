@@ -15,6 +15,7 @@
 import type { FormRunRecord, FormRunStatus } from './types';
 import { urlKey as resultKey } from '@/lib/projects/projectStore';
 import { supabaseAdmin } from '@/lib/supabase';
+import { extractFormRunDetail, type FormRunDetail } from '@/lib/formRunDetail';
 
 export interface FormWatchResult {
   /** Normalized + lowercased URL — the map key (matches health.ts key()). */
@@ -27,6 +28,10 @@ export interface FormWatchResult {
   mode: string;
   /** ISO timestamp of the run that produced this result. */
   ranAt: string;
+  /** FR-67 — everything the engine found on this check, so the per-URL dashboard
+   *  can show a scheduled run in the same depth as a manual one. Absent on rows
+   *  written before the column existed. */
+  detail?: FormRunDetail;
 }
 
 interface FormResultRow {
@@ -37,8 +42,10 @@ interface FormResultRow {
   form_found: boolean;
   mode: string | null;
   ran_at: string;
+  detail?: FormRunDetail | null;
 }
-const COLS = 'url_key, input_url, status, reason_code, form_found, mode, ran_at';
+const BASE_COLS = 'url_key, input_url, status, reason_code, form_found, mode, ran_at';
+const COLS = `${BASE_COLS}, detail`;
 
 function rowToResult(r: FormResultRow): FormWatchResult {
   return {
@@ -49,11 +56,12 @@ function rowToResult(r: FormResultRow): FormWatchResult {
     formFound: r.form_found ?? false,
     mode: r.mode ?? '',
     ranAt: r.ran_at,
+    ...(r.detail ? { detail: r.detail } : {}),
   };
 }
 
 /** Record the latest scheduled form result for a URL (upsert, last-write-wins). */
-export async function recordResult(record: FormRunRecord): Promise<void> {
+export async function recordResult(record: FormRunRecord, raw?: unknown): Promise<void> {
   try {
     const result: FormWatchResult = {
       url: resultKey(record.url),
@@ -64,19 +72,33 @@ export async function recordResult(record: FormRunRecord): Promise<void> {
       mode: record.mode || '',
       ranAt: record.ranAt,
     };
-    const { error } = await supabaseAdmin().from('form_watch_results').upsert(
-      {
-        url_key: result.url,
-        input_url: result.inputUrl,
-        status: result.status,
-        reason_code: result.reasonCode || null,
-        form_found: result.formFound,
-        mode: result.mode || null,
-        ran_at: result.ranAt,
-      },
-      { onConflict: 'url_key' },
-    );
-    if (error) console.warn(`[formWatch/resultStore] record: ${error.message}`);
+    const baseRow = {
+      url_key: result.url,
+      input_url: result.inputUrl,
+      status: result.status,
+      reason_code: result.reasonCode || null,
+      form_found: result.formFound,
+      mode: result.mode || null,
+      ran_at: result.ranAt,
+    };
+
+    // FR-67 — the same rich detail a manual Form Tester run stores, built by the
+    // same extractor from the same engine output. Without it, adding a monitor
+    // to a URL left its dashboard showing one line no matter how many checks had
+    // run, while a one-off test of the same page showed everything.
+    const detail = raw ? extractFormRunDetail(raw) : null;
+
+    const { error } = await supabaseAdmin()
+      .from('form_watch_results')
+      .upsert({ ...baseRow, detail }, { onConflict: 'url_key' });
+    if (error) {
+      // `detail` is missing until migration 0013 is applied — retry without it,
+      // so a check still records its result rather than being lost to a column.
+      const { error: retry } = await supabaseAdmin()
+        .from('form_watch_results')
+        .upsert(baseRow, { onConflict: 'url_key' });
+      if (retry) console.warn(`[formWatch/resultStore] record: ${retry.message}`);
+    }
   } catch (err) {
     console.warn(`[formWatch/resultStore] recordResult failed: ${err}`);
   }
@@ -92,9 +114,15 @@ export async function removeResult(url: string): Promise<void> {
 /** All persisted results as a Map keyed by normalized+lowercased URL. */
 export async function loadResults(): Promise<Map<string, FormWatchResult>> {
   const { data, error } = await supabaseAdmin().from('form_watch_results').select(COLS);
-  if (error) {
-    console.warn(`[formWatch/resultStore] loadResults: ${error.message}`);
+  if (!error) {
+    return new Map((data as FormResultRow[]).map((r) => [r.url_key, rowToResult(r)]));
+  }
+  // Pre-migration-0013 databases have no `detail` column. Fall back to the thin
+  // columns rather than losing every monitor's result over one missing field.
+  const { data: base, error: baseErr } = await supabaseAdmin().from('form_watch_results').select(BASE_COLS);
+  if (baseErr) {
+    console.warn(`[formWatch/resultStore] loadResults: ${baseErr.message}`);
     return new Map();
   }
-  return new Map((data as FormResultRow[]).map((r) => [r.url_key, rowToResult(r)]));
+  return new Map((base as FormResultRow[]).map((r) => [r.url_key, rowToResult(r)]));
 }
