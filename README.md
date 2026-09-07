@@ -58,7 +58,7 @@ The app is organized around **Projects** (a client and their URLs), with two too
 | **Contact Forms** | **Form Tester** — run an on-demand test against a URL. On a whole-site run it finds *every* form across the site and reports them form-by-form (summary + a tab per form), each with a screenshot of the form it matched; results persist across refreshes. **Form Scheduler** — recurring form tests with alerts when a form changes or breaks. |
 | **Site Health** | **Uptime & SSL** — availability plus certificate and domain expiry monitoring. **Content Changes** — track content, SEO, form and script changes over time, with an optional AI summary of each diff. |
 | **Status pages** | A live, client-safe health page per client (and per single URL), shareable with no login. An internal, richer version is available to the team. |
-| **Team** | Manage who can do what (roles), and triage bug reports submitted from within the app. |
+| **Team** | Manage who can do what (roles), and triage bug reports submitted from within the app. Every project keeps an **activity log** — who opened it, who added or removed a URL, who shared it, and when — readable by owners and admins. |
 
 Every action that changes or removes data is confirmed first, and the copy always makes clear what will happen — especially whether a form test will actually **submit**.
 
