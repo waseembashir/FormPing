@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectStore, urlKey } from '@/lib/projects/projectStore';
+import { recordEvent } from '@/lib/projects/eventStore';
 import { projectOwningUrl } from '@/lib/projects/urlOwnership';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { requireRole, currentUser } from '@/lib/auth/authorize';
@@ -57,9 +58,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // Dedup on the canonical key so re-adding the same URL in different casing is
   // still a no-op (a case-sensitive compare here silently created duplicates).
   const exists = project.urls.some((u) => urlKey(u) === urlKey(url));
+  const actor = await actorName(request);
   const updated = exists
     ? project
-    : await projectStore.update(params.id, { urls: [...project.urls, url] }, await actorName(request));
+    : await projectStore.update(params.id, { urls: [...project.urls, url] }, actor);
+  // Only a real addition is an event — re-adding an existing URL is a no-op and
+  // logging it would fill the history with actions nobody took. FR-66.
+  if (!exists) await recordEvent(params.id, actor, 'url_added', url);
 
   // Adding a URL to a project is the opposite of "don't track" — so clear any
   // lingering dismissal for it. Without this a URL could be both in a project

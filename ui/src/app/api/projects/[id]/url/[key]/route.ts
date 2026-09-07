@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectStore, projectForUrlKey, matchKey } from '@/lib/projects/projectStore';
+import { recordEvent } from '@/lib/projects/eventStore';
 import { hostUsedByOtherProject } from '@/lib/projects/hostUsage';
 import { buildClientStatus, parseWindow } from '@/lib/status/build';
 import { loadChangeEvents, removeChangeEvents } from '@/lib/changeEventStore';
@@ -131,11 +132,14 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   // If that was the project's ONLY URL, the project is now empty and useless —
   // remove it too (its data is already purged above). Otherwise just drop the URL.
   let projectDeleted = false;
+  const actor = await actorName(request);
   if (remaining.length === 0) {
+    // The project goes with its last URL; its log cascades away with it.
     await projectStore.remove(params.id);
     projectDeleted = true;
   } else {
-    await projectStore.update(params.id, { urls: remaining }, await actorName(request));
+    await projectStore.update(params.id, { urls: remaining }, actor);
+    await recordEvent(params.id, actor, 'url_removed', url);
   }
 
   return NextResponse.json({ ok: true, hostPurged, projectDeleted });

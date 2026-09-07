@@ -4,6 +4,7 @@ import { hostsUsedByOtherProjects } from '@/lib/projects/hostUsage';
 import { firstUrlOwnedElsewhere, firstDuplicatePage } from '@/lib/projects/urlOwnership';
 import { removeUrlShareByKey } from '@/lib/projects/urlShareStore';
 import { requireRole, currentUser } from '@/lib/auth/authorize';
+import { recordEvent } from '@/lib/projects/eventStore';
 import { atLeast } from '@/lib/auth/roles';
 import { getUserName } from '@/lib/auth/userStore';
 import { urlHealthFor } from '@/lib/projects/health';
@@ -48,9 +49,14 @@ async function actorName(request: NextRequest): Promise<string | null> {
 }
 
 /** GET /api/projects/[id] — the project plus per-URL health (form + uptime/SSL). */
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const project = await projectStore.get(params.id);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+  // Record that someone opened this project. Deduped to once per person per
+  // hour inside the store — without that, revisiting a project a few times
+  // would bury every real edit under a wall of "viewed" rows. Fire-and-forget:
+  // reading a project must never fail because its log could not be written. FR-66.
+  void recordEvent(params.id, await actorName(request), 'viewed');
   const health = await urlHealthFor(project.urls);
   return NextResponse.json({ project: { ...project, health } });
 }
@@ -155,8 +161,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       (patch.urls.length !== before.urls.length || patch.urls.some((u, i) => u !== before.urls[i])));
   if (!changed) return NextResponse.json({ project: before });
 
-  const updated = await projectStore.update(params.id, patch, await actorName(request));
+  const actor = await actorName(request);
+  const updated = await projectStore.update(params.id, patch, actor);
   if (!updated) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+
+  // Log WHAT changed, not just "edited". One save can rename a project and add
+  // two URLs; a single "updated" row would tell the reader nothing they can act
+  // on. Compared against `before`, so a field submitted unchanged is not logged. FR-66.
+  if (patch.name !== undefined && norm(patch.name) !== norm(before.name)) {
+    await recordEvent(params.id, actor, 'renamed', patch.name.trim());
+  }
+  if (patch.notes !== undefined && norm(patch.notes) !== norm(before.notes)) {
+    await recordEvent(params.id, actor, 'notes_changed');
+  }
+  if (patch.contact !== undefined && norm(patch.contact) !== norm(before.contact)) {
+    await recordEvent(params.id, actor, 'contact_changed');
+  }
+  if (patch.urls !== undefined) {
+    const beforeKeys = new Map(before.urls.map((u) => [matchKey(u), u]));
+    const afterKeys = new Map(patch.urls.map((u) => [matchKey(u), u]));
+    for (const [k, u] of afterKeys) if (!beforeKeys.has(k)) await recordEvent(params.id, actor, 'url_added', u);
+    for (const [k, u] of beforeKeys) if (!afterKeys.has(k)) await recordEvent(params.id, actor, 'url_removed', u);
+  }
 
   // A URL removed from the project must not keep a live public share link
   // (FR-27). Revoke the per-URL token for every URL that left. Best-effort.

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectStore } from '@/lib/projects/projectStore';
+import { recordEvent } from '@/lib/projects/eventStore';
 import { firstUrlOwnedElsewhere, firstDuplicatePage } from '@/lib/projects/urlOwnership';
 import { rollupsForUrlSets, listUnassignedUrls } from '@/lib/projects/health';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
@@ -112,6 +113,9 @@ export async function POST(request: NextRequest) {
   const contact = typeof body.contact === 'string' ? body.contact : undefined;
   const createdBy = await actorName(request);
   const project = await projectStore.create({ name, urls, notes, contact, createdBy });
+  // Open the project's log with the action that started it. FR-66.
+  await recordEvent(project.id, createdBy, 'created', project.name);
+  for (const u of project.urls) await recordEvent(project.id, createdBy, 'url_added', u);
 
   // Any URL grouped under a client is being tracked — clear a stale "don't track"
   // dismissal so the two states can't contradict. Best-effort per URL.
