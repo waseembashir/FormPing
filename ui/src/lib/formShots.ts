@@ -30,7 +30,11 @@
  * migration — the service-role key the app already holds is enough.
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+// Bare specifier, not `node:crypto` — the rest of the app imports node builtins
+// this way, and webpack's `node:` protocol handling breaks the moment a module
+// is reachable from more than one entry point (this file is now pulled in by the
+// Form Watch ticker as well as /api/run). FR-67.
+import { createHash, randomUUID } from 'crypto';
 import { supabaseAdmin, supabaseEnabled, supabaseSchema } from './supabase';
 import { urlKey } from './projects/projectStore';
 

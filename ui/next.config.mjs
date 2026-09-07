@@ -9,15 +9,18 @@ const nextConfig = {
     instrumentationHook: true,
   },
   webpack: (config, { isServer, nextRuntime }) => {
-    // instrumentation.ts pulls in watchResume → watchSpawner → child_process.
+    // instrumentation.ts pulls in watchResume → watchSpawner → child_process,
+    // and (since FR-67) the Form Watch ticker → formShots → crypto.
+    // Anything a module reachable from instrumentation imports must be listed.
     // In Next.js 14.x the instrumentation hook is also compiled for Edge,
-    // which doesn't have child_process. Stub Node built-ins as `false` so
+    // which has neither. Stub these Node built-ins as `false` so
     // webpack doesn't fail trying to resolve them — the runtime check in
     // instrumentation.ts already prevents execution outside Node.
     if (!isServer || nextRuntime === 'edge') {
       config.resolve.fallback = {
         ...(config.resolve.fallback ?? {}),
         child_process: false,
+        crypto: false,
         fs: false,
         'fs/promises': false,
         path: false,
