@@ -14,10 +14,13 @@ export default function FormWatchPage() {
   const [loading, setLoading] = useState(true);
 
   const [url, setUrl] = useState('');
-  const [days, setDays] = useState(3);
-  // Default to Safe — Live submits a real message on EVERY scheduled run, which
-  // is a dangerous default. The user opts into Live deliberately. FR-64.
-  const [mode, setMode] = useState<FormWatchMode>('safe');
+  // Daily by default — a form that breaks is found within a day rather than
+  // three. FR-81.
+  const [days, setDays] = useState(1);
+  // Default to Detect — the least intrusive check there is: it confirms the form
+  // is still there and fills nothing. Safe fills on every run, and Live submits a
+  // real message on every run; both are deliberate opt-ins. FR-64/FR-81.
+  const [mode, setMode] = useState<FormWatchMode>('detect-only');
   const [landingPage, setLandingPage] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);

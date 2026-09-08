@@ -134,7 +134,14 @@ export function FormTesterReport({
         <div className="flex flex-wrap items-center gap-2">
           <StatPill count={forms.length} label={forms.length === 1 ? 'form found' : 'forms found'} color="bg-accent/10 text-accent-soft" />
           <StatPill count={leadForms.length} label={leadForms.length === 1 ? 'lead form' : 'lead forms'} color="bg-ground text-ink-secondary" />
-          <StatPill count={pagesWithForms} label={pagesWithForms === 1 ? 'page' : 'pages'} color="bg-ground text-ink-secondary" />
+          {/* "pages WITH FORMS", not "pages crawled" — a bare "3 pages" beside a
+              form badged "seen on 5 pages" reads as a contradiction when the two
+              are simply counting different things. FR-81. */}
+          <StatPill
+            count={pagesWithForms}
+            label={pagesWithForms === 1 ? 'page with forms' : 'pages with forms'}
+            color="bg-ground text-ink-secondary"
+          />
           {noUtmLeads > 0 && <StatPill count={noUtmLeads} label={noUtmLeads === 1 ? 'form without UTM' : 'forms without UTM'} color="bg-warn/10 text-warn" />}
         </div>
 

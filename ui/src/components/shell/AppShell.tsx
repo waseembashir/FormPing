@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
+import { BackgroundRunToast } from './BackgroundRunToast';
 import { BrandMark } from './BrandMark';
 import { Footer } from '@/components/Footer';
 import { BugReportModal } from '@/components/BugReportModal';
@@ -64,6 +65,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
+      {/* A run keeps going when you leave the tab that started it — say so, once,
+          on the way out. Mounted at the shell so it survives route changes. FR-81. */}
+      <BackgroundRunToast />
+
       {/* Desktop rail — fixed to the left edge; width animates on collapse. */}
       <Sidebar
         collapsed={collapsed}

@@ -170,3 +170,44 @@ export async function captureFormShot(page: Page, formIndex: number): Promise<st
     await handle?.dispose().catch(() => { /* ignore */ });
   }
 }
+
+/**
+ * Photograph an EMBEDDED form — a provider's iframe or injected container.
+ *
+ * `captureFormShot` finds its target by `<form>` index, and an embed is not a
+ * `<form>`: it is an iframe or a div the provider fills in. So a genuine
+ * Typeform or HubSpot embed came back with no evidence at all — the one case
+ * where a user most needs to see what we mean, since they cannot inspect a
+ * cross-origin form themselves. FR-81.
+ *
+ * Takes the first selector that matches something with a real size, so a
+ * provider's hidden fallback markup doesn't win over its visible embed.
+ */
+export async function captureEmbedShot(page: Page, selectors: string[]): Promise<string | null> {
+  for (const selector of selectors) {
+    try {
+      const el = page.locator(selector).first();
+      if ((await el.count()) === 0) continue;
+
+      const box = await el.boundingBox({ timeout: 1500 });
+      if (!box || box.width < MIN_WIDTH || box.height < MIN_HEIGHT) continue;
+
+      await el.scrollIntoViewIfNeeded({ timeout: 1500 }).catch(() => { /* bounded */ });
+      await page.waitForTimeout(200);
+
+      const buf = await el.screenshot({
+        type: 'jpeg',
+        quality: QUALITY,
+        timeout: CAPTURE_TIMEOUT,
+        animations: 'disabled',
+        caret: 'hide',
+      });
+      if (buf.byteLength > MAX_BYTES) continue;
+      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    } catch {
+      // Try the next selector — a provider may match several, and only one of
+      // them is the rendered form.
+    }
+  }
+  return null;
+}

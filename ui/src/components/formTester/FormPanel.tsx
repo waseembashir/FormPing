@@ -173,7 +173,9 @@ export function FormPanel({
             <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} aria-hidden>
               <circle cx="10" cy="10" r="7.5" /><path strokeLinecap="round" d="M2.5 10h15M10 2.5c2.2 2.6 2.2 12.4 0 15M10 2.5c-2.2 2.6-2.2 12.4 0 15" />
             </svg>
-            Global{form.seenOn > 1 ? ` · on all ${form.seenOn} pages` : ''} · site header / footer
+            {/* "seen on N pages" — we crawl a bounded sample of the site, so we
+                can say where we FOUND it, never that it is on every page. FR-81. */}
+            Global{form.seenOn > 1 ? ` · seen on ${form.seenOn} pages` : ''} · site header / footer
           </span>
         )}
         {categoryChip && <CategoryChip text={categoryChip} />}

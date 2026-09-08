@@ -21,6 +21,7 @@ import { filterPromptable } from '@/lib/projects/membershipClient';
 
 const STORAGE_KEY_RESULTS = 'fp:tester:results';
 const STORAGE_KEY_LOGS = 'fp:tester:logs';
+const STORAGE_KEY_MODE = 'fp:tester:mode';
 
 export interface TesterRunState {
   results: SiteResult[];
@@ -29,9 +30,16 @@ export interface TesterRunState {
   logs: string[];
   /** URLs to prompt "add to a project?" for once a run completes. */
   pendingAssign: string[];
+  /**
+   * The mode the results on screen were produced in — persisted with them so a
+   * refresh doesn't leave a Safe-mode result sitting under a Detect selector.
+   * `null` once there are no results, which returns the picker to its default.
+   * FR-81.
+   */
+  mode: RunConfig['mode'] | null;
 }
 
-const EMPTY: TesterRunState = { results: [], running: false, progress: null, logs: [], pendingAssign: [] };
+const EMPTY: TesterRunState = { results: [], running: false, progress: null, logs: [], pendingAssign: [], mode: null };
 
 let state: TesterRunState = EMPTY;
 let hydrated = false;
@@ -95,6 +103,8 @@ function persist(): void {
     }
     if (state.logs.length) window.localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(state.logs));
     else window.localStorage.removeItem(STORAGE_KEY_LOGS);
+    if (state.mode) window.localStorage.setItem(STORAGE_KEY_MODE, state.mode);
+    else window.localStorage.removeItem(STORAGE_KEY_MODE);
   } catch {
     /* quota/private-mode — the run still works, we just don't cache it */
   }
@@ -107,12 +117,16 @@ export function hydrate(): void {
   try {
     const r = window.localStorage.getItem(STORAGE_KEY_RESULTS);
     const l = window.localStorage.getItem(STORAGE_KEY_LOGS);
+    const m = window.localStorage.getItem(STORAGE_KEY_MODE);
     const results = r ? (JSON.parse(r) as SiteResult[]) : [];
     const logs = l ? (JSON.parse(l) as string[]) : [];
+    const mode = m === 'safe' || m === 'live' || m === 'detect-only' ? m : null;
     state = {
       ...state,
       results: Array.isArray(results) ? results : [],
       logs: Array.isArray(logs) ? logs : [],
+      // Only meaningful while there's something on screen to describe.
+      mode: (Array.isArray(results) && results.length) || (Array.isArray(logs) && logs.length) ? mode : null,
     };
     // Restored straight from storage, so it's already written — don't rewrite it.
     persistedResults = state.results;
@@ -136,7 +150,7 @@ export function getServerSnapshot(): TesterRunState {
 
 /** Clear the on-screen view (never touches the server-side stored result). */
 export function clear(): void {
-  set({ results: [], logs: [], progress: null });
+  set({ results: [], logs: [], progress: null, mode: null });
   flushPersist(); // clearing must reach storage immediately, not in 400ms
 }
 
@@ -163,6 +177,7 @@ export async function startRun(urls: string[], config: RunConfig): Promise<void>
     results: [],
     logs: [],
     running: true,
+    mode: config.mode,
     progress: { current: 0, total: urls.length, currentUrl: urls[0]! },
     pendingAssign: [],
   });

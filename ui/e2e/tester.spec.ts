@@ -11,14 +11,14 @@ test.describe('Form Tester command bar', () => {
     await page.goto('/');
     await expect(page.getByRole('button', { name: 'Run test' })).toBeVisible();
     await expectModeButtons(page);
-    // Default is Safe → its note; landing OFF → whole-site helper.
-    await expectVisibleText(page, 'Safe mode —', 'We search the whole site to find the contact form');
+    // Default is Detect → its note; landing OFF → whole-site helper.
+    await expectVisibleText(page, 'Detect mode —', 'We search the whole site to find the contact form');
   });
 
   test('mode note switches when a different mode is picked', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Detect', exact: true }).click();
-    await expectVisibleText(page, 'Detect mode —');
+    await page.getByRole('button', { name: 'Safe', exact: true }).click();
+    await expectVisibleText(page, 'Safe mode —');
   });
 
   test('landing-page toggle swaps the helper copy', async ({ page }) => {

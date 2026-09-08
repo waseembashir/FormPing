@@ -149,14 +149,92 @@ export async function extractForms(page: Page): Promise<FormInfo[]> {
         if (!anchorId && node !== form && node.id) anchorId = node.id;
         node = node.parentElement;
       }
-      // Nearest heading that appears BEFORE the form in document order.
+      // What the form is CALLED.
+      //
+      // Preferred: the nearest heading INSIDE one of the form's own ancestors —
+      // i.e. the heading that structurally belongs to this form's section. That
+      // is the same heading the screenshot frames when it climbs to a container,
+      // so the title on the card and the title in the picture agree.
+      //
+      // The old rule took the nearest heading preceding the form in DOCUMENT
+      // ORDER, which can belong to an entirely different section further up the
+      // page. On a real site that printed "Enter Your Details" above a
+      // screenshot of a form headed "Inquire for Pricing". FR-81.
       let heading = '';
-      const heads = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6'));
-      for (let hi = heads.length - 1; hi >= 0; hi--) {
-        // DOCUMENT_POSITION_PRECEDING === 2: the heading comes before the form.
-        if (form.compareDocumentPosition(heads[hi]!) & 2) {
-          heading = (heads[hi]!.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
-          if (heading) break;
+
+      // NOTE: the text extraction below is repeated inline rather than pulled
+      // into a helper. A named function declared inside page.evaluate is wrapped
+      // by esbuild's keep-names as `__name(fn, "fn")`, and `__name` does not
+      // exist in the browser — the whole evaluate throws
+      // "ReferenceError: __name is not defined" and the run fails outright. The
+      // comment on extractForms says this; I added a `headingText` helper here
+      // anyway and broke every run until it came back. Keep it inline. FR-81.
+
+      // FIRST: a heading INSIDE the form. Many designs put the form's own title
+      // in the card with the fields ("Inquire for Pricing"), and that is the most
+      // reliable name there is — it cannot belong to another section. The
+      // ancestor rule alone missed it entirely, because a heading inside the form
+      // does not PRECEDE the form, and then settled on a heading from a different
+      // section further up the page. FR-81.
+      //
+      // Not just h1–h6: form builders very often render the title as a styled
+      // <div> or <p>. On a real site the visible title "Inquire for Pricing" was
+      // a plain div, so a semantic-only search found nothing here, climbed out,
+      // and picked up the page's actual <h2> from a different section —
+      // "Similar Venues" printed above a screenshot saying otherwise. So we also
+      // accept a short, visually-prominent line sitting above the first field.
+      let inside: Element | null = form.querySelector('h1,h2,h3,h4,h5,h6,legend,[role="heading"]');
+      if (!inside) {
+        const firstField = form.querySelector('input,select,textarea');
+        for (const el of Array.from(form.querySelectorAll('div,p,span,strong,b'))) {
+          // It has to sit ABOVE the fields to be a title rather than a caption.
+          if (firstField && !(firstField.compareDocumentPosition(el) & 2)) continue;
+          // A wrapper that contains controls is a layout box, not a title.
+          if (el.querySelector('input,select,textarea,label,button')) continue;
+          const t = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+          if (!t || t.length > 60) continue;
+          const cs = window.getComputedStyle(el);
+          const size = parseFloat(cs.fontSize) || 0;
+          const weight = parseInt(cs.fontWeight, 10) || 400;
+          // Bigger than body text, or clearly bold — how a title looks when it
+          // isn't marked up as one.
+          if (size >= 17 || weight >= 600) { inside = el; break; }
+        }
+      }
+      if (inside) heading = (inside.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+
+      // THEN: the nearest heading in an ancestor, bounded by the SAME size limits
+      // the screenshot uses when it picks a container. Without that bound the
+      // walk climbs into a section that merely contains the form and takes its
+      // heading, so the title and the picture disagree.
+      const formRect = form.getBoundingClientRect();
+      let scope: Element | null = form;
+      for (let up = 0; up < 6 && !heading && scope && scope !== document.body; up++) {
+        scope = scope.parentElement;
+        if (!scope) break;
+        const r = scope.getBoundingClientRect();
+        if (r.height > formRect.height * 3.5 + 400) break;
+        if (r.width > formRect.width * 2.2 + 200) break;
+        const scoped = Array.from(scope.querySelectorAll('h1,h2,h3,h4,h5,h6,legend'));
+        for (let hi = scoped.length - 1; hi >= 0; hi--) {
+          const el = scoped[hi]!;
+          // Only a heading that PRECEDES the form labels it; one after it
+          // belongs to whatever comes next.
+          if (form.compareDocumentPosition(el) & 2) {
+            const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+            if (text) { heading = text; break; }
+          }
+        }
+      }
+      // Fallback: nothing in any ancestor, so widen to document order — better a
+      // distant heading than none at all.
+      if (!heading) {
+        const heads = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+        for (let hi = heads.length - 1; hi >= 0; hi--) {
+          if (form.compareDocumentPosition(heads[hi]!) & 2) {
+            heading = (heads[hi]!.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+            if (heading) break;
+          }
         }
       }
 
