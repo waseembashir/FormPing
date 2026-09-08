@@ -7,8 +7,8 @@
  * (for https) an SSL check, evaluates alerts, stores history, and reschedules.
  */
 
-import type { SiteSchedule, SiteCheckRecord, DomainResult } from './types';
-import { listSchedules, upsertSchedule } from './scheduleStore';
+import type { SiteSchedule, SiteCheckRecord, DomainResult, RunTrigger } from './types';
+import { listSchedules, upsertSchedule, getSchedule } from './scheduleStore';
 import { appendCheck } from './historyStore';
 import { recordResult } from './resultStore';
 import { recordDaily } from './dailyStore';
@@ -36,8 +36,27 @@ const tickerState: SiteTickerState =
   };
 (globalThis as Record<string, unknown>).__siteWatchTicker = tickerState;
 
-/** Run one schedule now: probe uptime + SSL, alert, store, reschedule. */
-async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
+/**
+ * Run one schedule now: probe uptime + SSL, alert, store, reschedule.
+ *
+ * `trigger` decides how much of that escapes this function.
+ *
+ * A SCHEDULED check is the monitor doing its job — the full list above.
+ *
+ * A MANUAL check — the Re-run button, FR-82 — runs the SAME live probes and
+ * returns their real numbers (response time, status code, certificate), then
+ * writes only the history row. It deliberately does not reschedule, does not
+ * touch lastCheckedAt/lastResponseMs or any of the card's readouts, does not
+ * fire alerts or advance the down/SSL/domain alert counters, does not overwrite
+ * the durable per-URL result, and does not feed the daily rollup — that rollup
+ * is the answer to "what did the schedule observe", and a check someone ran by
+ * hand is not part of that answer.
+ */
+async function checkSiteOnce(
+  schedule: SiteSchedule,
+  trigger: RunTrigger = 'scheduled',
+): Promise<SiteCheckRecord> {
+  const manual = trigger === 'manual';
   const checkedAt = new Date().toISOString();
   const now = Date.now();
   const uptime = await checkUptime(schedule.url);
@@ -50,10 +69,15 @@ async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
   // since the last network lookup; otherwise recompute days from the cached
   // expiry (or report unknown if we've never got one). A failed lookup still
   // advances the throttle so we don't hammer RDAP on unsupported TLDs.
+  //
+  // A manual re-run always takes the cached path: it can't persist an advanced
+  // throttle (it writes no schedule), so letting it query would mean hitting
+  // RDAP on every click. Domain expiry doesn't change minute to minute, and
+  // uptime/SSL — the reason you pressed Re-run — are both probed live. FR-82.
   const lastDomFetch = schedule.lastDomainCheckedAt ? Date.parse(schedule.lastDomainCheckedAt) : 0;
   let domain: DomainResult | null;
   let domainFetched = false;
-  if (now - lastDomFetch < DOMAIN_RECHECK_MS) {
+  if (manual || now - lastDomFetch < DOMAIN_RECHECK_MS) {
     domain = schedule.lastDomainExpiry
       ? {
           ok: true,
@@ -75,7 +99,14 @@ async function checkSiteOnce(schedule: SiteSchedule): Promise<SiteCheckRecord> {
     uptime,
     ssl,
     domain,
+    trigger,
   };
+
+  // The history row is the ONE thing a manual check writes.
+  if (manual) {
+    await appendCheck(record);
+    return record;
+  }
 
   let patch;
   try {
@@ -160,4 +191,20 @@ export function startSiteWatchTicker(): void {
 export function kickSiteWatchTicker(): void {
   startSiteWatchTicker();
   void tick();
+}
+
+/**
+ * FR-82 — check one monitored URL NOW because a person asked, leaving the
+ * schedule untouched (see `checkSiteOnce` for exactly what a manual check skips).
+ *
+ * Unlike a form re-run this AWAITS the result: an uptime probe plus a TLS
+ * handshake takes a second or two, so the caller can hand the real numbers
+ * straight back and the user sees the answer without waiting for a poll.
+ *
+ * Returns null if the schedule no longer exists.
+ */
+export async function runSiteCheckNow(scheduleId: string): Promise<SiteCheckRecord | null> {
+  const schedule = await getSchedule(scheduleId);
+  if (!schedule) return null;
+  return checkSiteOnce(schedule, 'manual');
 }
