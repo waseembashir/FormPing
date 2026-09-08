@@ -3,7 +3,7 @@ import type { AppConfig, DetectedFormField, FormCandidate, FormKind, FormOutcome
 import { extractForms, formAbout, type FormInfo } from './findContactForm.js';
 import { detectEmbeds } from './detectEmbeds.js';
 import { fillForm } from './fillForm.js';
-import { captureFormShot } from './captureFormShot.js';
+import { captureFormShot, captureEmbedShot } from './captureFormShot.js';
 import { classifyFormKind, meaningfulFields, ownFields, detectTrackingParams, isLeadForm, isMarketingParam } from '../runners/formFacts.js';
 import { fetchHtml } from '../browser/playwrightClient.js';
 import { loadHtml, extractLinks } from '../utils/dom.js';
@@ -126,9 +126,17 @@ async function fillLeadForm(page: Page, f: FormInfo, kind: FormKind, config: App
 /** Lead forms first, then marketing, then utility — for a sensible report order. */
 const KIND_RANK: Record<string, number> = { contact: 0, other: 1, newsletter: 2, login: 3, search: 4, 'third-party': 5 };
 
-/** How many lead forms we photograph per run. Evidence for the forms a user
- *  actually reads, without turning a whole-site scan into a screenshot job. FR-73. */
-const SHOT_CAP = 4;
+/**
+ * How many forms we photograph per run — lead forms and real embeds share this
+ * budget. Evidence for the forms a user actually reads, without turning a
+ * whole-site scan into a screenshot job. FR-73.
+ *
+ * Raised from 4: a site with four lead forms left every embed unphotographed,
+ * so the report showed "no screenshot" beside forms that genuinely exist. Six
+ * covers the great majority of sites outright, at roughly a second more per run.
+ * FR-81.
+ */
+const SHOT_CAP = 6;
 
 interface NativeRec {
   type: 'native';
@@ -152,6 +160,8 @@ interface EmbedRec {
   url: string;
   pageProtection: boolean;
   provider: string;
+  /** A real embed can be photographed too — it is just not a <form>. FR-81. */
+  shot: string | null;
 }
 
 export async function inventorySiteForms(
@@ -197,6 +207,9 @@ export async function inventorySiteForms(
   const embedRecords: EmbedRec[] = [];
   let filledCount = 0;
   let shots = 0;
+  /** Identities of forms already handled this run — a header/footer form is the
+   *  same form on every page, and doing the work again teaches us nothing. FR-81. */
+  const seenSignatures = new Set<string>();
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
   ctx.setDefaultNavigationTimeout(RENDER_TIMEOUT);
   try {
@@ -210,7 +223,32 @@ export async function inventorySiteForms(
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: RENDER_TIMEOUT });
         await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT }).catch(() => { /* bounded */ });
         const forms = await extractForms(page);
-        const embeds = await detectEmbeds(page);
+        const allEmbeds = await detectEmbeds(page);
+
+        // Drop any "embed" that is really a native form we have already counted.
+        //
+        // Not every provider uses an iframe. Mailchimp's signup, Gravity Forms
+        // and Marketo render ORDINARY HTML into the page, so extractForms picks
+        // them up as native forms with real fields — and then detectEmbeds
+        // reported the same thing again as a third-party embed with 0 fields, no
+        // location and nothing to point at. That fieldless shadow was the
+        // "Mailchimp form" nobody could find on the page.
+        //
+        // If a provider's container IS a <form>, contains one, or sits inside
+        // one, the real entry already exists; reporting it twice is a duplicate,
+        // and the second copy is strictly worse than the first. FR-81.
+        const embeds = [];
+        for (const e of allEmbeds) {
+          if (!e.selectors?.length) { embeds.push(e); continue; }
+          const shadowsNative = await page
+            .evaluate((sels: string[]) => sels.some((sel) => {
+              const el = document.querySelector(sel);
+              if (!el) return false;
+              return el.tagName === 'FORM' || !!el.querySelector('form') || !!el.closest('form');
+            }), e.selectors)
+            .catch(() => false);
+          if (!shadowsNative) embeds.push(e);
+        }
         // Page-level bot protection. Until FR-73 this single page-wide regex was
         // stamped onto EVERY form on the page, so a search box came back "CAPTCHA
         // protected". It is now kept as what it is — a fact about the page — while
@@ -218,6 +256,19 @@ export async function inventorySiteForms(
         const pageProtection = /recaptcha|hcaptcha|turnstile|g-recaptcha/i.test(await page.content());
 
         for (const form of forms) {
+          // A form nobody can see is not a form we can report.
+          //
+          // The inventory used to record every <form> element on the page,
+          // filtering only at FILL time. So a hidden modal or duplicate copy was
+          // listed beside the real one — the same page appearing twice with
+          // different field counts, and a URL that shows no form (or the same
+          // form) when you open it. It also cannot be screenshotted, pointed at
+          // or verified, which is everything the report is supposed to offer.
+          //
+          // The primary flow still handles hidden multi-step forms; that lives
+          // in findContactForm and is untouched. FR-81.
+          if (!form.visible) continue;
+
           const allFields = toFields(form);
           const kind = classifyFormKind({ fields: allFields, submitText: form.submitText, allText: form.allText });
           const meaningful = meaningfulFields(allFields);
@@ -233,18 +284,39 @@ export async function inventorySiteForms(
           // once — so detect it here but don't re-fill it.
           const isPrimaryContact = kind === 'contact' && primaryContactUrl !== null && samePage(url, primaryContactUrl);
 
+          // The form's identity, computed HERE rather than only at dedupe time.
+          //
+          // A form in the site header or footer appears on every page, and we
+          // were filling it again on each one — 14 fills for 4 distinct forms on
+          // a real site. That is wasted time and, worse, repeated test data typed
+          // into one client's form for no extra information. It also made the
+          // loader ("found 15 forms · filled 14") contradict the report ("4 forms
+          // · filled 3"), because one counted page instances and the other
+          // counted forms. Recognise a repeat before doing the work. FR-81.
+          const sig = `${kind}|${meaningful.length}|${meaningful
+            .map((f) => (f.name || f.label || f.type).toLowerCase())
+            .sort()
+            .join(',')}`;
+          const alreadySeen = seenSignatures.has(sig);
+          seenSignatures.add(sig);
+
           // Evidence for the forms a user will actually read — lead forms only,
           // capped per run, best-effort. A utility search box needs no portrait. FR-73.
           let shot: string | null = null;
-          if (lead && shots < SHOT_CAP) {
+          if (lead && !alreadySeen && shots < SHOT_CAP) {
             shot = await captureFormShot(page, form.index);
             if (shot) shots += 1;
           }
 
           let outcome: FormOutcome = { state: 'detected' };
-          if (lead) {
+          if (lead && alreadySeen) {
+            // Same form, another page. Already filled where we first met it; the
+            // dedupe below folds this record into that entry and counts the page.
+            outcome = { state: 'detected', note: 'same form, already filled on another page' };
+          } else if (lead) {
             // Per-form progress the UI streams into a live narrative ("found a
-            // rental form… filled it") — real events, one per lead form. FR-76.
+            // rental form… filled it") — real events, one per DISTINCT lead form,
+            // so the running count matches the report that follows it.
             logger.info(`Site inventory: found a ${kind} form on ${shortPath(url)}`);
             if (willFill && !isPrimaryContact) {
               outcome = await fillLeadForm(page, form, kind, config);
@@ -273,7 +345,17 @@ export async function inventorySiteForms(
             outcome,
           });
         }
-        for (const embed of embeds) embedRecords.push({ type: 'embed', url, pageProtection, provider: embed.provider });
+        for (const embed of embeds) {
+          // An embed is the one case where a user CANNOT inspect the form
+          // themselves — it is cross-origin — so evidence matters most here. It
+          // shares the per-run shot budget with the native forms. FR-81.
+          let embedShot: string | null = null;
+          if (embed.selectors?.length && shots < SHOT_CAP) {
+            embedShot = await captureEmbedShot(page, embed.selectors);
+            if (embedShot) shots += 1;
+          }
+          embedRecords.push({ type: 'embed', url, pageProtection, provider: embed.provider, shot: embedShot });
+        }
       } catch (err) {
         logger.debug(`Site inventory: skipped ${url}: ${err}`);
       } finally {
@@ -290,12 +372,33 @@ export async function inventorySiteForms(
   // sit on every page into one entry); forms with no shared action stay distinct
   // per page (so Contact / Rental / Demo remain separate). Seen on 3+ pages = site-wide.
   const byKey = new Map<string, SiteForm>();
-  const bump = (sf: SiteForm) => { sf.seenOn += 1; sf.siteWide = sf.seenOn >= 3; };
+  // DISTINCT pages a form was seen on — not how many records matched it.
+  //
+  // `seenOn` used to be a counter bumped per matching record, so a page carrying
+  // the same form twice inflated it. A real run reported a form as "GLOBAL · ON
+  // ALL 17 PAGES" while having crawled 2 pages, out of a maximum of 12 — a
+  // number that could not describe anything. `siteWide` is derived from it, so
+  // the Global badge was wrong for the same reason. FR-81.
+  const pagesFor = new Map<string, Set<string>>();
+  const bump = (key: string, sf: SiteForm, pageUrl: string) => {
+    const pages = pagesFor.get(key) ?? new Set<string>();
+    pages.add(normUrl(pageUrl));
+    pagesFor.set(key, pages);
+    sf.seenOn = pages.size;
+    // "Global" means genuinely repeated across the site — a header search, a
+    // footer newsletter — so it needs several DISTINCT pages, and can never
+    // exceed the number crawled.
+    sf.siteWide = pages.size >= 3;
+  };
 
   for (const rec of embedRecords) {
     const key = `embed:${rec.provider.toLowerCase()}`;
     const found = byKey.get(key);
-    if (found) { bump(found); continue; }
+    if (found) {
+      bump(key, found, rec.url);
+      if (!found.shot && rec.shot) found.shot = rec.shot;
+      continue;
+    }
     byKey.set(key, {
       url: rec.url, kind: 'third-party', about: rec.provider, formType: 'third-party',
       // We can't see inside a cross-origin embed, so we never claim a CAPTCHA on
@@ -303,7 +406,9 @@ export async function inventorySiteForms(
       provider: rec.provider, fieldCount: 0, fields: [], security: { captcha: false, pageProtection: rec.pageProtection },
       tracking: { utm: [], other: [] }, siteWide: false, seenOn: 1,
       outcome: { state: 'detected', note: 'third-party embed — can’t auto-fill' },
+      ...(rec.shot ? { shot: rec.shot } : {}),
     });
+    pagesFor.set(key, new Set([normUrl(rec.url)]));
   }
 
   for (const rec of records) {
@@ -315,7 +420,7 @@ export async function inventorySiteForms(
     const key = `${rec.kind}|${rec.meaningful.length}|${sig}`;
     const found = byKey.get(key);
     if (found) {
-      bump(found);
+      bump(key, found, rec.url);
       // Prefer a real fill outcome if a later copy of the same form was filled.
       if (found.outcome?.state !== 'filled' && rec.outcome.state === 'filled') found.outcome = rec.outcome;
       // Keep whatever evidence we have: the first copy of a site-wide form may
@@ -340,6 +445,7 @@ export async function inventorySiteForms(
       ...(rec.anchorId ? { anchorId: rec.anchorId } : {}),
       ...(rec.shot ? { shot: rec.shot } : {}),
     });
+    pagesFor.set(key, new Set([normUrl(rec.url)]));
   }
 
   return Array.from(byKey.values()).sort(
