@@ -24,6 +24,10 @@ const MODE_LABEL: Record<string, string> = { 'detect-only': 'Detect', safe: 'Saf
 const RERUN_POLL_MS = 3000;
 const RERUN_MAX_WAIT_MS = 5 * 60 * 1000;
 
+/** How the card waits for a just-added monitor's very first run. FR-83. */
+const FIRST_RUN_POLL_MS = 3000;
+const FIRST_RUN_MAX_WAIT_MS = 5 * 60 * 1000;
+
 
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
@@ -45,6 +49,8 @@ export function ScheduleCard({
   schedule,
   onStop,
   onTogglePause,
+  awaitFirstRun,
+  onFirstRunSeen,
   onDone,
   onHold,
 }: {
@@ -55,6 +61,10 @@ export function ScheduleCard({
   onDone: () => void;
   /** Hold/release the parent's background poll while the "stopped" note is up. */
   onHold: (active: boolean) => void;
+  /** Just added: open the run history and watch for the very first run, so the
+   *  user sees the answer instead of an empty panel. Once only. FR-83. */
+  awaitFirstRun?: boolean;
+  onFirstRunSeen?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [runs, setRuns] = useState<FormRunRecord[] | null>(null);
@@ -66,6 +76,7 @@ export function ScheduleCard({
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
   const rerunPoll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const firstPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holding = useRef(false);
 
@@ -97,15 +108,16 @@ export function ScheduleCard({
    * re-expand every few seconds, which reads as the panel flickering shut. Only
    * a first load, when there is genuinely nothing to show yet, shows skeletons.
    */
-  async function loadRuns(opts?: { silent?: boolean }): Promise<boolean> {
+  async function loadRuns(opts?: { silent?: boolean }): Promise<{ manualRunning: boolean; count: number }> {
     if (!opts?.silent) setLoadingRuns(true);
     try {
       const res = await fetch(`/api/form-watch/results?id=${encodeURIComponent(schedule.id)}`, { cache: 'no-store' }).then((r) => r.json());
-      setRuns(Array.isArray(res?.runs) ? res.runs : []);
-      return res?.manualRunning === true;
+      const rows = Array.isArray(res?.runs) ? res.runs : [];
+      setRuns(rows);
+      return { manualRunning: res?.manualRunning === true, count: rows.length };
     } catch {
       setRuns([]);
-      return false;
+      return { manualRunning: false, count: 0 };
     } finally {
       if (!opts?.silent) setLoadingRuns(false);
     }
@@ -119,7 +131,7 @@ export function ScheduleCard({
     // A re-run started before this card mounted (another visit, a refresh, or a
     // tab change) may still be going. The server knows; pick that up from the
     // same request rather than resetting the button to "Re-run". FR-82.
-    void loadRuns().then((manualRunning) => {
+    void loadRuns().then(({ manualRunning }) => {
       if (manualRunning && !rerunPoll.current) { setRerunning(true); startRerunPoll(); }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,7 +143,35 @@ export function ScheduleCard({
     if (holding.current) onHold(false);
     if (timer.current) clearTimeout(timer.current);
     if (rerunPoll.current) clearInterval(rerunPoll.current);
+    if (firstPoll.current) clearInterval(firstPoll.current);
   }, [onHold]);
+
+  /**
+   * A monitor you just added runs its first check straight away. Open the run
+   * history and watch for that result, so adding a URL ends with the answer on
+   * screen rather than an empty panel you have to come back to.
+   *
+   * First run only — after that the card behaves normally. A form run drives a
+   * browser, so this waits longer than the uptime equivalent. FR-83.
+   */
+  useEffect(() => {
+    if (!awaitFirstRun || firstPoll.current) return;
+    setExpanded(true);
+    const startedAt = Date.now();
+    const stop = () => {
+      if (firstPoll.current) clearInterval(firstPoll.current);
+      firstPoll.current = null;
+      onFirstRunSeen?.();
+    };
+    void loadRuns({ silent: true }).then(({ count }) => { if (count > 0) stop(); });
+    firstPoll.current = setInterval(() => {
+      void loadRuns({ silent: true }).then(({ count }) => {
+        if (count > 0 || Date.now() - startedAt > FIRST_RUN_MAX_WAIT_MS) stop();
+      });
+    }, FIRST_RUN_POLL_MS);
+    return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [awaitFirstRun]);
 
 
   function finish() {
@@ -194,7 +234,7 @@ export function ScheduleCard({
     if (rerunPoll.current) clearInterval(rerunPoll.current);
     const startedAt = Date.now();
     rerunPoll.current = setInterval(() => {
-      void loadRuns({ silent: true }).then((stillRunning) => {
+      void loadRuns({ silent: true }).then(({ manualRunning: stillRunning }) => {
         if (stillRunning && Date.now() - startedAt < RERUN_MAX_WAIT_MS) return;
         if (rerunPoll.current) clearInterval(rerunPoll.current);
         rerunPoll.current = null;
@@ -324,7 +364,10 @@ export function ScheduleCard({
           {loadingRuns && (
             <div className="space-y-2"><div className="fp-skeleton h-12 rounded-lg" /><div className="fp-skeleton h-12 rounded-lg" /></div>
           )}
-          {!loadingRuns && runs && runs.length === 0 && (
+          {!loadingRuns && runs && runs.length === 0 && awaitFirstRun && (
+            <p className="text-xs text-ink-faint">Running the first check now — the result appears here in a moment…</p>
+          )}
+          {!loadingRuns && runs && runs.length === 0 && !awaitFirstRun && (
             <p className="text-xs text-ink-faint">No runs yet — they appear here after the first check.</p>
           )}
           {!loadingRuns && runs && runs.map((run, i) => <RunRow key={`${run.ranAt}-${i}`} run={run} />)}
