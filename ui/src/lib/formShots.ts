@@ -113,7 +113,7 @@ function fingerprint(key: string): string {
  * Built from the same `urlKey` the runs table uses, so both agree on what "the
  * same URL" means (protocol, www and trailing slash all normalised away).
  */
-export function shotFolder(url: string): string {
+export function shotFolder(url: string, variant?: 'manual'): string {
   const key = urlKey(url);
   let host = 'unknown-site';
   let page = 'home';
@@ -125,7 +125,13 @@ export function shotFolder(url: string): string {
   } catch {
     /* unparseable — the shot is still worth keeping, just less findable */
   }
-  return `${envFolder()}/${host}/${page}-${fingerprint(key)}`;
+  // A re-run gets a sibling folder rather than the URL's own. Each run clears
+  // its folder before uploading, so writing a manual run into the shared one
+  // would delete the images the stored scheduled result still points at — the
+  // run would keep its verdict and lose its evidence. Still one folder per URL
+  // per kind, so this stays bounded exactly as the main folder is. FR-82.
+  const suffix = variant === 'manual' ? '-rerun' : '';
+  return `${envFolder()}/${host}/${page}-${fingerprint(key)}${suffix}`;
 }
 
 /**
@@ -209,9 +215,12 @@ async function upload(
  */
 export async function removeShots(url: string): Promise<void> {
   if (!supabaseEnabled()) return;
-  // Same sweep a re-run does before uploading — one implementation, so the two
-  // can never disagree about what "this URL's screenshots" means.
+  // Same sweep a repeat run does before uploading — one implementation, so the
+  // two can never disagree about what "this URL's screenshots" means. Both
+  // folders go: the scheduled one and the Re-run sibling (FR-82), or deleting a
+  // run would leave the re-run's images behind with nothing pointing at them.
   await clearFolder(shotFolder(url));
+  await clearFolder(shotFolder(url, 'manual'));
 }
 
 /** The shot-carrying shape of a result, as far as this module cares. */
@@ -233,7 +242,7 @@ interface ShotBearing {
  *
  * Never throws, and never takes longer than the upload budget.
  */
-export async function hostFormShots<T>(raw: T): Promise<T> {
+export async function hostFormShots<T>(raw: T, opts?: { variant?: 'manual' }): Promise<T> {
   if (!raw || typeof raw !== 'object') return raw;
   const result = raw as ShotBearing;
 
@@ -265,7 +274,7 @@ export async function hostFormShots<T>(raw: T): Promise<T> {
   // Everything this run captures lands in the folder for the URL it tested, and
   // the previous run's images are cleared first — so a URL tested ten times
   // holds one set, even though each file now has a random name.
-  const folder = shotFolder(str(result.normalizedUrl) ?? str(result.inputUrl) ?? testedPage ?? '');
+  const folder = shotFolder(str(result.normalizedUrl) ?? str(result.inputUrl) ?? testedPage ?? '', opts?.variant);
   await clearFolder(folder);
 
   const hosted = await Promise.race([

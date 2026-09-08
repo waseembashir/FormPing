@@ -10,6 +10,11 @@
 
 export type UptimeClass = 'up' | 'down' | 'blocked';
 
+/** Who started a check: the schedule's own timer, or a person hitting Re-run.
+ *  Declared here rather than imported from Form Watch — this module stays
+ *  self-contained by design (see the file header). FR-82. */
+export type RunTrigger = 'scheduled' | 'manual';
+
 /** Result of a single uptime probe. */
 export interface UptimeResult {
   classification: UptimeClass;
@@ -91,4 +96,12 @@ export interface SiteCheckRecord {
   ssl: SslResult | null;
   /** Optional so older stored records (pre-domain-expiry) still parse. */
   domain?: DomainResult | null;
+  /**
+   * What started this run. A re-run is a manual probe: it takes the identical
+   * engine path but writes only this history row, so the log must be able to say
+   * so rather than presenting it as something the schedule did. Optional —
+   * records written before FR-82 have no value and are read as 'scheduled',
+   * which is what they all were.
+   */
+  trigger?: RunTrigger;
 }

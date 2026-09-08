@@ -5,7 +5,7 @@ import type { SiteSchedule, SiteCheckRecord, UptimeClass } from '@/lib/siteWatch
 import { STATUS, type StatusLevel } from '@/lib/design/status';
 import { TrendBar, type TrendTone } from '@/components/TrendBar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Badge, StatusPill, StatusText, cx, KeptNotice } from '@/components/ui';
+import { Badge, StatusPill, StatusText, cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
 
 // Canonical status vocabulary (FR-35/FR-65) — one language across every surface.
 const UPTIME: Record<UptimeClass | 'pending', { level: StatusLevel; label: string }> = {
@@ -22,6 +22,19 @@ function expiry(days: number | null, valid: boolean | undefined, kind: 'SSL' | '
   if (days <= 7) return { level: 'danger', label: `${kind} expires in ${days}d` };
   if (days <= 30) return { level: 'warn', label: `${kind} ${days}d left` };
   return { level: 'ok', label: `${kind} ${days}d left` };
+}
+
+/**
+ * FR-83 — the plain sentence beside the status word, so an Uptime card opens the
+ * way a Form Scheduler card does: a verdict, then what it means. The badges that
+ * follow are the evidence; this is the reading of it.
+ */
+function siteSentence(up: UptimeClass | 'pending', responseMs: number | null | undefined): string {
+  if (up === 'pending') return 'running the first check…';
+  if (up === 'down') return 'we can’t reach it right now';
+  if (up === 'blocked') return 'the host challenged our check, so we can’t confirm';
+  if (responseMs != null && responseMs >= 3000) return 'responding, but slowly';
+  return 'responding normally';
 }
 
 function relativeTime(iso: string | null): string {
@@ -61,6 +74,8 @@ export function SiteCard({
   const [pausing, setPausing] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [justStopped, setJustStopped] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
+  const [rerunError, setRerunError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holding = useRef(false);
 
@@ -69,15 +84,17 @@ export function SiteCard({
   const ssl = expiry(schedule.lastSslDaysRemaining ?? null, schedule.lastSslValid, 'SSL');
   const domain = expiry(schedule.lastDomainDaysRemaining ?? null, schedule.lastDomainValid, 'Domain');
 
-  async function loadChecks() {
-    setLoading(true);
+  /** `silent` skips the loading state, so refreshing an already-open history
+   *  doesn't swap it for skeletons and read as the panel flickering shut. */
+  async function loadChecks(opts?: { silent?: boolean }) {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch(`/api/site-watch/results?id=${encodeURIComponent(schedule.id)}`, { cache: 'no-store' }).then((r) => r.json());
       setChecks(Array.isArray(res?.checks) ? res.checks : []);
     } catch {
       setChecks([]);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }
   function toggle() {
@@ -92,7 +109,13 @@ export function SiteCard({
 
   useEffect(() => () => { if (holding.current) onHold(false); if (timer.current) clearTimeout(timer.current); }, [onHold]);
 
-  const recent = (checks ?? []).slice(0, 12).reverse();
+
+  // Scheduled checks only. This strip and its percentage answer "how has this
+  // site been doing on its schedule?" — a check someone ran by hand is not part
+  // of that answer, and letting re-runs in would mean the number moved every
+  // time you pressed the button. FR-82.
+  const scheduled = (checks ?? []).filter((c) => c.trigger !== 'manual');
+  const recent = scheduled.slice(0, 12).reverse();
   const upCount = recent.filter((c) => c.uptime.classification !== 'down').length;
   const uptimePct = recent.length ? Math.round((upCount / recent.length) * 100) : null;
   const trendTones: TrendTone[] = recent.map((c) => (c.uptime.classification === 'up' ? 'emerald' : c.uptime.classification === 'blocked' ? 'amber' : 'red'));
@@ -111,6 +134,32 @@ export function SiteCard({
     setJustStopped(true);
     timer.current = setTimeout(finish, 7000);
   }
+  /** Check this URL now. Adds one tagged row to the history below and changes
+   *  nothing else — the schedule, its next check and its uptime figure all stay
+   *  exactly as they were. FR-82. */
+  async function handleRerun() {
+    setRerunning(true);
+    setRerunError(null);
+    setExpanded(true); // the answer lands in the history — open it before it does
+    try {
+      const res = await fetch('/api/site-watch/run-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: schedule.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setRerunError(data?.error || 'Could not run the check just now. Try again in a moment.');
+        return;
+      }
+      await loadChecks({ silent: checks !== null }); // the new row is the result
+    } catch {
+      setRerunError('Could not reach the server. Your schedule is unaffected.');
+    } finally {
+      setRerunning(false);
+    }
+  }
+
   async function handlePause() {
     setPausing(true);
     try { await onTogglePause(schedule.id, !schedule.paused); } finally { setPausing(false); }
@@ -127,7 +176,9 @@ export function SiteCard({
           <div className="min-w-0">
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <StatusPill level={u.level} pulse={up === 'pending'}>{u.label}</StatusPill>
-              {up !== 'pending' && schedule.lastResponseMs != null && <Badge tone="neutral">{schedule.lastResponseMs} ms</Badge>}
+              {/* The reading of that verdict, exactly where a Form Scheduler card
+                  puts its own. FR-83. */}
+              <span className="text-[13px] text-ink-secondary">· {siteSentence(up, schedule.lastResponseMs)}</span>
               <StatusText level={ssl.level}>{ssl.label}</StatusText>
               <StatusText level={domain.level}>{domain.label}</StatusText>
               {schedule.paused && <Badge tone="neutral">Paused</Badge>}
@@ -139,6 +190,7 @@ export function SiteCard({
               <span>{intervalLabel(schedule.intervalMs)}</span>
               <span>checked {relativeTime(schedule.lastCheckedAt)}</span>
               <span>next {relativeTime(schedule.nextCheckAt)}</span>
+              {up !== 'pending' && schedule.lastResponseMs != null && <span>{schedule.lastResponseMs} ms</span>}
               {uptimePct != null && (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="text-ink-muted">{uptimePct}% up</span>
@@ -149,6 +201,7 @@ export function SiteCard({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <RerunButton onClick={handleRerun} running={rerunning} what="site" />
             <button type="button" onClick={handlePause} disabled={pausing} className="rounded-md border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:bg-panel hover:text-ink disabled:opacity-40">
               {pausing ? '…' : schedule.paused ? 'Resume' : 'Pause'}
             </button>
@@ -162,6 +215,10 @@ export function SiteCard({
           <p className="mt-2.5 rounded-md border border-line bg-panel-raised px-3 py-2 text-[11px] text-ink-muted">
             Paused — not checking right now. Its last results stay in Projects; hit <strong className="text-ink-secondary">Resume</strong> to start again.
           </p>
+        )}
+
+        {rerunError && (
+          <p className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">{rerunError}</p>
         )}
 
         <button type="button" onClick={toggle} className="mt-3 text-xs font-medium text-ink-muted transition-colors hover:text-ink">
@@ -294,7 +351,10 @@ function CheckRow({ check }: { check: SiteCheckRecord }) {
           <UptimeMark level={u.level} />
           <span className={cx('text-sm font-semibold', STATUS[u.level].text)}>{UPTIME_SENTENCE[cls] ?? u.label}</span>
         </div>
-        <span className="text-[11px] text-ink-faint">{new Date(check.checkedAt).toLocaleString()}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          {check.trigger === 'manual' && <RerunTag />}
+          <span className="text-[11px] text-ink-faint">{new Date(check.checkedAt).toLocaleString()}</span>
+        </div>
       </div>
       <div className="mt-3 grid grid-cols-1 gap-x-5 gap-y-2.5 pl-[34px] sm:grid-cols-2">
         <Field label="HTTP status" value={httpValue} />

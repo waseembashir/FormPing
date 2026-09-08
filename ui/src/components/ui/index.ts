@@ -18,5 +18,6 @@ export { Modal } from './Modal';
 export { PageHeader } from './PageHeader';
 export { EmptyState } from './EmptyState';
 export { Skeleton } from './Skeleton';
+export { RerunButton, RerunTag } from './Rerun';
 export { KeptNotice } from './KeptNotice';
 export { ConfirmDialog } from './ConfirmDialog';

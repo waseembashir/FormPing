@@ -10,6 +10,9 @@ import type { FormsOnPage, TrackingParams } from '@/types';
 
 export type FormWatchMode = 'live' | 'safe' | 'detect-only';
 
+/** Who started a run: the schedule's own timer, or a person hitting Re-run. FR-82. */
+export type RunTrigger = 'scheduled' | 'manual';
+
 /** A recurring schedule for one form URL. */
 export interface FormSchedule {
   /** Stable unique id. */
@@ -93,6 +96,14 @@ export interface FormRunRecord {
   submissionResult: string;
   durationMs: number;
   fingerprint: FormFingerprint;
+  /**
+   * What started this run. A re-run is a manual probe: it takes the identical
+   * engine path but writes only this history row, so the log must be able to say
+   * so rather than presenting it as something the schedule did. Optional —
+   * records written before FR-82 have no value and are read as 'scheduled',
+   * which is what they all were.
+   */
+  trigger?: RunTrigger;
   /** Free-text notes/errors surfaced by the form tester. */
   notes: string[];
   errors: string[];

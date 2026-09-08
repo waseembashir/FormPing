@@ -7,7 +7,7 @@
  * Best-effort: errors logged, never thrown.
  */
 
-import type { FormRunRecord, FormFingerprint, FormRunStatus, FormWatchMode } from './types';
+import type { FormRunRecord, FormFingerprint, FormRunStatus, FormWatchMode, RunTrigger } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
 
 const MAX_RUNS = 100;
@@ -25,9 +25,11 @@ interface FormRunRow {
   fingerprint: FormFingerprint | null;
   notes: string[] | null;
   errors: string[] | null;
+  /** null on every row written before FR-82 — all of which were scheduled. */
+  trigger_source: string | null;
 }
 const FR_COLS =
-  'schedule_id, url, site, mode, ran_at, status, reason_code, submission_result, duration_ms, fingerprint, notes, errors';
+  'schedule_id, url, site, mode, ran_at, status, reason_code, submission_result, duration_ms, fingerprint, notes, errors, trigger_source';
 
 function toRecord(r: FormRunRow): FormRunRecord {
   return {
@@ -43,6 +45,7 @@ function toRecord(r: FormRunRow): FormRunRecord {
     fingerprint: r.fingerprint as FormFingerprint,
     notes: r.notes ?? [],
     errors: r.errors ?? [],
+    trigger: r.trigger_source === 'manual' ? 'manual' : 'scheduled',
   };
 }
 
@@ -60,6 +63,7 @@ function toRow(rec: FormRunRecord): FormRunRow {
     fingerprint: rec.fingerprint ?? null,
     notes: rec.notes ?? [],
     errors: rec.errors ?? [],
+    trigger_source: (rec.trigger ?? 'scheduled') satisfies RunTrigger,
   };
 }
 
