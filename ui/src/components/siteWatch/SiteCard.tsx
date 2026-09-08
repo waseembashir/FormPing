@@ -37,6 +37,10 @@ function siteSentence(up: UptimeClass | 'pending', responseMs: number | null | u
   return 'responding normally';
 }
 
+/** How the card waits for a just-added monitor's very first check. FR-83. */
+const FIRST_CHECK_POLL_MS = 3000;
+const FIRST_CHECK_MAX_WAIT_MS = 3 * 60 * 1000;
+
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
   const diff = new Date(iso).getTime() - Date.now();
@@ -60,12 +64,18 @@ export function SiteCard({
   onTogglePause,
   onDone,
   onHold,
+  awaitFirstCheck,
+  onFirstCheckSeen,
 }: {
   schedule: SiteSchedule;
   onStop: (id: string) => Promise<void>;
   onTogglePause: (id: string, paused: boolean) => Promise<void>;
   onDone: () => void;
   onHold: (active: boolean) => void;
+  /** Just added: open the history and watch for the very first check, so the
+   *  user sees the answer instead of an empty panel. Once only. FR-83. */
+  awaitFirstCheck?: boolean;
+  onFirstCheckSeen?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [checks, setChecks] = useState<SiteCheckRecord[] | null>(null);
@@ -76,6 +86,7 @@ export function SiteCard({
   const [justStopped, setJustStopped] = useState(false);
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  const firstPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holding = useRef(false);
 
@@ -86,13 +97,16 @@ export function SiteCard({
 
   /** `silent` skips the loading state, so refreshing an already-open history
    *  doesn't swap it for skeletons and read as the panel flickering shut. */
-  async function loadChecks(opts?: { silent?: boolean }) {
+  async function loadChecks(opts?: { silent?: boolean }): Promise<number> {
     if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch(`/api/site-watch/results?id=${encodeURIComponent(schedule.id)}`, { cache: 'no-store' }).then((r) => r.json());
-      setChecks(Array.isArray(res?.checks) ? res.checks : []);
+      const rows = Array.isArray(res?.checks) ? res.checks : [];
+      setChecks(rows);
+      return rows.length;
     } catch {
       setChecks([]);
+      return 0;
     } finally {
       if (!opts?.silent) setLoading(false);
     }
@@ -107,8 +121,37 @@ export function SiteCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule.lastCheckedAt]);
 
-  useEffect(() => () => { if (holding.current) onHold(false); if (timer.current) clearTimeout(timer.current); }, [onHold]);
+  useEffect(() => () => {
+    if (holding.current) onHold(false);
+    if (timer.current) clearTimeout(timer.current);
+    if (firstPoll.current) clearInterval(firstPoll.current);
+  }, [onHold]);
 
+  /**
+   * A monitor you just added runs its first check straight away. Open the
+   * history and watch for that result, so adding a URL ends with the answer on
+   * screen rather than an empty "No checks yet" panel you have to come back to.
+   *
+   * First check only — after that the card behaves normally. FR-83.
+   */
+  useEffect(() => {
+    if (!awaitFirstCheck || firstPoll.current) return;
+    setExpanded(true);
+    const startedAt = Date.now();
+    const stop = () => {
+      if (firstPoll.current) clearInterval(firstPoll.current);
+      firstPoll.current = null;
+      onFirstCheckSeen?.();
+    };
+    void loadChecks({ silent: true }).then((n) => { if (n > 0) stop(); });
+    firstPoll.current = setInterval(() => {
+      void loadChecks({ silent: true }).then((n) => {
+        if (n > 0 || Date.now() - startedAt > FIRST_CHECK_MAX_WAIT_MS) stop();
+      });
+    }, FIRST_CHECK_POLL_MS);
+    return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [awaitFirstCheck]);
 
   // Scheduled checks only. This strip and its percentage answer "how has this
   // site been doing on its schedule?" — a check someone ran by hand is not part
@@ -229,7 +272,11 @@ export function SiteCard({
       {expanded && (
         <div className="space-y-2 border-t border-line p-4">
           {loading && <div className="space-y-2"><div className="fp-skeleton h-11 rounded-lg" /><div className="fp-skeleton h-11 rounded-lg" /></div>}
-          {!loading && checks && checks.length === 0 && <p className="text-xs text-ink-faint">No checks yet — they appear after the first run.</p>}
+          {!loading && checks && checks.length === 0 && (
+            <p className="text-xs text-ink-faint">
+              {awaitFirstCheck ? 'Running the first check now — the result appears here in a moment…' : 'No checks yet — they appear after the first run.'}
+            </p>
+          )}
           {!loading && checks && checks.slice(0, 40).map((c, i) => <CheckRow key={`${c.checkedAt}-${i}`} check={c} />)}
         </div>
       )}
