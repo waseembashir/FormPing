@@ -5,7 +5,7 @@
  * capped to the most recent MAX_RUNS. Best-effort: errors logged, never thrown.
  */
 
-import type { SiteCheckRecord, UptimeResult, SslResult, DomainResult } from './types';
+import type { SiteCheckRecord, UptimeResult, SslResult, DomainResult, RunTrigger } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
 
 const MAX_RUNS = 200;
@@ -18,8 +18,10 @@ interface SiteRunRow {
   uptime: UptimeResult;
   ssl: SslResult | null;
   domain: DomainResult | null;
+  /** null on every row written before FR-82 — all of which were scheduled. */
+  trigger_source: string | null;
 }
-const SR_COLS = 'schedule_id, url, host, checked_at, uptime, ssl, domain';
+const SR_COLS = 'schedule_id, url, host, checked_at, uptime, ssl, domain, trigger_source';
 
 function toRecord(r: SiteRunRow): SiteCheckRecord {
   return {
@@ -30,6 +32,7 @@ function toRecord(r: SiteRunRow): SiteCheckRecord {
     uptime: r.uptime,
     ssl: r.ssl,
     domain: r.domain ?? null,
+    trigger: r.trigger_source === 'manual' ? 'manual' : 'scheduled',
   };
 }
 
@@ -42,6 +45,7 @@ function toRow(rec: SiteCheckRecord): SiteRunRow {
     uptime: rec.uptime,
     ssl: rec.ssl ?? null,
     domain: rec.domain ?? null,
+    trigger_source: (rec.trigger ?? 'scheduled') satisfies RunTrigger,
   };
 }
 
