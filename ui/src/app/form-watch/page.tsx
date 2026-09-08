@@ -30,6 +30,9 @@ export default function FormWatchPage() {
   // had happened — the new row could be several screens down. We scroll to it and
   // mark it briefly, so the result of the action is where the eye already is.
   const [addedId, setAddedId] = useState<string | null>(null);
+  // Kept separate from `addedId`: the ring fades after a couple of seconds, but
+  // the wait for the first run can take a minute or more. FR-83.
+  const [firstRunId, setFirstRunId] = useState<string | null>(null);
 
   // While a card is showing its in-place "stopped" confirmation, hold the poll so
   // a background refresh doesn't yank the card (and its message) out from under it.
@@ -79,7 +82,10 @@ export default function FormWatchPage() {
         setUrl('');
         setLandingPage(false);
         setJustAdded(target);
-        if (typeof data?.schedule?.id === 'string') setAddedId(data.schedule.id);
+        if (typeof data?.schedule?.id === 'string') {
+          setAddedId(data.schedule.id);
+          setFirstRunId(data.schedule.id);
+        }
         await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Request failed');
@@ -197,7 +203,15 @@ export default function FormWatchPage() {
                     : 'rounded-xl ring-2 ring-transparent transition-shadow duration-500'
                 }
               >
-                <ScheduleCard schedule={s} onStop={handleStop} onTogglePause={handleTogglePause} onDone={load} onHold={holdPoll} />
+                <ScheduleCard
+                  schedule={s}
+                  onStop={handleStop}
+                  onTogglePause={handleTogglePause}
+                  onDone={load}
+                  onHold={holdPoll}
+                  awaitFirstRun={s.id === firstRunId}
+                  onFirstRunSeen={() => setFirstRunId(null)}
+                />
               </div>
             ))}
         </div>

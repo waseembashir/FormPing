@@ -186,9 +186,9 @@ export default function DocsContent() {
                 <Table
                   headers={['Mode', 'What it does']}
                   rows={[
-                    [<Code key="0">Safe</Code>, 'Fills the form but does NOT submit. The default.'],
+                    [<Code key="0">Detect</Code>, 'Just confirms a form is there. Nothing filled, nothing sent. The default.'],
+                    [<Code key="0">Safe</Code>, 'Fills the form with test data but does NOT submit.'],
                     [<Code key="0">Live</Code>, 'Actually submits — confirms the form delivers. Use only on sites you’re authorized to test.'],
-                    [<Code key="0">Detect-only</Code>, 'Just confirms a form is present. No fill, no submit.'],
                   ]}
                 />
                 <P>Each result is a clear verdict — <strong className="text-ink">healthy</strong>, <strong className="text-ink">needs attention</strong>, or <strong className="text-ink">failing</strong> — with a plain-English reason. It also shows what was found: the page the form is on, whether it’s a <strong className="text-ink">native</strong> in-page form or a <strong className="text-ink">third-party</strong> one (Typeform, HubSpot, …), how many fields and their names, and whether it’s a <strong className="text-ink">single- or multi-step</strong> form. CAPTCHA and anti-bot protection are detected and reported, never bypassed.</P>
@@ -204,14 +204,16 @@ export default function DocsContent() {
                 <Note>
                   <strong>It tells you <em>why</em>, not just “not found”.</strong> When no contact form is submitted you get a clear outcome: <strong>No form on the page</strong>; <strong>Found a form — but not a contact form</strong> (with which contact fields are missing); <strong>Third-party embed found</strong> — a hosted Typeform, HubSpot, Calendly, Jotform, Tally, or GoHighLevel form that genuinely exists but can’t be auto-submitted across origins, so it’s named for you to check by hand; or <strong>Multi-step form found</strong> — a “Next”-style wizard. FormPing walks the steps and fills them; in Live mode it only submits when the walk cleanly reaches the end and enters an email, otherwise it fills through and holds the submission so no partial entry is sent.
                 </Note>
-                <Note>Your results (and the URL) stay on screen when you switch tabs or refresh. <strong>Clear</strong> wipes the view but keeps the saved result that Projects uses — “clear the view, keep the data.” To keep watching a URL over time, set it up in the <strong>Form Scheduler</strong>.</Note>
+                <Note>Your results (and the URL) stay on screen when you switch tabs or refresh — and so does the mode you ran them in, so what you’re reading always matches how it was tested. <strong>Clear</strong> wipes the view but keeps the saved result that Projects uses — “clear the view, keep the data” — and returns the mode to Detect. To keep watching a URL over time, set it up in the <strong>Form Scheduler</strong>.</Note>
+                <Note><strong>Leave the tab and the test keeps going.</strong> A run doesn’t stop because you looked at something else. A small notice appears telling you it’s still going and which tab to go back to, and the result is waiting for you when you return.</Note>
               </Section>
 
               <Section id="form-scheduler" title="Form Scheduler" eyebrow="Contact Forms">
                 <P>The Scheduler re-tests a form <strong className="text-ink">automatically on a fixed schedule</strong> and alerts you when it changes or breaks — so you catch a silently-broken form within one cycle, instead of when leads dry up. It’s the Form Tester on a timer, tracking the result over time.</P>
                 <UL>
-                  <LI>Add a URL, a check frequency (e.g. every 3 days), and a mode. A baseline check runs immediately, then repeats on your interval.</LI>
-                  <LI><strong className="text-ink">Pause / Resume</strong> any time (keeps its history), or <strong>Delete</strong> to remove it. Each card shows a recent-runs trend — % healthy plus a sparkline.</LI>
+                  <LI>Add a URL, a check frequency (daily by default), and a mode. The first check runs straight away — the monitor opens its own history and shows you that result as soon as it lands, so you’re not left wondering.</LI>
+                  <LI><strong className="text-ink">Re-run</strong> checks that URL right now, in the same mode, without disturbing anything: your schedule, its next run and its health figure all stay exactly as they were. The result is added to the history below, marked <strong>Re-run</strong> so you can tell it apart from the scheduled checks.</LI>
+                  <LI><strong className="text-ink">Pause / Resume</strong> any time (keeps its history), or <strong>Delete</strong> to remove it. Each card shows a recent-runs trend — % healthy plus a sparkline, counting the scheduled runs only.</LI>
                   <LI>Each run records the verdict, the reason, and the same details as the Tester — the form found, its type, field count, and single/multi-step — plus what changed since last time and a suggested next action, and sends a Slack alert.</LI>
                 </UL>
                 <Note tone="warn"><strong>Live mode submits a real entry every cycle</strong>, which lands in the client’s inbox/CRM. Use it only on forms you’re authorized to monitor — the test data identifies it as a health check.</Note>
@@ -228,7 +230,13 @@ export default function DocsContent() {
                     [<b key="0">Domain</b>, 'Days until the domain registration expires.'],
                   ]}
                 />
-                <P>Alerts are <strong className="text-ink">change-based</strong>, never a ping every cycle: <strong>down</strong> after two checks in a row fail (so a brief blip doesn’t cry wolf) and again when it recovers; <strong>SSL</strong> and <strong>domain</strong> as each threshold is crossed (30 / 14 / 7 days, then expired), resetting on renewal. While a site stays down — or a certificate/domain stays expired — a <strong>reminder repeats every few hours</strong> until it’s fixed, so an ongoing problem doesn’t go quiet. Each monitor shows an uptime % and a recent-checks sparkline, and can be paused/resumed.</P>
+                <P>Alerts are <strong className="text-ink">change-based</strong>, never a ping every cycle: <strong>down</strong> after two checks in a row fail (so a brief blip doesn’t cry wolf) and again when it recovers; <strong>SSL</strong> and <strong>domain</strong> as each threshold is crossed (30 / 14 / 7 days, then expired), resetting on renewal. While a site stays down — or a certificate/domain stays expired — a <strong>reminder repeats every few hours</strong> until it’s fixed, so an ongoing problem doesn’t go quiet.</P>
+                <P>Each monitor opens with a plain reading of where it stands — <strong>Up · responding normally</strong>, <strong>Down · we can’t reach it right now</strong> — followed by its certificate and domain status, an uptime % and a recent-checks sparkline. Above the list, a summary counts how many sites are up, down, challenged or have a certificate expiring soon, so you can see whether anything needs you without reading every card.</P>
+                <UL>
+                  <LI>Adding a URL takes you straight to it and shows the first check as soon as it finishes.</LI>
+                  <LI><strong className="text-ink">Re-run</strong> checks the site right now and shows you the real result — live response time, status code and certificate — without disturbing your schedule, its next check, its uptime figure, or triggering any alert. It’s added to the history marked <strong>Re-run</strong>.</LI>
+                  <LI><strong className="text-ink">Pause / Resume</strong> any time, keeping the history.</LI>
+                </UL>
                 <Note>A few heavily-protected sites return a challenge page to automated checks — FormPing classifies that as <em>reachable (challenged)</em>, not <em>down</em>, so it never cries wolf.</Note>
               </Section>
 

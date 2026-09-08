@@ -6,7 +6,7 @@ import { SiteWatchCommandBar, type Unit } from '@/components/siteWatch/SiteWatch
 import { AddToProjectModal } from '@/components/projects/AddToProjectModal';
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner';
 import { PageHeader, Skeleton } from '@/components/ui';
-import type { SiteSchedule } from '@/lib/siteWatch/types';
+import type { SiteSchedule, UptimeClass } from '@/lib/siteWatch/types';
 
 const UNIT_TO_MIN: Record<Unit, number> = { min: 1, hour: 60, day: 1440 };
 
@@ -21,6 +21,15 @@ export default function SiteWatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  // The monitor just created. The list sits below the form and grows downward, so
+  // after adding one the user was left looking at the form with no sign anything
+  // had happened — the new row could be several screens down. We scroll to it and
+  // mark it briefly, so the result of the action is where the eye already is.
+  // Matches the Form Scheduler exactly. FR-83.
+  const [addedId, setAddedId] = useState<string | null>(null);
+  // Kept separate from `addedId`: the ring fades after a couple of seconds, but
+  // the wait for the first check can take a minute. FR-83.
+  const [firstCheckId, setFirstCheckId] = useState<string | null>(null);
 
   const pollHold = useRef(0);
 
@@ -66,6 +75,10 @@ export default function SiteWatchPage() {
         setUrl('');
         setNeedsConfirm(false);
         setJustAdded(target);
+        if (typeof data?.schedule?.id === 'string') {
+          setAddedId(data.schedule.id);
+          setFirstCheckId(data.schedule.id);
+        }
         await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Request failed');
@@ -96,6 +109,19 @@ export default function SiteWatchPage() {
     },
     [load],
   );
+
+  // Scroll the new monitor into view once it has actually rendered, and let the
+  // highlight fade on its own. Honours reduced-motion: the jump still happens,
+  // it just doesn't glide.
+  useEffect(() => {
+    if (!addedId || !schedules.some((s) => s.id === addedId)) return;
+    const el = document.getElementById(`site-${addedId}`);
+    if (!el) return;
+    const smooth = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+    const t = setTimeout(() => setAddedId(null), 2200);
+    return () => clearTimeout(t);
+  }, [addedId, schedules]);
 
   const holdPoll = useCallback((active: boolean) => {
     pollHold.current = Math.max(0, pollHold.current + (active ? 1 : -1));
@@ -141,15 +167,7 @@ export default function SiteWatchPage() {
             ))
           )}
 
-          {!loading && schedules.length > 0 && (
-            <div className="flex items-center gap-2.5 rounded-lg border border-ok/25 bg-ok/10 px-3.5 py-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-ok" />
-              </span>
-              <span className="text-xs font-medium text-ok">Monitoring {schedules.length} site{schedules.length === 1 ? '' : 's'} automatically</span>
-            </div>
-          )}
+          {!loading && schedules.length > 0 && <SiteWatchStatus schedules={schedules} />}
 
           {!loading && schedules.length === 0 && (
             <div className="flex flex-col items-center rounded-xl border border-dashed border-line bg-panel/40 px-8 py-14 text-center">
@@ -167,12 +185,104 @@ export default function SiteWatchPage() {
 
           {!loading &&
             schedules.map((s) => (
-              <SiteCard key={s.id} schedule={s} onStop={handleStop} onTogglePause={handleTogglePause} onDone={load} onHold={holdPoll} />
+              <div
+                key={s.id}
+                id={`site-${s.id}`}
+                className={
+                  s.id === addedId
+                    ? 'rounded-xl ring-2 ring-accent/60 ring-offset-2 ring-offset-ground transition-shadow duration-500'
+                    : 'rounded-xl ring-2 ring-transparent transition-shadow duration-500'
+                }
+              >
+                <SiteCard
+                  schedule={s}
+                  onStop={handleStop}
+                  onTogglePause={handleTogglePause}
+                  onDone={load}
+                  onHold={holdPoll}
+                  awaitFirstCheck={s.id === firstCheckId}
+                  onFirstCheckSeen={() => setFirstCheckId(null)}
+                />
+              </div>
             ))}
         </div>
       </main>
 
       {justAdded && <AddToProjectModal url={justAdded} onClose={() => setJustAdded(null)} />}
     </>
+  );
+}
+
+/**
+ * FR-83 — the "what's happening right now" panel, mirroring the Form Scheduler's
+ * SchedulerStatus so the two tabs read as one product: a heartbeat, how many
+ * sites are being watched, and worst-first counts.
+ *
+ * "Monitoring 3 sites automatically" told you the scheduler was alive but
+ * nothing about whether anything was wrong — you had to read every card to find
+ * out. The counts answer that at a glance.
+ */
+function SiteWatchStatus({ schedules }: { schedules: SiteSchedule[] }) {
+  const counts: Record<UptimeClass | 'pending' | 'paused' | 'expiring', number> = {
+    up: 0, down: 0, blocked: 0, pending: 0, paused: 0, expiring: 0,
+  };
+  for (const s of schedules) {
+    if (s.paused) { counts.paused += 1; continue; }
+    // No classification yet = the first check is still running (a new monitor).
+    if (!s.lastClassification) { counts.pending += 1; continue; }
+    counts[s.lastClassification] += 1;
+    // A certificate about to lapse is worth surfacing even while the site is up
+    // — it's the failure you can still prevent. Counted alongside, not instead.
+    const sslDays = s.lastSslDaysRemaining;
+    if (s.lastSslValid !== false && sslDays != null && sslDays <= 30) counts.expiring += 1;
+  }
+
+  // Worst-first, so what needs a look is read before what's fine.
+  const stats: { n: number; label: string; cls: string }[] = [
+    { n: counts.down, label: 'down', cls: 'bg-danger/12 text-danger ring-danger/30' },
+    { n: counts.blocked, label: 'challenged', cls: 'bg-warn/12 text-warn ring-warn/30' },
+    { n: counts.expiring, label: 'expiring soon', cls: 'bg-warn/12 text-warn ring-warn/30' },
+    { n: counts.up, label: 'up', cls: 'bg-ok/12 text-ok ring-ok/30' },
+    { n: counts.pending, label: 'setting up', cls: 'bg-idle/12 text-ink-muted ring-line-strong' },
+    { n: counts.paused, label: 'paused', cls: 'bg-idle/12 text-ink-muted ring-line-strong' },
+  ].filter((s) => s.n > 0);
+
+  const active = schedules.length - counts.paused;
+  const allWell = counts.down === 0 && counts.blocked === 0 && counts.expiring === 0;
+
+  return (
+    <div
+      className={`fp-rise flex flex-wrap items-center justify-between gap-x-5 gap-y-3 rounded-xl border px-4 py-3.5 ${
+        allWell ? 'border-ok/25 bg-ok/8' : 'border-warn/25 bg-warn/8'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {/* The heartbeat: a ping ring, on-brand for a tool called FormPing. */}
+        <span className="relative flex h-3 w-3 shrink-0">
+          <span
+            className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 [animation-duration:2s] motion-reduce:animate-none ${allWell ? 'bg-ok' : 'bg-warn'}`}
+          />
+          <span className={`relative inline-flex h-3 w-3 rounded-full ${allWell ? 'bg-ok' : 'bg-warn'}`} />
+        </span>
+        <div className="min-w-0">
+          <p className={`text-sm font-semibold ${allWell ? 'text-ok' : 'text-warn'}`}>Monitoring</p>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            Checking <b className="font-mono tabular-nums text-ink-secondary">{active}</b> site
+            {active === 1 ? '' : 's'} on their own schedules
+            {counts.paused > 0 && <> · {counts.paused} paused</>}
+          </p>
+        </div>
+      </div>
+
+      {/* Canonical StatPills — the same shape the Form Scheduler uses. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {stats.map((s) => (
+          <div key={s.label} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ${s.cls}`}>
+            <span className="font-mono text-base font-bold tabular-nums">{s.n}</span>
+            <span className="uppercase tracking-wide opacity-80">{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

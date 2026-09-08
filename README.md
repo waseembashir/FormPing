@@ -55,8 +55,10 @@ The app is organized around **Projects** (a client and their URLs), with two too
 | Area | What it does |
 |------|--------------|
 | **Projects** | Group a client's URLs into a project and see their form, uptime and SSL health at a glance. URLs you've tested or monitored but not grouped yet surface in an **Unassigned** bucket to assign or dismiss, so nothing is ever invisible. |
-| **Contact Forms** | **Form Tester** — run an on-demand test against a URL. On a whole-site run it finds *every* form across the site and reports them form-by-form (summary + a tab per form), each with a screenshot of the form it matched; results persist across refreshes. **Form Scheduler** — recurring form tests with alerts when a form changes or breaks. |
+| **Contact Forms** | **Form Tester** — run an on-demand test against a URL. On a whole-site run it finds *every* form across the site and reports them form-by-form (summary + a tab per form), each with a screenshot of the form it matched; results and the mode they were run in persist across refreshes. **Form Scheduler** — recurring form tests (daily by default) with alerts when a form changes or breaks. |
 | **Site Health** | **Uptime & SSL** — availability plus certificate and domain expiry monitoring. **Content Changes** — track content, SEO, form and script changes over time, with an optional AI summary of each diff. |
+
+Both schedulers carry a **Re-run** button: it checks that URL immediately in the monitor's own mode and adds one tagged row to its history, while leaving the schedule untouched — no reschedule, no alert, no change to the stored result or the uptime figure a monitor reports.
 | **Status pages** | A live, client-safe health page per client (and per single URL), shareable with no login. An internal, richer version is available to the team. |
 | **Team** | Manage who can do what (roles), and triage bug reports submitted from within the app. Every project keeps an **activity log** — who opened it, who added or removed a URL, who shared it, and when — readable by owners and admins. |
 
@@ -104,9 +106,11 @@ Counts and claims are scoped to the form itself: a **CAPTCHA is only reported on
 
 | Mode | Behavior |
 |------|----------|
-| `safe` *(default)* | Find the page and form, fill the fields — **never submit**. |
 | `detect-only` | Find the contact page and form; don't fill or submit. |
+| `safe` | Find the page and form, fill the fields — **never submit**. |
 | `live` | The full flow **including submission** — only on sites you're authorized to test. |
+
+The **app** defaults to `detect-only` in both the Form Tester and the Form Scheduler: the out-of-the-box behaviour puts nothing into a stranger's form, and Safe and Live are deliberate choices. The **CLI** still defaults to `safe` (`--mode`), since it's invoked explicitly and scripts depend on that behaviour.
 
 **Landing-page mode** skips discovery and the site crawl, testing the form on the exact URL given — for standalone landing pages with an inline form and no separate `/contact` page. Detection is also more lenient there: since you've asserted the form is on this page, the best-scoring form is accepted even if it wouldn't clear the usual contact-form threshold (a quiz, assessment or booking form is still a real form) — and the result says plainly that it's a low-confidence match.
 
