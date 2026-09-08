@@ -14,7 +14,10 @@ import { markCleared, unmarkCleared, wasCleared } from '@/lib/clearedInput';
 import type { RunConfig, SiteResult } from '@/types';
 
 const DEFAULT_CONFIG: RunConfig = {
-  mode: 'safe',
+  // Detect is the default: it only confirms a form is there, filling nothing and
+  // sending nothing. Safe and Live are both deliberate choices the user makes,
+  // and the least-intrusive option is the right thing to land on. FR-81.
+  mode: 'detect-only',
   email: 'formping-test@example.com',
   timeout: 30000,
   headed: false,
@@ -65,6 +68,12 @@ export default function Home() {
   // (results/logs are restored by the store, which owns that cache.)
   useEffect(() => {
     testerRun.hydrate();
+    // A persisted result belongs to the mode it was run in, so restore that mode
+    // with it — otherwise a refresh leaves a Safe-mode log sitting under a Detect
+    // selector, and the page describes a run it didn't do. Applied once, here, so
+    // the user can still change the mode afterwards. FR-81.
+    const storedMode = testerRun.getSnapshot().mode;
+    if (storedMode) setConfig((c) => ({ ...c, mode: storedMode }));
     try {
       // Respect a deliberate clear: don't restore the URL if the user emptied it.
       const u = wasCleared('tester') ? null : window.localStorage.getItem(STORAGE_KEY_URL);
@@ -88,6 +97,8 @@ export default function Home() {
    *  touch the server-stored run result (Projects/Status keep using it). */
   const handleClear = useCallback(() => {
     testerRun.clear();
+    // Nothing left on screen to keep the mode honest — back to the default.
+    setConfig((c) => ({ ...c, mode: DEFAULT_CONFIG.mode }));
     setUrlInput('');
     setPreflight(null);
     forceRef.current = false;
