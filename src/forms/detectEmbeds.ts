@@ -19,6 +19,10 @@ import type { Page } from 'playwright';
 export interface EmbedDetection {
   /** Human provider name, e.g. "Typeform". */
   provider: string;
+  /** CSS selectors that should match the rendered embed on the page — what to
+   *  screenshot and what to point the user at. An embed is not a <form>, so the
+   *  usual by-index capture cannot find it. FR-81. */
+  selectors?: string[];
   /** How we spotted it. */
   kind: 'iframe' | 'script' | 'container';
   /** The matched src / selector (trimmed) — for the note + debugging. */
@@ -74,19 +78,34 @@ export async function detectEmbeds(page: Page): Promise<EmbedDetection[]> {
   const seen = new Set<string>();
   const claimed = new Set<string>(); // srcs already matched to a named provider
 
-  const add = (provider: string, kind: EmbedDetection['kind'], detail: string) => {
+  const add = (provider: string, kind: EmbedDetection['kind'], detail: string, selectors?: string[]) => {
     if (seen.has(provider)) return;
     seen.add(provider);
-    found.push({ provider, kind, detail: detail.slice(0, 200) });
+    found.push({ provider, kind, detail: detail.slice(0, 200), ...(selectors?.length ? { selectors } : {}) });
   };
 
+  // ── 1. An IFRAME from a form provider is a form. ────────────────────────────
+  // The iframe IS the embedded form — there is something on the page to point
+  // at, screenshot and open.
+  //
+  // A SCRIPT is not. Nearly every marketing site loads HubSpot or Mailchimp JS
+  // for tracking, and matching on that reported "there is a HubSpot form here"
+  // for a page with no form on it — 0 fields, no screenshot, nothing to see when
+  // you go and look. A script tag is evidence the site USES a vendor, not that a
+  // form is embedded. So script matches are only a hint, confirmed below by
+  // actually finding the provider's container in the DOM. FR-81.
+  const scriptHints = new Map<string, string>();
   for (const item of raw) {
     for (const p of PROVIDERS) {
-      if (p.url?.some((re) => re.test(item.value))) {
-        add(p.name, item.kind, item.value);
-        claimed.add(item.value);
-        break;
+      if (!p.url?.some((re) => re.test(item.value))) continue;
+      claimed.add(item.value);
+      if (item.kind === 'iframe') {
+        // The iframe IS the form — point straight at it.
+        const esc = item.value.replace(/"/g, '\\"');
+        add(p.name, 'iframe', item.value, [`iframe[src="${esc}"]`, ...(p.containers ?? [])]);
       }
+      else if (!scriptHints.has(p.name)) scriptHints.set(p.name, item.value);
+      break;
     }
   }
 
@@ -102,13 +121,17 @@ export async function detectEmbeds(page: Page): Promise<EmbedDetection[]> {
     if (GENERIC_FORM_PATH.test(item.value)) {
       let host = item.value;
       try { host = new URL(item.value).host; } catch { /* keep raw */ }
-      add(host, 'iframe', item.value);
+      const escGeneric = item.value.replace(/"/g, '\\"');
+      add(host, 'iframe', item.value, [`iframe[src="${escGeneric}"]`]);
     }
   }
 
-  // Container-selector pass — some providers inject a target div/script config
-  // without a same-page iframe/script src we can match (e.g. HubSpot's
-  // createForm target, Marketo's <form id="mktoForm_1">).
+  // ── 2. Container pass — the proof a script-loaded form actually rendered. ───
+  // Some providers inject a target div without a same-page iframe (HubSpot's
+  // createForm target, Marketo's <form id="mktoForm_1">, Mailchimp's
+  // #mc_embed_signup). Finding one of those means the form is really on the
+  // page. This now runs for script-hinted providers too — it is what promotes a
+  // hint into a reported form.
   const containerRules = PROVIDERS.filter((p) => !seen.has(p.name) && p.containers?.length);
   if (containerRules.length) {
     const hits = await page.evaluate(
@@ -118,8 +141,14 @@ export async function detectEmbeds(page: Page): Promise<EmbedDetection[]> {
           .map((r) => r.name),
       containerRules.map((p) => ({ name: p.name, containers: p.containers! })),
     );
-    for (const name of hits) add(name, 'container', PROVIDERS.find((p) => p.name === name)!.containers!.join(', '));
+    for (const name of hits) {
+      const rule = PROVIDERS.find((p) => p.name === name)!;
+      add(name, 'container', rule.containers!.join(', '), rule.containers);
+    }
   }
 
+  // Anything still only script-hinted is deliberately NOT reported. The vendor's
+  // code is on the page; a form is not. Saying nothing is the honest answer —
+  // claiming a form the user cannot find is what this fixes.
   return found;
 }
