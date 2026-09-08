@@ -5,7 +5,7 @@ import type { FormSchedule, FormRunRecord } from '@/lib/formWatch/types';
 import { runVerdict, type VerdictLevel } from '@/lib/formWatch/verdict';
 import { TrendBar, type TrendTone } from '@/components/TrendBar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { cx, KeptNotice } from '@/components/ui';
+import { cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
 import { friendlyNotes } from '@/lib/friendlyNotes';
 import { FormSummary, FormsOnPageLine, TrackingParamsLine } from '@/components/FormFactChips';
 
@@ -18,6 +18,11 @@ const LEVEL_STYLE: Record<VerdictLevel | 'pending', { dot: string; text: string;
 };
 
 const MODE_LABEL: Record<string, string> = { 'detect-only': 'Detect', safe: 'Safe', live: 'Live' };
+
+/** How often the card asks whether a Re-run has finished, and how long it keeps
+ *  asking before it stops and tells you to look for the row instead. FR-82. */
+const RERUN_POLL_MS = 3000;
+const RERUN_MAX_WAIT_MS = 5 * 60 * 1000;
 
 
 function relativeTime(iso: string | null): string {
@@ -58,6 +63,9 @@ export function ScheduleCard({
   const [pausing, setPausing] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [justStopped, setJustStopped] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
+  const [rerunError, setRerunError] = useState<string | null>(null);
+  const rerunPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holding = useRef(false);
 
@@ -67,22 +75,39 @@ export function ScheduleCard({
   const level: VerdictLevel | 'pending' = verdict ? verdict.level : 'pending';
   const style = LEVEL_STYLE[level];
 
-  const recentRuns = (runs ?? []).slice(0, 12).reverse();
+  // Scheduled runs only. This trend and its percentage answer "how has this form
+  // been doing on its schedule?" — a run someone started by hand is not part of
+  // that answer, and letting re-runs in would move the number every time you
+  // pressed the button. The re-runs are still in the history below, tagged. FR-82.
+  const scheduledRuns = (runs ?? []).filter((r) => r.trigger !== 'manual');
+  const recentRuns = scheduledRuns.slice(0, 12).reverse();
   const levels = recentRuns.map((r) => runVerdict(r.reasonCode, r.fingerprint.formFound, r.status, r.fingerprint.formConfidenceLevel).level);
   // A detected third-party embed is a fine outcome — count it as OK for the pass
   // rate and give it its own sky bar in the trend (not amber). FR-60.
   const passPct = levels.length ? Math.round((levels.filter((l) => l === 'healthy' || l === 'detected').length / levels.length) * 100) : null;
   const trendTones: TrendTone[] = levels.map((l) => (l === 'healthy' ? 'emerald' : l === 'detected' ? 'sky' : l === 'failing' ? 'red' : 'amber'));
 
-  async function loadRuns() {
-    setLoadingRuns(true);
+  /**
+   * Load the run history. Returns whether a Re-run is still in flight, which the
+   * server tracks — so the card can keep saying "Running…" even if you refreshed
+   * or left the tab while it ran. FR-82.
+   *
+   * `silent` skips the loading state. A background refresh (the re-run poll)
+   * must not swap the list for skeletons: it made the open history collapse and
+   * re-expand every few seconds, which reads as the panel flickering shut. Only
+   * a first load, when there is genuinely nothing to show yet, shows skeletons.
+   */
+  async function loadRuns(opts?: { silent?: boolean }): Promise<boolean> {
+    if (!opts?.silent) setLoadingRuns(true);
     try {
       const res = await fetch(`/api/form-watch/results?id=${encodeURIComponent(schedule.id)}`, { cache: 'no-store' }).then((r) => r.json());
       setRuns(Array.isArray(res?.runs) ? res.runs : []);
+      return res?.manualRunning === true;
     } catch {
       setRuns([]);
+      return false;
     } finally {
-      setLoadingRuns(false);
+      if (!opts?.silent) setLoadingRuns(false);
     }
   }
   function toggleExpand() {
@@ -91,12 +116,23 @@ export function ScheduleCard({
     if (next) void loadRuns();
   }
   useEffect(() => {
-    void loadRuns();
+    // A re-run started before this card mounted (another visit, a refresh, or a
+    // tab change) may still be going. The server knows; pick that up from the
+    // same request rather than resetting the button to "Re-run". FR-82.
+    void loadRuns().then((manualRunning) => {
+      if (manualRunning && !rerunPoll.current) { setRerunning(true); startRerunPoll(); }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule.lastRunAt]);
 
-  // Release the poll hold if this card unmounts while its note is still up.
-  useEffect(() => () => { if (holding.current) onHold(false); if (timer.current) clearTimeout(timer.current); }, [onHold]);
+  // Release the poll hold if this card unmounts while its note is still up, and
+  // stop watching a re-run we can no longer show the result of.
+  useEffect(() => () => {
+    if (holding.current) onHold(false);
+    if (timer.current) clearTimeout(timer.current);
+    if (rerunPoll.current) clearInterval(rerunPoll.current);
+  }, [onHold]);
+
 
   function finish() {
     if (timer.current) clearTimeout(timer.current);
@@ -116,6 +152,58 @@ export function ScheduleCard({
     onHold(true); // freeze the poll so the note stays put
     setJustStopped(true);
     timer.current = setTimeout(finish, 7000);
+  }
+
+  /**
+   * Test this form now. Adds one tagged row to the run history below and changes
+   * nothing else — the schedule, its next run and its health trend all stay
+   * exactly as they were. FR-82.
+   *
+   * A form run drives a real browser, so it takes a minute or so and the server
+   * keeps going after this request returns. We poll the history until the server
+   * says the run is done; the server owns that flag, so leaving the tab or
+   * refreshing doesn't lose track of it.
+   */
+  async function handleRerun() {
+    setRerunning(true);
+    setRerunError(null);
+    setExpanded(true); // the answer lands in the history — open it before it does
+    try {
+      const res = await fetch('/api/form-watch/run-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: schedule.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setRerunError(data?.error || 'Could not start the run just now. Try again in a moment.');
+        setRerunning(false);
+        return;
+      }
+      startRerunPoll();
+    } catch {
+      setRerunError('Could not reach the server. Your schedule is unaffected.');
+      setRerunning(false);
+    }
+  }
+
+  /** Watch for the re-run to finish. Gives up after RERUN_MAX_WAIT_MS rather
+   *  than polling forever — the run itself is unaffected either way, and its row
+   *  will be in the history whenever it lands. */
+  function startRerunPoll() {
+    if (rerunPoll.current) clearInterval(rerunPoll.current);
+    const startedAt = Date.now();
+    rerunPoll.current = setInterval(() => {
+      void loadRuns({ silent: true }).then((stillRunning) => {
+        if (stillRunning && Date.now() - startedAt < RERUN_MAX_WAIT_MS) return;
+        if (rerunPoll.current) clearInterval(rerunPoll.current);
+        rerunPoll.current = null;
+        setRerunning(false);
+        if (stillRunning) {
+          setRerunError('Still running — it’s taking longer than usual. The result will appear in the history when it lands.');
+        }
+      });
+    }, RERUN_POLL_MS);
   }
 
   async function handlePause() {
@@ -173,6 +261,7 @@ export function ScheduleCard({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <RerunButton onClick={handleRerun} running={rerunning} what="form" />
             <button
               type="button"
               onClick={handlePause}
@@ -220,6 +309,10 @@ export function ScheduleCard({
                 : 'This multi-step form couldn’t be auto-filled on the last run. Live can’t submit what it can’t fill — verify it manually.'}
             </p>
           )}
+
+        {rerunError && (
+          <p className="mt-3 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-accent-soft">{rerunError}</p>
+        )}
 
         <button type="button" onClick={toggleExpand} className="mt-3 text-xs font-medium text-ink-muted transition-colors hover:text-ink">
           {expanded ? '▾ Hide run history' : '▸ View run history'}
@@ -300,7 +393,10 @@ function RunRow({ run }: { run: FormRunRecord }) {
           {s.label}
           <span className="font-normal text-ink-muted">· {v.label}</span>
         </span>
-        <span className="text-[11px] text-ink-faint">{new Date(run.ranAt).toLocaleString()}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          {run.trigger === 'manual' && <RerunTag />}
+          <span className="text-[11px] text-ink-faint">{new Date(run.ranAt).toLocaleString()}</span>
+        </div>
       </div>
       <div className="mt-1 text-[11px] text-ink-faint">
         {MODE_LABEL[run.mode] ?? run.mode} mode · {Math.round(run.durationMs / 1000)}s
