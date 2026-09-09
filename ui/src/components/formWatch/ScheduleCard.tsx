@@ -75,6 +75,7 @@ export function ScheduleCard({
   const [justStopped, setJustStopped] = useState(false);
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  const [confirmRerun, setConfirmRerun] = useState(false);
   const rerunPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const firstPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -204,7 +205,20 @@ export function ScheduleCard({
    * says the run is done; the server owns that flag, so leaving the tab or
    * refreshing doesn't lose track of it.
    */
-  async function handleRerun() {
+  /**
+   * Pressing Re-run. On a Live monitor this only ASKS — running it submits a
+   * real message to the client's form, immediately and irreversibly, so it gets
+   * the same confirmation Stop does. Safe and Detect run straight away: they
+   * send nothing, and a prompt on a harmless action is how people learn to
+   * dismiss prompts without reading. FR-85.
+   */
+  function handleRerunClick() {
+    if (schedule.mode === 'live') { setConfirmRerun(true); return; }
+    void doRerun();
+  }
+
+  async function doRerun() {
+    setConfirmRerun(false);
     setRerunning(true);
     setRerunError(null);
     setExpanded(true); // the answer lands in the history — open it before it does
@@ -301,7 +315,7 @@ export function ScheduleCard({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <RerunButton onClick={handleRerun} running={rerunning} what="form" />
+            <RerunButton onClick={handleRerunClick} running={rerunning} what="form" live={schedule.mode === 'live'} />
             <button
               type="button"
               onClick={handlePause}
@@ -373,6 +387,27 @@ export function ScheduleCard({
           {!loadingRuns && runs && runs.map((run, i) => <RunRow key={`${run.ranAt}-${i}`} run={run} />)}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmRerun}
+        variant="danger"
+        title="Submit a real message to this form now?"
+        confirmLabel="Yes, submit now"
+        message={
+          <>
+            <p>
+              This monitor is set to <strong className="text-ink-secondary">Live</strong>, so running it now fills{' '}
+              <span className="break-all font-mono text-ink-secondary">{schedule.url}</span> and{' '}
+              <strong className="text-ink-secondary">submits it for real</strong> — the entry lands in the site owner&rsquo;s inbox or CRM straight away, and can&rsquo;t be taken back.
+            </p>
+            <p className="mt-2">
+              The test data identifies it as a health check. Your schedule is unaffected either way.
+            </p>
+          </>
+        }
+        onConfirm={doRerun}
+        onCancel={() => setConfirmRerun(false)}
+      />
 
       <ConfirmDialog
         open={confirmStop}
