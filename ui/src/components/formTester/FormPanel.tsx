@@ -4,7 +4,7 @@ import type { DetectedFormField, SiteResult, SubmitMode } from '@/types';
 import { runVerdict } from '@/lib/formWatch/verdict';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { aboutIsTitle, displayName, DOT, KindIcon, type PreparedForm, type Tone } from './formMeta';
-import { formHref, FormShot, LowConfidenceNote, PageProtectionNote } from './FormEvidence';
+import { EmbedUnreadableNote, formHref, FormShot, LowConfidenceNote, PageProtectionNote } from './FormEvidence';
 
 /**
  * FR-75 — one form's detail block inside the multi-form results log: a category
@@ -90,7 +90,22 @@ export function FormPanel({
     const result = await onSubmitLiveTest(form.url);
     setSubmit({ phase: 'done', result });
   }
-  const showTitle = Boolean(form.about) && !aboutIsTitle(form);
+  // A form's title is something the page calls it. For an unreadable embed the
+  // only thing we have is the provider's name, and showing 'HubSpot' as FORM
+  // TITLE presents a vendor as the form's own words. FR-84.
+  const aboutIsJustProvider =
+    form.formType === 'third-party' && !!form.provider &&
+    form.about.trim().toLowerCase() === form.provider.trim().toLowerCase();
+  const showTitle = Boolean(form.about) && !aboutIsTitle(form) && !aboutIsJustProvider;
+  // Fields we could not read, as opposed to a form that genuinely has none.
+  const fieldsUnreadable = typeof form.fieldCount !== 'number';
+  // ...and whether we can honestly say WHY. Only a cross-origin iframe is
+  // genuinely unreadable. A `container` embed renders a real <form> into this
+  // page's DOM (Marketo's mktoForm, Mailchimp's mc_embed_signup), so claiming we
+  // can't see inside it would be false — we simply haven't read it there yet.
+  // Legacy records carry no embedKind and are treated as iframes, which is what
+  // they were. FR-84.
+  const hostedInOwnFrame = fieldsUnreadable && form.embedKind !== 'container';
   const categoryChip =
     form.kind === 'newsletter' ? 'We detected a Newsletter form'
     : form.kind === 'search' ? 'We detected a Searchbar input form'
@@ -211,7 +226,12 @@ export function FormPanel({
         <div className="flex flex-wrap items-center gap-2">
           <Chip>{form.formType === 'third-party' ? `Third-party${form.provider ? ` · ${form.provider}` : ''}` : 'Native form'}</Chip>
           {tested && typeof isMultiStep === 'boolean' && <Chip>{isMultiStep ? 'Multi-step' : 'Single-step'}</Chip>}
-          <Chip><b className="font-mono font-bold text-ink">{form.fieldCount}</b> field{form.fieldCount === 1 ? '' : 's'}</Chip>
+          {/* No number when we could not read the fields. "0 fields" appeared
+              under a screenshot showing six, because an unreadable form was
+              recorded as an empty one. FR-84. */}
+          {!fieldsUnreadable && (
+            <Chip><b className="font-mono font-bold text-ink">{form.fieldCount}</b> field{form.fieldCount === 1 ? '' : 's'}</Chip>
+          )}
           {/* Only claim CAPTCHA when the widget is on THIS form. Page-wide
               protection is reported separately below — stamping it here is how a
               search box came back "CAPTCHA protected" (FR-73). We can't see an
@@ -219,13 +239,16 @@ export function FormPanel({
           {form.security?.captcha && (
             <Chip tone="captcha">
               <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden><path strokeLinecap="round" strokeLinejoin="round" d="M6 9V6.5a4 4 0 018 0V9M5 9h10a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6a1 1 0 011-1z" /></svg>
-              CAPTCHA
+              {form.captchaVendor ?? 'CAPTCHA'}
             </Chip>
           )}
         </div>
 
         {/* Protection on the page, but not on this form — said as its own fact. FR-73. */}
-        {!form.security?.captcha && form.security?.pageProtection && <PageProtectionNote />}
+        {hostedInOwnFrame && <EmbedUnreadableNote provider={form.provider} />}
+        {!form.security?.captcha && form.security?.pageProtection && (
+          <PageProtectionNote unreadableEmbed={hostedInOwnFrame} />
+        )}
 
         {/* Field-name preview — each field a chip, aligned next to the label;
             global (site header/footer) fields are marked so they're not mistaken

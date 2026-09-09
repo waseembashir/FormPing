@@ -109,12 +109,44 @@ export function LowConfidenceNote({ reason }: { reason?: string }) {
  * separately, because it is a fact about the page: claiming it as "this form is
  * CAPTCHA protected" is exactly the false confidence FR-73 removed.
  */
-export function PageProtectionNote() {
+export function PageProtectionNote({ unreadableEmbed }: { unreadableEmbed?: boolean }) {
+  // "not attached to this form" is a claim about the form's contents. We cannot
+  // make it about a form we cannot see into — and the screenshot may plainly
+  // show a reCAPTCHA badge sitting on it. FR-84.
+  if (unreadableEmbed) {
+    return (
+      <p className="text-xs leading-relaxed text-ink-faint">
+        <span className="font-semibold text-ink-secondary">Bot protection on this page.</span>{' '}
+        We found reCAPTCHA/Turnstile code on the page. Because this form is hosted elsewhere we can&rsquo;t see inside
+        it, so we can&rsquo;t tell you whether it protects this form — check the picture above.
+      </p>
+    );
+  }
   return (
     <p className="text-xs leading-relaxed text-ink-faint">
       <span className="font-semibold text-ink-secondary">Bot protection on this page.</span>{' '}
       We found reCAPTCHA/Turnstile code on the page, but not attached to this form — it may still challenge a real
       submission.
+    </p>
+  );
+}
+
+/**
+ * Why a hosted form shows no field count — and what to do about it.
+ *
+ * Leads with what we DID establish (it loaded, here is the picture) and ends
+ * with the one action left to the user, rather than a paragraph about our
+ * limitations. An earlier version explained at length that we couldn't check
+ * the CAPTCHA either; the frame-tree check now answers that, and the chip above
+ * says so, so the sentence went. FR-84.
+ */
+export function EmbedUnreadableNote({ provider }: { provider?: string }) {
+  const name = provider?.trim() || 'another service';
+  return (
+    <p className="text-xs leading-relaxed text-ink-faint">
+      <span className="font-semibold text-ink-secondary">Hosted by {name} — it loaded correctly.</span>{' '}
+      We can&rsquo;t fill or read a form inside another company&rsquo;s frame, so send one test through it yourself to
+      confirm it reaches you.
     </p>
   );
 }

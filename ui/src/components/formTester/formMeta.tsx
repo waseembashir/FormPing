@@ -53,7 +53,11 @@ export const DOT: Record<Tone, string> = {
  *  Newsletter / search / login are utility inputs — never lead forms. */
 export function isLeadForm(f: Pick<SiteForm, 'kind' | 'fieldCount'>): boolean {
   if (f.kind === 'contact') return true;
-  if (f.kind === 'other') return f.fieldCount > 1; // a rental/demo form, not a 1-box widget
+  // A rental/demo form, not a 1-box widget. An unknown count can't clear that
+  // bar — but it never reaches here anyway: only hosted embeds lack a count, and
+  // those are kind 'third-party'. Written out rather than coerced so the
+  // reasoning is visible if that ever changes. FR-84.
+  if (f.kind === 'other') return typeof f.fieldCount === 'number' && f.fieldCount > 1;
   return false; // newsletter / search / login
 }
 

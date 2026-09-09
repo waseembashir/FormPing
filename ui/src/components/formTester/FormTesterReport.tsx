@@ -162,7 +162,12 @@ export function FormTesterReport({
                   {p.form.url}
                 </a>
                 <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-faint">
-                  {p.form.fieldCount} field{p.form.fieldCount === 1 ? '' : 's'} · {p.status.label.toLowerCase()}
+                  {/* A hosted form's fields can't be read from outside its frame.
+                      Say "hosted form" rather than print a count we don't have —
+                      "0 fields" sat under a screenshot showing six. FR-84. */}
+                  {typeof p.form.fieldCount === 'number'
+                    ? `${p.form.fieldCount} field${p.form.fieldCount === 1 ? '' : 's'}`
+                    : 'hosted form'} · {p.status.label.toLowerCase()}
                 </span>
               </div>
             ))}
