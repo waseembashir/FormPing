@@ -193,6 +193,12 @@ export default function DocsContent() {
                 />
                 <P>Each result is a clear verdict — <strong className="text-ink">healthy</strong>, <strong className="text-ink">needs attention</strong>, or <strong className="text-ink">failing</strong> — with a plain-English reason. It also shows what was found: the page the form is on, whether it’s a <strong className="text-ink">native</strong> in-page form or a <strong className="text-ink">third-party</strong> one (Typeform, HubSpot, …), how many fields and their names, and whether it’s a <strong className="text-ink">single- or multi-step</strong> form. CAPTCHA and anti-bot protection are detected and reported, never bypassed.</P>
                 <Note>
+                  <strong>Forms hosted by someone else.</strong> A Typeform or HubSpot form runs inside that
+                  company&rsquo;s own frame, so we can show you a picture of it and confirm it loaded, but we can&rsquo;t
+                  read its fields from outside — so we show no field count rather than a made-up one. We <em>can</em>
+                  still tell whether a <strong>CAPTCHA sits on that form</strong>, and we say which kind.
+                </Note>
+                <Note>
                   <strong>See the form we found.</strong> Every form comes with a <strong>picture of it, headline and all</strong> — and cookie banners or chat bubbles are taken out of the shot, so you see the form and not what was sitting on top of it. Its address opens the page right at that form, so you can check in a second that we tested the form you meant instead of taking our word for it.
                 </Note>
                 <Note>
