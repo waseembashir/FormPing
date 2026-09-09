@@ -221,13 +221,50 @@ export interface SiteForm {
   formType: 'native' | 'third-party';
   /** Provider when third-party (Typeform, HubSpot, …). */
   provider?: string;
-  /** Accurate fillable-field count (groups collapsed, hidden dropped). */
-  fieldCount: number;
+  /**
+   * How the embed reaches the page, when this is a third-party form.
+   *
+   * `container` means the provider rendered a real <form> into THIS page's DOM,
+   * so its fields are readable like any native form's. `iframe` means the form
+   * lives in a cross-origin document we cannot read into — we can photograph it
+   * (a screenshot captures rendered pixels either way) but not inspect it. The
+   * two used to be collapsed, and everything unreadable was reported as if it
+   * had been read and found empty. FR-84.
+   */
+  embedKind?: 'iframe' | 'script' | 'container';
+  /**
+   * Accurate fillable-field count (groups collapsed, hidden dropped).
+   *
+   * OMITTED when the fields could not be read at all — a cross-origin embed. It
+   * is not `0`: zero asserts "we looked and there are none", which appeared under
+   * a screenshot showing six. Absent means "we could not look", and every
+   * renderer must show nothing rather than a number. FR-84.
+   */
+  fieldCount?: number;
   fields: DetectedFormField[];
   /** `captcha` = a widget on THIS form. `pageProtection` = bot-protection markup
    *  somewhere on the page it lives on — true of the whole page, not evidence
    *  about this form, so the two are never conflated on the card. FR-73. */
-  security: { captcha: boolean; pageProtection?: boolean };
+  security: {
+    /**
+     * A CAPTCHA widget on THIS form. OMITTED when it could not be determined —
+     * inside a cross-origin embed, `false` would claim the form is unprotected
+     * when the screenshot may plainly show a reCAPTCHA badge on it. FR-84.
+     */
+    captcha?: boolean;
+    /** Bot-protection markup somewhere on the page it lives on — true of the
+     *  whole page, not evidence about this form, so the two are never conflated
+     *  on the card. FR-73. */
+    pageProtection?: boolean;
+  };
+  /**
+   * Which vendor's challenge widget was found on this form, when one was.
+   *
+   * For a hosted form this comes from the frame tree rather than the DOM: a
+   * reCAPTCHA frame whose ancestors lead back to the form's own frame is on
+   * that form. Absent means none was seen — never that none exists. FR-84.
+   */
+  captchaVendor?: string;
   tracking: TrackingParams;
   /** An element id to jump straight to this form — `url#anchorId`. FR-73. */
   anchorId?: string;

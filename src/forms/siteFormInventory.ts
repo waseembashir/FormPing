@@ -2,6 +2,7 @@ import type { Browser, Page } from 'playwright';
 import type { AppConfig, DetectedFormField, FormCandidate, FormKind, FormOutcome, SiteForm, TrackingParams } from '../types.js';
 import { extractForms, formAbout, type FormInfo } from './findContactForm.js';
 import { detectEmbeds } from './detectEmbeds.js';
+import { inspectEmbedFrames } from './inspectEmbedFrames.js';
 import { fillForm } from './fillForm.js';
 import { captureFormShot, captureEmbedShot } from './captureFormShot.js';
 import { classifyFormKind, meaningfulFields, ownFields, detectTrackingParams, isLeadForm, isMarketingParam } from '../runners/formFacts.js';
@@ -160,6 +161,19 @@ interface EmbedRec {
   url: string;
   pageProtection: boolean;
   provider: string;
+  /**
+   * How we found it, and therefore whether its contents are knowable.
+   *
+   * A `container` embed renders a real <form> into this page's DOM — readable
+   * like any other. An `iframe` embed lives in a cross-origin document we cannot
+   * read into. Dropping this distinction is what let an unreadable form be
+   * reported as an empty one. FR-84.
+   */
+  kind: 'iframe' | 'script' | 'container';
+  /** A challenge widget found INSIDE this embed's own frame. Absent means we
+   *  didn't see one, never that there isn't one. FR-84. */
+  captcha?: boolean;
+  captchaVendor?: string;
   /** A real embed can be photographed too — it is just not a <form>. FR-81. */
   shot: string | null;
 }
@@ -346,15 +360,25 @@ export async function inventorySiteForms(
           });
         }
         for (const embed of embeds) {
-          // An embed is the one case where a user CANNOT inspect the form
-          // themselves — it is cross-origin — so evidence matters most here. It
-          // shares the per-run shot budget with the native forms. FR-81.
+          // Evidence matters most here: an embed is the case where the user has
+          // no markup of their own to go and check. A screenshot captures
+          // rendered pixels, so it works even for a cross-origin iframe whose
+          // fields we cannot read — we can SHOW a form we cannot INSPECT. Shares
+          // the per-run shot budget with the native forms. FR-81/FR-84.
           let embedShot: string | null = null;
           if (embed.selectors?.length && shots < SHOT_CAP) {
             embedShot = await captureEmbedShot(page, embed.selectors);
             if (embedShot) shots += 1;
           }
-          embedRecords.push({ type: 'embed', url, pageProtection, provider: embed.provider, shot: embedShot });
+          // Read the frame tree — the one way to learn what is inside a
+          // cross-origin form without reading its DOM. Answers "is the CAPTCHA
+          // on THIS form?", which the page-level DOM check cannot. FR-84.
+          const frameFacts = inspectEmbedFrames(page, embed.detail);
+          embedRecords.push({
+            type: 'embed', url, pageProtection, provider: embed.provider, kind: embed.kind,
+            captcha: frameFacts.captcha, captchaVendor: frameFacts.captchaVendor,
+            shot: embedShot,
+          });
         }
       } catch (err) {
         logger.debug(`Site inventory: skipped ${url}: ${err}`);
@@ -403,7 +427,18 @@ export async function inventorySiteForms(
       url: rec.url, kind: 'third-party', about: rec.provider, formType: 'third-party',
       // We can't see inside a cross-origin embed, so we never claim a CAPTCHA on
       // one — only that the page it sits on carries bot protection. FR-73.
-      provider: rec.provider, fieldCount: 0, fields: [], security: { captcha: false, pageProtection: rec.pageProtection },
+      provider: rec.provider,
+      embedKind: rec.kind,
+      // No fieldCount and no captcha verdict: both are unknowable from outside a
+      // cross-origin frame, and inventing 0/false there put "0 fields" and "no
+      // CAPTCHA on this form" under a screenshot showing six fields and a
+      // reCAPTCHA badge. Absent means "we could not look". FR-84.
+      fields: [],
+      // `captcha` is set only when a challenge frame was actually found inside
+      // this form. Left absent otherwise — "we didn't see one" is not "there
+      // isn't one", and claiming the latter is what FR-73 removed elsewhere.
+      security: { ...(rec.captcha ? { captcha: true } : {}), pageProtection: rec.pageProtection },
+      captchaVendor: rec.captchaVendor,
       tracking: { utm: [], other: [] }, siteWide: false, seenOn: 1,
       outcome: { state: 'detected', note: 'third-party embed — can’t auto-fill' },
       ...(rec.shot ? { shot: rec.shot } : {}),
@@ -449,6 +484,8 @@ export async function inventorySiteForms(
   }
 
   return Array.from(byKey.values()).sort(
-    (a, b) => (KIND_RANK[a.kind] ?? 9) - (KIND_RANK[b.kind] ?? 9) || b.fieldCount - a.fieldCount,
+    // An unknown field count sorts as 0 here: it says nothing about importance,
+    // and the kind rank above has already done the meaningful ordering. FR-84.
+    (a, b) => (KIND_RANK[a.kind] ?? 9) - (KIND_RANK[b.kind] ?? 9) || (b.fieldCount ?? 0) - (a.fieldCount ?? 0),
   );
 }

@@ -388,6 +388,8 @@ function FormRow({ form }: { form: FormRunFormSummary }) {
           {form.formType && (
             <Tag>{form.formType === 'third-party' ? `Third-party${form.provider ? ` · ${form.provider}` : ''}` : 'Native form'}</Tag>
           )}
+          {/* Already absent when unreadable: a hosted form has no fieldCount at
+              all now, rather than a 0 this guard happened to hide. FR-84. */}
           {typeof form.fieldCount === 'number' && form.fieldCount > 0 && (
             <Tag>{form.fieldCount} field{form.fieldCount === 1 ? '' : 's'}</Tag>
           )}
