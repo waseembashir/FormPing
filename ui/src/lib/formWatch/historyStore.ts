@@ -11,6 +11,17 @@ import type { FormRunRecord, FormFingerprint, FormRunStatus, FormWatchMode, RunT
 import { supabaseAdmin } from '@/lib/supabase';
 
 const MAX_RUNS = 100;
+/**
+ * How long a manual run's row survives. A re-run answers "is this working right
+ * now?" — a question with a short shelf life — so its row is kept long enough to
+ * be looked at again later in the day, then removed from the database and from
+ * the log. FR-89.
+ *
+ * This replaces a count-based allowance: a time limit is one sentence a user can
+ * understand, and like the count it cannot evict scheduled history, because the
+ * two are pruned independently.
+ */
+const MANUAL_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface FormRunRow {
   schedule_id: string;
@@ -67,6 +78,12 @@ function toRow(rec: FormRunRecord): FormRunRow {
   };
 }
 
+/** True unless this is a manual run past its 24-hour life. FR-89. */
+function notExpiredManual(r: FormRunRecord): boolean {
+  if (r.trigger !== 'manual') return true;
+  return Date.now() - Date.parse(r.ranAt) < MANUAL_TTL_MS;
+}
+
 /** Read a schedule's run history (newest first). */
 export async function readHistory(scheduleId: string): Promise<FormRunRecord[]> {
   const { data, error } = await supabaseAdmin()
@@ -79,7 +96,9 @@ export async function readHistory(scheduleId: string): Promise<FormRunRecord[]> 
     console.warn(`[formWatch/historyStore] read: ${error.message}`);
     return [];
   }
-  return (data as FormRunRow[]).map(toRecord);
+  // Expired re-runs never reach a reader, even if pruning hasn't run since —
+  // the 24-hour promise holds regardless of when the last write happened.
+  return (data as FormRunRow[]).map(toRecord).filter(notExpiredManual);
 }
 
 /** The most recent run for a schedule, or null. */
@@ -109,17 +128,47 @@ export async function appendRun(record: FormRunRecord): Promise<void> {
   await pruneToCap(record.scheduleId);
 }
 
-/** Keep only the newest MAX_RUNS rows for a schedule. Best-effort. */
+/**
+ * Trim a schedule's history, counting scheduled runs and re-runs SEPARATELY.
+ *
+ * One shared cap let re-runs evict real history: the newest N rows were kept
+ * whatever started them, so a handful of re-runs while debugging silently
+ * dropped that many days of scheduled results. A re-run is not allowed to
+ * change anything the schedule owns, and its own history is very much
+ * something it owns. FR-85.
+ *
+ * Rows written before FR-82 have no trigger_source and count as scheduled,
+ * which is what they were. Best-effort throughout.
+ */
 async function pruneToCap(scheduleId: string): Promise<void> {
+  await Promise.all([pruneScheduledToCap(scheduleId), pruneExpiredManual(scheduleId)]);
+}
+
+/** Scheduled runs keep their count cap — manual rows are not counted against it. */
+async function pruneScheduledToCap(scheduleId: string): Promise<void> {
   const db = supabaseAdmin();
   const { data, error } = await db
     .from('form_watch_runs')
     .select('id')
     .eq('schedule_id', scheduleId)
+    .or('trigger_source.is.null,trigger_source.eq.scheduled')
     .order('ran_at', { ascending: false })
     .range(MAX_RUNS, MAX_RUNS + 500);
   if (error || !data || data.length === 0) return;
   const ids = (data as { id: string }[]).map((r) => r.id);
   const { error: delErr } = await db.from('form_watch_runs').delete().in('id', ids);
-  if (delErr) console.warn(`[formWatch/historyStore] prune: ${delErr.message}`);
+  if (delErr) console.warn(`[formWatch/historyStore] prune scheduled: ${delErr.message}`);
+}
+
+/** Manual runs expire on time, not on count. */
+async function pruneExpiredManual(scheduleId: string): Promise<void> {
+  const db = supabaseAdmin();
+  const cutoff = new Date(Date.now() - MANUAL_TTL_MS).toISOString();
+  const { error } = await db
+    .from('form_watch_runs')
+    .delete()
+    .eq('schedule_id', scheduleId)
+    .eq('trigger_source', 'manual')
+    .lt('ran_at', cutoff);
+  if (error) console.warn(`[formWatch/historyStore] prune expired manual: ${error.message}`);
 }

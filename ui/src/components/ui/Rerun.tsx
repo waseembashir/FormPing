@@ -42,11 +42,20 @@ export function RerunButton({
   disabled,
   /** What the button is checking — used in the tooltip so the promise is explicit. */
   what,
+  /**
+   * True when pressing this button will SUBMIT a real message — a Form Scheduler
+   * monitor set to Live. The button then names the mode and takes the danger
+   * colour, because the accident this guards against happens before any dialog
+   * opens: someone clicking an ordinary-looking button without thinking. The
+   * confirm is the second line of defence, not the first. FR-85.
+   */
+  live,
 }: {
   onClick: () => void;
   running: boolean;
   disabled?: boolean;
   what: 'form' | 'site';
+  live?: boolean;
 }) {
   return (
     <button
@@ -56,18 +65,22 @@ export function RerunButton({
       title={
         running
           ? 'Running now — the result appears in the history below when it finishes'
-          : what === 'form'
-            ? 'Test this form right now, in this monitor’s mode. Your schedule is not affected — the next scheduled run stays exactly where it is.'
-            : 'Check this site right now. Your schedule is not affected — the next scheduled check stays exactly where it is.'
+          : live
+            ? 'This monitor is set to Live, so running it now SUBMITS a real message to the form. You’ll be asked to confirm first. Your schedule is not affected.'
+            : what === 'form'
+              ? 'Test this form right now, in this monitor’s mode. Your schedule is not affected — the next scheduled run stays exactly where it is.'
+              : 'Check this site right now. Your schedule is not affected — the next scheduled check stays exactly where it is.'
       }
       className={cx(
         'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors',
-        'border-accent/40 text-accent-soft hover:bg-accent/10',
+        live
+          ? 'border-danger/45 text-danger hover:bg-danger/10'
+          : 'border-accent/40 text-accent-soft hover:bg-accent/10',
         'disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent',
       )}
     >
       <RerunIcon spinning={running} />
-      {running ? 'Running…' : 'Re-run'}
+      {running ? 'Running…' : live ? 'Re-run · Live' : 'Re-run'}
     </button>
   );
 }
