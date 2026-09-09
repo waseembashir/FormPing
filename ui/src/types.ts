@@ -74,12 +74,37 @@ export interface SiteForm {
   about: string;
   formType: 'native' | 'third-party';
   provider?: string;
-  fieldCount: number;
+  /**
+   * How a third-party form reaches the page. `container` means the provider
+   * rendered a real <form> into THIS page's DOM, so its fields are readable like
+   * any native form's; `iframe` means it lives in a cross-origin document we
+   * cannot read into — we can photograph it, but not inspect it. FR-84.
+   */
+  embedKind?: 'iframe' | 'script' | 'container';
+  /**
+   * Fillable-field count. OMITTED when the fields could not be read at all.
+   *
+   * It is not `0`: zero asserts "we looked and there are none", which appeared
+   * under a screenshot showing six. Absent means "we could not look", and every
+   * renderer must show nothing rather than a number. FR-84.
+   */
+  fieldCount?: number;
   fields: DetectedFormField[];
   /** `captcha` = a widget on THIS form; `pageProtection` = bot-protection markup
    *  on the page it lives on. Never conflated — page-level protection says
-   *  nothing about whether this particular form is protected. FR-73. */
-  security: { captcha: boolean; pageProtection?: boolean };
+   *  nothing about whether this particular form is protected. FR-73.
+   *  `captcha` is omitted when it could not be determined — inside a hosted
+   *  frame, `false` would claim a form is unprotected when its own screenshot
+   *  may show a reCAPTCHA badge. FR-84. */
+  security: { captcha?: boolean; pageProtection?: boolean };
+  /**
+   * Which vendor's challenge widget was found on this form, when one was.
+   *
+   * For a hosted form this comes from the frame tree rather than the DOM: a
+   * reCAPTCHA frame whose ancestors lead back to the form's own frame is on
+   * that form. Absent means none was seen — never that none exists. FR-84.
+   */
+  captchaVendor?: string;
   tracking: TrackingParams;
   siteWide: boolean;
   seenOn: number;
