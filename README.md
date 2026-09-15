@@ -126,6 +126,14 @@ The **app** defaults to `detect-only` in both the Form Tester and the Form Sched
 
 The same facts, in the same words, appear on the Form Tester result card, each Form Scheduler run, and the per-URL dashboard — one engine, one story. A scheduled check stores exactly what a manual test stores, so watching a URL makes its dashboard richer, never thinner; when a URL has both, the page shows the more recent one and says which it was.
 
+### A result that couldn't be stored is reported, not painted over
+
+A monitor's run record and the summary on its card are separate writes to separate tables. If the run record is refused — a missing column after a partial migration, a database blip — the summary must not be written anyway, or the card reports a fresh healthy check above a history that doesn't contain it.
+
+So writes are sorted into two kinds. **Essential** writes (the run record, the durable per-URL result, the daily rollup behind the uptime figures) report whether they landed; a failure is logged at `error` level and the monitor keeps the last result it can actually prove, advancing only its retry time. The card then says *"The last check could not be saved"* rather than showing stale figures as current. **Best-effort** writes (screenshots, Slack posts, the activity log, history pruning) still fail quietly on purpose, and say so where that choice is made.
+
+On boot a schema guard selects the columns each critical table is expected to have and logs a loud, unmissable error if any are missing — the condition that caused this, found in seconds rather than hours. It never stops the server: a monitoring tool that refuses to start is worse than one running with a stale column.
+
 ---
 
 ## Website change monitoring
