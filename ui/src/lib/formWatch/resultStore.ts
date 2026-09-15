@@ -15,6 +15,7 @@
 import type { FormRunRecord, FormRunStatus } from './types';
 import { urlKey as resultKey } from '@/lib/projects/projectStore';
 import { supabaseAdmin } from '@/lib/supabase';
+import { WRITE_OK, essentialWriteFailed, type WriteOutcome } from '@/lib/persistence';
 import { extractFormRunDetail, type FormRunDetail } from '@/lib/formRunDetail';
 
 export interface FormWatchResult {
@@ -60,8 +61,14 @@ function rowToResult(r: FormResultRow): FormWatchResult {
   };
 }
 
-/** Record the latest scheduled form result for a URL (upsert, last-write-wins). */
-export async function recordResult(record: FormRunRecord, raw?: unknown): Promise<void> {
+/**
+ * Record the latest scheduled form result for a URL (upsert, last-write-wins).
+ *
+ * ESSENTIAL: this row is what Projects and the dashboards read, so a silent
+ * failure here shows a stale verdict as though it were current. Reports its
+ * outcome; the ticker refuses to advance the card past a failure. FR-87.
+ */
+export async function recordResult(record: FormRunRecord, raw?: unknown): Promise<WriteOutcome> {
   try {
     const result: FormWatchResult = {
       url: resultKey(record.url),
@@ -97,10 +104,11 @@ export async function recordResult(record: FormRunRecord, raw?: unknown): Promis
       const { error: retry } = await supabaseAdmin()
         .from('form_watch_results')
         .upsert(baseRow, { onConflict: 'url_key' });
-      if (retry) console.warn(`[formWatch/resultStore] record: ${retry.message}`);
+      if (retry) return essentialWriteFailed('formWatch/resultStore', retry.message);
     }
+    return WRITE_OK;
   } catch (err) {
-    console.warn(`[formWatch/resultStore] recordResult failed: ${err}`);
+    return essentialWriteFailed('formWatch/resultStore', String(err));
   }
 }
 

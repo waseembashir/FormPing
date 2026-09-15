@@ -2,11 +2,22 @@
  * Persistence for Site Watch check history.
  *
  * Backed by Supabase (`site_watch_runs` table, one row per check). Newest-first,
- * capped to the most recent MAX_RUNS. Best-effort: errors logged, never thrown.
+ * capped to the most recent MAX_RUNS.
+ *
+ * The check row is an ESSENTIAL write: it IS the result, so `appendCheck`
+ * reports whether it landed and the caller decides what to do about it. Reads
+ * and pruning stay best-effort — neither can lose a result. See lib/persistence.
+ * FR-87.
  */
 
 import type { SiteCheckRecord, UptimeResult, SslResult, DomainResult, RunTrigger } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
+import {
+  WRITE_OK,
+  bestEffortWriteFailed,
+  essentialWriteFailed,
+  type WriteOutcome,
+} from '@/lib/persistence';
 
 const MAX_RUNS = 200;
 /**
@@ -83,15 +94,20 @@ export async function readHistory(scheduleId: string): Promise<SiteCheckRecord[]
   return (data as SiteRunRow[]).map(toRecord).filter(notExpiredManual);
 }
 
-/** Append a new check record (keyed by its scheduleId), cap to MAX_RUNS. */
-export async function appendCheck(record: SiteCheckRecord): Promise<void> {
+/**
+ * Append a new check record (keyed by its scheduleId), cap to MAX_RUNS.
+ *
+ * Returns whether the row landed — see `appendRun` in the Form Watch history
+ * store for why the caller is expected to look. FR-87.
+ */
+export async function appendCheck(record: SiteCheckRecord): Promise<WriteOutcome> {
   const db = supabaseAdmin();
   const { error } = await db.from('site_watch_runs').insert(toRow(record));
   if (error) {
-    console.warn(`[siteWatch/historyStore] append: ${error.message}`);
-    return;
+    return essentialWriteFailed('siteWatch/historyStore', error.message);
   }
   await pruneToCap(record.scheduleId);
+  return WRITE_OK;
 }
 
 /**
@@ -123,7 +139,7 @@ async function pruneScheduledToCap(scheduleId: string): Promise<void> {
   if (error || !data || data.length === 0) return;
   const ids = (data as { id: string }[]).map((r) => r.id);
   const { error: delErr } = await db.from('site_watch_runs').delete().in('id', ids);
-  if (delErr) console.warn(`[siteWatch/historyStore] prune scheduled: ${delErr.message}`);
+  if (delErr) bestEffortWriteFailed('siteWatch/historyStore: prune scheduled', delErr.message);
 }
 
 /** Manual checks expire on time, not on count. */
@@ -136,5 +152,5 @@ async function pruneExpiredManual(scheduleId: string): Promise<void> {
     .eq('schedule_id', scheduleId)
     .eq('trigger_source', 'manual')
     .lt('checked_at', cutoff);
-  if (error) console.warn(`[siteWatch/historyStore] prune expired manual: ${error.message}`);
+  if (error) bestEffortWriteFailed('siteWatch/historyStore: prune expired manual', error.message);
 }
