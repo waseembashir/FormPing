@@ -15,6 +15,8 @@ import { recordDaily } from './dailyStore';
 import { checkUptime, checkSsl, checkDomain } from './checks';
 import { evaluateAndAlert } from './alerts';
 import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
+import { isPermanent } from './failures';
+import { clearDomainRetry, domainRetryHeld, holdDomainRetry } from './domainBackoff';
 
 /** How often the loop checks for due schedules. */
 const TICK_MS = Number(process.env.SITE_WATCH_TICK_MS) || 60_000;
@@ -76,20 +78,49 @@ async function checkSiteOnce(
   // RDAP on every click. Domain expiry doesn't change minute to minute, and
   // uptime/SSL — the reason you pressed Re-run — are both probed live. FR-82.
   const lastDomFetch = schedule.lastDomainCheckedAt ? Date.parse(schedule.lastDomainCheckedAt) : 0;
-  let domain: DomainResult | null;
-  let domainFetched = false;
-  if (manual || now - lastDomFetch < DOMAIN_RECHECK_MS) {
-    domain = schedule.lastDomainExpiry
+  /** What we already know, recomputed for today. Null if we've never had one. */
+  const cachedDomain = (extra: Partial<DomainResult> = {}): DomainResult | null =>
+    schedule.lastDomainExpiry
       ? {
           ok: true,
           daysRemaining: Math.floor((Date.parse(schedule.lastDomainExpiry) - now) / 86_400_000),
           expiryDate: schedule.lastDomainExpiry,
           registrar: schedule.lastDomainRegistrar ?? null,
+          ...extra,
         }
-      : null; // last lookup failed / never succeeded — don't re-hit RDAP yet
+      : null;
+
+  let domain: DomainResult | null;
+  let domainFetched = false;
+  /**
+   * Whether this attempt should consume the 12-hour success throttle. A lookup
+   * that produced no answer must not, or one blip hides the expiry until
+   * tomorrow — the bug behind FR-86.
+   */
+  let advanceThrottle = false;
+
+  if (manual || now - lastDomFetch < DOMAIN_RECHECK_MS || domainRetryHeld(schedule.host, now)) {
+    domain = cachedDomain();
   } else {
-    domain = await checkDomain(schedule.host);
+    const looked = await checkDomain(schedule.host);
     domainFetched = true;
+    if (looked.ok) {
+      domain = looked;
+      advanceThrottle = true;
+      clearDomainRetry(schedule.host);
+    } else if (isPermanent('domain', looked.failure)) {
+      // Nothing to wait for: this registry will not start publishing an expiry
+      // because we asked twice. Keep the long throttle, as before FR-86.
+      domain = looked;
+      advanceThrottle = true;
+      clearDomainRetry(schedule.host);
+    } else {
+      // Temporary. Retry in DOMAIN_RETRY_MS rather than 12 hours, and do not
+      // throw away an expiry we already know just because the registry was
+      // unreachable for a second — show what we have and mark it unrefreshed.
+      holdDomainRetry(schedule.host, now);
+      domain = cachedDomain({ stale: true, failure: looked.failure }) ?? looked;
+    }
   }
 
   const record: SiteCheckRecord = {
@@ -155,13 +186,16 @@ async function checkSiteOnce(
     lastSslValid: ssl?.ok ?? undefined,
     lastDomainDaysRemaining: domain?.daysRemaining ?? null,
     lastDomainValid: domain?.ok ?? undefined,
-    // Advance the throttle timestamp whenever we actually queried; keep the
-    // cached expiry/registrar unless a fresh lookup succeeded (so a transient
-    // RDAP failure never wipes a known-good expiry).
-    lastDomainCheckedAt: domainFetched ? checkedAt : schedule.lastDomainCheckedAt,
-    lastDomainExpiry: domainFetched && domain?.ok ? domain.expiryDate : schedule.lastDomainExpiry,
+    // The throttle is consumed only by an attempt that actually answered —
+    // either with an expiry, or with a permanent "this registry doesn't publish
+    // one". A temporary failure leaves it untouched and takes the short backoff
+    // instead, so a blip self-heals in half an hour rather than half a day.
+    // The cached expiry/registrar survive either way. FR-86.
+    lastDomainCheckedAt: advanceThrottle ? checkedAt : schedule.lastDomainCheckedAt,
+    lastDomainExpiry:
+      domainFetched && domain?.ok && !domain.stale ? domain.expiryDate : schedule.lastDomainExpiry,
     lastDomainRegistrar:
-      domainFetched && domain?.ok ? domain.registrar : schedule.lastDomainRegistrar,
+      domainFetched && domain?.ok && !domain.stale ? domain.registrar : schedule.lastDomainRegistrar,
   };
   if (savedCheck.ok && savedResult.ok && savedDaily.ok) {
     clearSaveFailure('site', schedule.id);
