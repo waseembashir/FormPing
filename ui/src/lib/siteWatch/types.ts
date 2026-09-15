@@ -8,6 +8,8 @@
  * storage, Slack webhook) without importing or modifying Form Watch.
  */
 
+import type { CheckFailure } from './failures';
+
 export type UptimeClass = 'up' | 'down' | 'blocked';
 
 /** Who started a check: the schedule's own timer, or a person hitting Re-run.
@@ -20,7 +22,10 @@ export interface UptimeResult {
   classification: UptimeClass;
   statusCode: number | null;
   responseMs: number;
+  /** Raw technical detail. SERVER LOGS ONLY — never rendered. See failures.ts. */
   error?: string;
+  /** Why it failed, in a form the UI can phrase for a person. FR-86. */
+  failure?: CheckFailure;
 }
 
 /** Result of a single TLS-certificate check. */
@@ -31,7 +36,10 @@ export interface SslResult {
   /** ISO expiry date. */
   validTo: string | null;
   issuer: string | null;
+  /** Raw technical detail. SERVER LOGS ONLY — never rendered. See failures.ts. */
   error?: string;
+  /** Why it failed, in a form the UI can phrase for a person. FR-86. */
+  failure?: CheckFailure;
 }
 
 /** Result of a single domain-registration (WHOIS/RDAP) check. */
@@ -42,7 +50,17 @@ export interface DomainResult {
   /** ISO expiry date. */
   expiryDate: string | null;
   registrar: string | null;
+  /** Raw technical detail. SERVER LOGS ONLY — never rendered. See failures.ts. */
   error?: string;
+  /** Why it failed, in a form the UI can phrase for a person. FR-86. */
+  failure?: CheckFailure;
+  /**
+   * True when these figures come from the last SUCCESSFUL lookup rather than
+   * this check. A transient registry outage no longer blanks out an expiry we
+   * already know — it shows what we know, and says it could not be refreshed.
+   * FR-86.
+   */
+  stale?: boolean;
 }
 
 /** A recurring availability/SSL monitor for one site. */
