@@ -14,6 +14,7 @@ import { recordResult } from './resultStore';
 import { recordDaily } from './dailyStore';
 import { checkUptime, checkSsl, checkDomain } from './checks';
 import { evaluateAndAlert } from './alerts';
+import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
 
 /** How often the loop checks for due schedules. */
 const TICK_MS = Number(process.env.SITE_WATCH_TICK_MS) || 60_000;
@@ -102,7 +103,13 @@ async function checkSiteOnce(
     trigger,
   };
 
-  // The history row is the ONE thing a manual check writes.
+  // The history row is the ONE thing a manual check writes — and the unsaved-result
+  // flag is the SCHEDULE's, so a re-run does not touch it either way. Clearing it
+  // here would be worse than pointless: a re-run proves only that the history
+  // table accepts rows, so a successful one would wipe a warning raised by a
+  // failing results or rollup write and hide a scheduled failure that is still
+  // happening. A re-run must not alter the schedule, and this flag is part of
+  // what the schedule's card reports. FR-82 / FR-87.
   if (manual) {
     await appendCheck(record);
     return record;
@@ -121,15 +128,19 @@ async function checkSiteOnce(
     };
   }
 
-  await appendCheck(record);
+  const savedCheck = await appendCheck(record);
   // Durable per-URL result (survives stopping/deleting this monitor; only a
   // project delete clears it). See siteWatch/resultStore.
-  await recordResult(record);
+  //
+  // Both of these are skipped when the check row itself was refused: they
+  // describe a result we failed to store, and writing them anyway is what let a
+  // broken database look like a healthy monitor. FR-87.
+  const savedResult = savedCheck.ok ? await recordResult(record) : savedCheck;
   // Daily rollup so uptime/response over 7d/30d/all-time stay truthful (raw
   // history is capped). See siteWatch/dailyStore.
-  await recordDaily(record);
+  const savedDaily = savedResult.ok ? await recordDaily(record) : savedResult;
 
-  const updated: SiteSchedule = {
+  const advanced: SiteSchedule = {
     ...schedule,
     lastCheckedAt: checkedAt,
     nextCheckAt: new Date(now + schedule.intervalMs).toISOString(),
@@ -152,7 +163,26 @@ async function checkSiteOnce(
     lastDomainRegistrar:
       domainFetched && domain?.ok ? domain.registrar : schedule.lastDomainRegistrar,
   };
-  await upsertSchedule(updated);
+  if (savedCheck.ok && savedResult.ok && savedDaily.ok) {
+    clearSaveFailure('site', schedule.id);
+    await upsertSchedule(advanced);
+  } else {
+    // Keep the cadence, drop the claims — see keepCadenceOnly. Note this also
+    // preserves lastDomainCheckedAt, so a failed save cannot burn the 12-hour
+    // RDAP throttle on a lookup whose result was never stored.
+    noteSaveFailure('site', schedule.id, failureReason(savedCheck, savedResult, savedDaily));
+    await upsertSchedule({
+      ...keepCadenceOnly(schedule, advanced, 'nextCheckAt'),
+      // Alert bookkeeping is carried forward even here, because it is not a
+      // claim about what we found — it records that we already told someone.
+      // Reverting it would re-send the same "site is down" alert every
+      // interval for as long as the database kept refusing writes.
+      consecutiveDown: patch.consecutiveDown,
+      alertedDown: patch.alertedDown,
+      lastSslThresholdAlerted: patch.lastSslThresholdAlerted,
+      lastDomainThresholdAlerted: patch.lastDomainThresholdAlerted,
+    });
+  }
   return record;
 }
 
