@@ -11,6 +11,7 @@
  */
 
 import type { SiteCheckRecord, UptimeClass } from './types';
+import type { CheckFailure } from './failures';
 import { urlKey as resultKey } from '@/lib/projects/projectStore';
 import { supabaseAdmin } from '@/lib/supabase';
 import { WRITE_OK, essentialWriteFailed, type WriteOutcome } from '@/lib/persistence';
@@ -38,11 +39,18 @@ export interface SiteCheckDetail {
   sslIssuer?: string | null;
   /** ISO date the certificate expires — a real date beats "in 34 days". */
   sslValidTo?: string | null;
+  /** Kind of failure, not the raw message — the message never leaves the server. FR-86. */
+  sslFailure?: CheckFailure | null;
+  /** @deprecated pre-FR-86 rows only; never rendered. */
   sslError?: string | null;
   domainRegistrar?: string | null;
   domainExpiry?: string | null;
+  domainFailure?: CheckFailure | null;
+  /** @deprecated pre-FR-86 rows only; never rendered. */
   domainError?: string | null;
   /** Why the site was unreachable, when it was. */
+  uptimeFailure?: CheckFailure | null;
+  /** @deprecated pre-FR-86 rows only; never rendered. */
   uptimeError?: string | null;
 }
 
@@ -82,11 +90,11 @@ function checkDetail(record: SiteCheckRecord): SiteCheckDetail | null {
   const d: SiteCheckDetail = {};
   if (record.ssl?.issuer) d.sslIssuer = record.ssl.issuer;
   if (record.ssl?.validTo) d.sslValidTo = record.ssl.validTo;
-  if (record.ssl?.error) d.sslError = record.ssl.error;
+  if (record.ssl?.failure) d.sslFailure = record.ssl.failure;
   if (record.domain?.registrar) d.domainRegistrar = record.domain.registrar;
   if (record.domain?.expiryDate) d.domainExpiry = record.domain.expiryDate;
-  if (record.domain?.error) d.domainError = record.domain.error;
-  if (record.uptime?.error) d.uptimeError = record.uptime.error;
+  if (record.domain?.failure) d.domainFailure = record.domain.failure;
+  if (record.uptime?.failure) d.uptimeFailure = record.uptime.failure;
   return Object.keys(d).length ? d : null;
 }
 

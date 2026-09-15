@@ -17,6 +17,7 @@
  */
 
 import type { SiteSchedule, SiteCheckRecord } from './types';
+import { describeFailure } from './failures';
 import { dispatchAlert } from '@/lib/alerts/dispatch';
 import { lastAlertAt } from '@/lib/alerts/store';
 import { detailPathFor } from '@/lib/alerts/link';
@@ -97,7 +98,8 @@ function statusText(record: SiteCheckRecord): string {
 function sslText(record: SiteCheckRecord): string {
   const ssl = record.ssl;
   if (!ssl) return 'n/a (not HTTPS)';
-  if (!ssl.ok || ssl.daysRemaining == null) return ssl.error ?? 'check failed';
+  // Plain language, never the TLS library's own words. FR-86.
+  if (!ssl.ok || ssl.daysRemaining == null) return describeFailure('ssl', ssl.failure).text;
   const expiry = ssl.validTo ? new Date(ssl.validTo).toLocaleDateString() : '?';
   return ssl.daysRemaining <= 0
     ? `EXPIRED (was valid to ${expiry})`
@@ -108,7 +110,7 @@ function sslText(record: SiteCheckRecord): string {
 function domainText(record: SiteCheckRecord): string {
   const d = record.domain;
   if (!d) return 'n/a';
-  if (!d.ok || d.daysRemaining == null) return d.error ?? 'check failed';
+  if (!d.ok || d.daysRemaining == null) return describeFailure('domain', d.failure).text;
   const expiry = d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : '?';
   return d.daysRemaining <= 0
     ? `EXPIRED (was valid to ${expiry})`
