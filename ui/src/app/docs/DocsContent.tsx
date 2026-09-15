@@ -318,6 +318,9 @@ export default function DocsContent() {
                 <Faq q="Will scheduled Live checks spam the client’s inbox?">
                   Each Live run does submit one real entry, clearly marked as a health check by its test data. Use Safe mode if you only need to confirm the form fills, or Live on forms you’re authorized to monitor.
                 </Faq>
+                <Faq q="Why does a site say its domain expiry can’t be tracked?">
+                  Some domain registries — many country domains, like .org.uk or .co.in — simply don’t publish an expiry date for anyone to read. When that’s the case FormPing says so plainly and stops trying, because no amount of checking will make the date appear. That’s different from “we couldn’t reach the registry just now”, which is temporary: nothing is wrong with the domain, and we check again a short while later rather than waiting for the next day.
+                </Faq>
                 <Faq q="A monitor says “The last check could not be saved”. What does that mean?">
                   The check ran, but FormPing couldn’t store what it found — usually a brief problem saving to our database. The figures on that card are from the last check we <em>did</em> save, so treat them as possibly out of date. Nothing is lost on your site’s end, and the monitor tries again at its next scheduled check. If the message stays up for more than a few checks, use <strong>Report a bug</strong> so the team can look.
                 </Faq>

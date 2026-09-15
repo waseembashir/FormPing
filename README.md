@@ -126,6 +126,12 @@ The **app** defaults to `detect-only` in both the Form Tester and the Form Sched
 
 The same facts, in the same words, appear on the Form Tester result card, each Form Scheduler run, and the per-URL dashboard — one engine, one story. A scheduled check stores exactly what a manual test stores, so watching a URL makes its dashboard richer, never thinner; when a URL has both, the page shows the more recent one and says which it was.
 
+### A failed check explains itself, and retries at a sensible interval
+
+When a check can't produce an answer, the reason is carried as a *kind* — `unreachable`, `rate_limited`, `not_published`, and so on — from the moment it happens. The raw message (`fetch failed`, a TLS socket error, an RDAP status) stays on the result for the server log, and no user surface renders it: the dashboard, the monitor card and the Slack alert all phrase the kind instead.
+
+That distinction also drives the retry. A domain expiry is re-read at most every 12 hours, because it changes once a year and public RDAP endpoints rate-limit. But a registry that was briefly unreachable is asked again in 30 minutes, while a registry that doesn't publish expiry dates at all — true of many country domains — keeps the long interval, since asking twice can't make the field appear. A transient failure also keeps showing the expiry we already know, marked as not refreshed, rather than replacing a good answer with an error.
+
 ### A result that couldn't be stored is reported, not painted over
 
 A monitor's run record and the summary on its card are separate writes to separate tables. If the run record is refused — a missing column after a partial migration, a database blip — the summary must not be written anyway, or the card reports a fresh healthy check above a history that doesn't contain it.
