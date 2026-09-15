@@ -11,6 +11,8 @@ import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 
 export default function FormWatchPage() {
   const [schedules, setSchedules] = useState<FormSchedule[]>([]);
+  /** Monitors whose latest result could not be saved, keyed by schedule id. FR-87. */
+  const [saveFailures, setSaveFailures] = useState<Record<string, { at: string }>>({});
   const [loading, setLoading] = useState(true);
 
   const [url, setUrl] = useState('');
@@ -42,8 +44,12 @@ export default function FormWatchPage() {
     try {
       const res = await fetch('/api/form-watch').then((r) => r.json());
       setSchedules(Array.isArray(res?.schedules) ? res.schedules : []);
+      // Monitors whose last run could not be stored, so each card can say so
+      // rather than showing an older summary as if it were current. FR-87.
+      setSaveFailures(res?.saveFailures && typeof res.saveFailures === 'object' ? res.saveFailures : {});
     } catch {
       setSchedules([]);
+      setSaveFailures({});
     } finally {
       setLoading(false);
     }
@@ -205,6 +211,7 @@ export default function FormWatchPage() {
               >
                 <ScheduleCard
                   schedule={s}
+                  saveFailure={saveFailures[s.id]}
                   onStop={handleStop}
                   onTogglePause={handleTogglePause}
                   onDone={load}

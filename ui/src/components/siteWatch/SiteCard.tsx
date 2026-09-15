@@ -6,6 +6,7 @@ import { STATUS, type StatusLevel } from '@/lib/design/status';
 import { TrendBar, type TrendTone } from '@/components/TrendBar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge, StatusPill, StatusText, cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
+import { UnsavedResultNotice } from '@/components/UnsavedResultNotice';
 
 // Canonical status vocabulary (FR-35/FR-65) — one language across every surface.
 const UPTIME: Record<UptimeClass | 'pending', { level: StatusLevel; label: string }> = {
@@ -66,8 +67,12 @@ export function SiteCard({
   onHold,
   awaitFirstCheck,
   onFirstCheckSeen,
+  saveFailure,
 }: {
   schedule: SiteSchedule;
+  /** Set when this monitor's last check ran but could not be stored. The reason
+   *  stays server-side — see saveFailuresForClient. FR-87. */
+  saveFailure?: { at: string };
   onStop: (id: string) => Promise<void>;
   onTogglePause: (id: string, paused: boolean) => Promise<void>;
   onDone: () => void;
@@ -215,6 +220,13 @@ export function SiteCard({
   return (
     <div className={cx('rounded-xl border bg-panel/60', schedule.paused ? 'border-dashed border-line-strong' : 'border-line')}>
       <div className="p-4">
+        {/* Above the summary it qualifies — the reader must see "this may be
+            out of date" before reading the numbers. FR-87. */}
+        {saveFailure && (
+          <div className="mb-3">
+            <UnsavedResultNotice at={saveFailure.at} />
+          </div>
+        )}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
