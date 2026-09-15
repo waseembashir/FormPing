@@ -17,10 +17,16 @@ import path from 'path';
  * volume is mounted there, so the default is correct in production and the
  * override below is left unset.
  *
- * Set `FORMPING_DATA_DIR` to an ABSOLUTE path to relocate these files. Its use
- * is LOCAL DEV: the repo lives inside OneDrive, and OneDrive re-syncs / reverts
- * frequently-written files (snapshots are rewritten on every check) — pointing
- * this at a non-synced folder (e.g. `%LOCALAPPDATA%\FormPing\data`) avoids that.
+ * Set `FORMPING_DATA_DIR` to an ABSOLUTE path to relocate these files. It is
+ * unset everywhere as of the WSL move (2026-09-10), because the default is now
+ * right in both places: the mounted volume in production, and the repo itself
+ * in local dev.
+ *
+ * It exists because the repo USED to live inside OneDrive, which re-synced and
+ * reverted files rewritten on every check — snapshots are rewritten every time
+ * (FR-14). The working copy now sits on a filesystem that syncs nowhere, so the
+ * workaround is no longer needed. The hook stays for the case where this data
+ * genuinely has to live outside the repo.
  *
  * When set, it REPLACES the `data/snapshots` segment; the rest of the relative
  * path is joined onto it, so the on-disk sub-layout is unchanged.
