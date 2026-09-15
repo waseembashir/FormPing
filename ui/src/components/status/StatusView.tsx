@@ -6,6 +6,7 @@ import type { PageChange } from '@/types';
 import { PageChangeCard } from '@/components/monitor/PageChangeCard';
 import { getReasonMessage } from '@/lib/reasonMessages';
 import type { FormRunFormSummary } from '@/lib/formRunDetail';
+import { describeFailure, type CheckFailure, type CheckSubject } from '@/lib/siteWatch/failures';
 
 type StatusData = ClientStatus & { contact?: string | null; changes?: ChangePoint[] };
 
@@ -80,6 +81,22 @@ function ExpiryRow({ label, days, valid }: { label: string; days: number; valid:
       </span>
     </div>
   );
+}
+
+/**
+ * Why a check produced no answer — phrased for a person, toned to what it means.
+ *
+ * Replaces four places that printed `err.message` straight to the page, where a
+ * momentary network failure read `fetch failed` in amber beneath a certificate
+ * that was perfectly healthy. `info` is deliberately quiet: a registry that does
+ * not publish expiry dates is a fact about that registry, not a fault anyone can
+ * fix, and colouring facts amber teaches people to ignore amber. FR-86.
+ */
+function CheckNote({ subject, kind }: { subject: CheckSubject; kind?: CheckFailure | null }) {
+  const why = describeFailure(subject, kind ?? undefined);
+  const tone =
+    why.tone === 'danger' ? 'text-danger' : why.tone === 'warn' ? 'text-warn' : 'text-ink-muted';
+  return <p className={`pt-1 text-[11px] leading-relaxed ${tone}`}>{why.text}</p>;
 }
 
 function Detail({ k, v }: { k: string; v: React.ReactNode }) {
@@ -680,10 +697,17 @@ function SiteCard({
               {internal && tech?.check?.domainRegistrar && (
                 <Detail k="Registrar" v={<span className="truncate" title={tech.check.domainRegistrar}>{tech.check.domainRegistrar}</span>} />
               )}
-              {internal && (tech?.check?.sslError || tech?.check?.domainError) && (
-                <p className="pt-1 text-[11px] leading-relaxed text-warn">
-                  {tech.check.sslError ?? tech.check.domainError}
-                </p>
+              {/* Why a check produced no answer, phrased for a person and toned
+                  to what it means. A registry that publishes no expiry is not
+                  amber — it is a fact, and painting facts amber teaches people
+                  to ignore amber. Rows stored before FR-86 carry no kind and
+                  fall back to a truthful generic line; their raw text is never
+                  rendered. FR-86. */}
+              {internal && (tech?.check?.sslFailure || tech?.check?.sslError) && (
+                <CheckNote subject="ssl" kind={tech.check.sslFailure} />
+              )}
+              {internal && (tech?.check?.domainFailure || tech?.check?.domainError) && (
+                <CheckNote subject="domain" kind={tech.check.domainFailure} />
               )}
             </div>
           </Panel>
@@ -701,12 +725,9 @@ function SiteCard({
             </div>
             {/* Why a failing check failed. The reason was measured and thrown
                 away, leaving a red status with no explanation. FR-67. */}
-            {tech.check?.uptimeError && (
-              <p className="mt-2 border-t border-line pt-2 text-[11px] leading-relaxed text-danger">
-                <span className="font-semibold">Last error:</span> {tech.check.uptimeError}
-              </p>
-            )}
-          </Panel>
+            {(tech.check?.uptimeFailure || tech.check?.uptimeError) && (
+              <CheckNote subject="uptime" kind={tech.check.uptimeFailure} />
+            )}          </Panel>
         )}
 
         {changes && changes.length > 0 && (

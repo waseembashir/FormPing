@@ -7,6 +7,7 @@
  */
 
 import type { UptimeResult, SslResult, DomainResult, UptimeClass } from './types';
+import { failureForStatus, type CheckFailure } from './failures';
 
 // Node's `tls` is loaded via webpack's runtime require (not a static import).
 // Next compiles the instrumentation hook for the Edge runtime as well, and Edge
@@ -68,12 +69,14 @@ export async function checkUptime(url: string): Promise<UptimeResult> {
 
     return { classification, statusCode: status, responseMs };
   } catch (err) {
-    // Network error / timeout / refused → down.
+    // Network error / timeout / refused → down. The message is kept for the
+    // server log; the UI is told the KIND, never the text. FR-86.
     return {
       classification: 'down',
       statusCode: null,
       responseMs: Date.now() - start,
       error: err instanceof Error ? err.message : String(err),
+      failure: 'unreachable',
     };
   }
 }
@@ -99,7 +102,7 @@ export function checkSsl(hostname: string, port = 443): Promise<SslResult> {
         const cert = socket.getPeerCertificate();
         socket.end();
         if (!cert || !cert.valid_to) {
-          done({ ok: false, daysRemaining: null, validTo: null, issuer: null, error: 'No certificate' });
+          done({ ok: false, daysRemaining: null, validTo: null, issuer: null, error: 'No certificate', failure: 'no_certificate' });
           return;
         }
         const validTo = new Date(cert.valid_to);
@@ -116,11 +119,11 @@ export function checkSsl(hostname: string, port = 443): Promise<SslResult> {
     );
 
     socket.on('error', (err) =>
-      done({ ok: false, daysRemaining: null, validTo: null, issuer: null, error: err.message }),
+      done({ ok: false, daysRemaining: null, validTo: null, issuer: null, error: err.message, failure: 'unreachable' }),
     );
     socket.on('timeout', () => {
       socket.destroy();
-      done({ ok: false, daysRemaining: null, validTo: null, issuer: null, error: 'TLS timeout' });
+      done({ ok: false, daysRemaining: null, validTo: null, issuer: null, error: 'TLS timeout', failure: 'unreachable' });
     });
   });
 }
@@ -179,12 +182,13 @@ function extractRegistrar(entities: RdapEntity[] | undefined): string | null {
  * error — never throws, so a domain lookup can never break an uptime/SSL cycle.
  */
 export async function checkDomain(hostname: string): Promise<DomainResult> {
-  const none = (error: string): DomainResult => ({
+  const none = (error: string, failure: CheckFailure): DomainResult => ({
     ok: false,
     daysRemaining: null,
     expiryDate: null,
     registrar: null,
     error,
+    failure,
   });
   const domain = registrableDomain(hostname);
   try {
@@ -193,13 +197,15 @@ export async function checkDomain(hostname: string): Promise<DomainResult> {
       signal: AbortSignal.timeout(RDAP_TIMEOUT_MS),
       headers: { Accept: 'application/rdap+json', 'User-Agent': UA },
     });
-    if (!res.ok) return none(`RDAP ${res.status}`);
+    // 404 means this registry simply isn't in RDAP — a permanent fact about the
+    // TLD, not a fault. 429/5xx are the registry having a bad day. FR-86.
+    if (!res.ok) return none(`RDAP ${res.status}`, failureForStatus(res.status));
     const data = (await res.json()) as RdapResponse;
     const events = Array.isArray(data.events) ? data.events : [];
     const exp = events.find((e) => e.eventAction === 'expiration' && typeof e.eventDate === 'string');
-    if (!exp || !exp.eventDate) return none('no expiry in RDAP record');
+    if (!exp || !exp.eventDate) return none('no expiry in RDAP record', 'not_published');
     const ms = Date.parse(exp.eventDate);
-    if (Number.isNaN(ms)) return none('unparseable expiry date');
+    if (Number.isNaN(ms)) return none('unparseable expiry date', 'unreadable');
     const daysRemaining = Math.floor((ms - Date.now()) / 86_400_000);
     return {
       ok: true,
@@ -210,6 +216,7 @@ export async function checkDomain(hostname: string): Promise<DomainResult> {
   } catch (err) {
     return none(
       err instanceof Error ? (err.name === 'TimeoutError' ? 'RDAP timeout' : err.message) : 'RDAP lookup failed',
+      'unreachable',
     );
   }
 }

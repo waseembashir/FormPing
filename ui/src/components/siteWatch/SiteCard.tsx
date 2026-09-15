@@ -7,6 +7,7 @@ import { TrendBar, type TrendTone } from '@/components/TrendBar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge, StatusPill, StatusText, cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
 import { UnsavedResultNotice } from '@/components/UnsavedResultNotice';
+import { describeFailure } from '@/lib/siteWatch/failures';
 
 // Canonical status vocabulary (FR-35/FR-65) — one language across every surface.
 const UPTIME: Record<UptimeClass | 'pending', { level: StatusLevel; label: string }> = {
@@ -381,8 +382,11 @@ function CheckRow({ check }: { check: SiteCheckRecord }) {
         : `${ssl.daysRemaining} day${ssl.daysRemaining === 1 ? '' : 's'} left${issuer} — expires ${expiry}`;
       sslClass = ssl.daysRemaining <= 7 ? 'text-danger' : ssl.daysRemaining <= 30 ? 'text-warn' : 'text-ink-secondary';
     } else {
-      sslValue = ssl.error ?? 'check failed';
-      sslClass = 'text-danger';
+      // Plain language, and a tone that matches what it means — the TLS
+      // library's own message never reaches a person. FR-86.
+      const why = describeFailure('ssl', ssl.failure);
+      sslValue = why.text;
+      sslClass = why.tone === 'danger' ? 'text-danger' : why.tone === 'warn' ? 'text-warn' : 'text-ink-muted';
     }
   }
 
@@ -397,9 +401,14 @@ function CheckRow({ check }: { check: SiteCheckRecord }) {
         ? `Expired (was valid to ${expiry})${registrar}`
         : `${domain.daysRemaining} day${domain.daysRemaining === 1 ? '' : 's'} left${registrar} — expires ${expiry}`;
       domainClass = domain.daysRemaining <= 7 ? 'text-danger' : domain.daysRemaining <= 30 ? 'text-warn' : 'text-ink-secondary';
+      // A known expiry the registry could not confirm this time still answers
+      // the user's question — it just says so rather than replacing the answer
+      // with an error, which is what prompted FR-86.
+      if (domain.stale) domainValue = `${domainValue} · not refreshed this check`;
     } else {
-      domainValue = domain.error ?? 'check failed';
-      domainClass = 'text-ink-muted';
+      const why = describeFailure('domain', domain.failure);
+      domainValue = why.text;
+      domainClass = why.tone === 'danger' ? 'text-danger' : why.tone === 'warn' ? 'text-warn' : 'text-ink-muted';
     }
   }
 
