@@ -13,6 +13,7 @@
 import type { SiteCheckRecord, UptimeClass } from './types';
 import { urlKey as resultKey } from '@/lib/projects/projectStore';
 import { supabaseAdmin } from '@/lib/supabase';
+import { WRITE_OK, essentialWriteFailed, type WriteOutcome } from '@/lib/persistence';
 
 export interface SiteWatchResult {
   /** Normalized + lowercased URL — the map key. */
@@ -89,8 +90,12 @@ function checkDetail(record: SiteCheckRecord): SiteCheckDetail | null {
   return Object.keys(d).length ? d : null;
 }
 
-/** Record the latest Site Watch result for a URL (upsert, last-write-wins). */
-export async function recordResult(record: SiteCheckRecord): Promise<void> {
+/**
+ * Record the latest Site Watch result for a URL (upsert, last-write-wins).
+ *
+ * ESSENTIAL — see the Form Watch result store for why. FR-87.
+ */
+export async function recordResult(record: SiteCheckRecord): Promise<WriteOutcome> {
   try {
     const result: SiteWatchResult = {
       url: resultKey(record.url),
@@ -124,10 +129,11 @@ export async function recordResult(record: SiteCheckRecord): Promise<void> {
       const { error: retry } = await supabaseAdmin()
         .from('site_watch_results')
         .upsert(baseRow, { onConflict: 'url_key' });
-      if (retry) console.warn(`[siteWatch/resultStore] record: ${retry.message}`);
+      if (retry) return essentialWriteFailed('siteWatch/resultStore', retry.message);
     }
+    return WRITE_OK;
   } catch (err) {
-    console.warn(`[siteWatch/resultStore] recordResult failed: ${err}`);
+    return essentialWriteFailed('siteWatch/resultStore', String(err));
   }
 }
 

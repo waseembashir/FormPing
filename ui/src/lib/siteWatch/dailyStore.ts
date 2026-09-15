@@ -12,6 +12,7 @@
 import type { SiteCheckRecord } from './types';
 import { urlKey } from '@/lib/projects/projectStore';
 import { supabaseAdmin } from '@/lib/supabase';
+import { WRITE_OK, essentialWriteFailed, type WriteOutcome } from '@/lib/persistence';
 
 export interface SiteDaily {
   /** YYYY-MM-DD (UTC). */
@@ -54,8 +55,14 @@ function rowToDaily(r: DailyRow): SiteDaily {
   };
 }
 
-/** Fold one check into today's rollup for its URL. Best-effort. */
-export async function recordDaily(record: SiteCheckRecord): Promise<void> {
+/**
+ * Fold one check into today's rollup for its URL.
+ *
+ * ESSENTIAL: raw history is capped, so these rows ARE the 7d/30d/all-time
+ * uptime figures once the raw checks age out. A dropped fold silently changes
+ * a published percentage, which no one can spot after the fact. FR-87.
+ */
+export async function recordDaily(record: SiteCheckRecord): Promise<WriteOutcome> {
   try {
     const url_key = urlKey(record.url);
     const day = record.checkedAt.slice(0, 10); // UTC calendar day (checkedAt is ...Z)
@@ -86,9 +93,10 @@ export async function recordDaily(record: SiteCheckRecord): Promise<void> {
       .maybeSingle();
     const next = fold((existing as DailyRow) ?? empty);
     const { error } = await db.from('site_watch_daily').upsert({ url_key, day, ...next }, { onConflict: 'url_key,day' });
-    if (error) console.warn(`[siteWatch/dailyStore] record: ${error.message}`);
+    if (error) return essentialWriteFailed('siteWatch/dailyStore', error.message);
+    return WRITE_OK;
   } catch (err) {
-    console.warn(`[siteWatch/dailyStore] recordDaily failed: ${err}`);
+    return essentialWriteFailed('siteWatch/dailyStore', String(err));
   }
 }
 

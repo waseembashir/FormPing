@@ -318,6 +318,9 @@ export default function DocsContent() {
                 <Faq q="Will scheduled Live checks spam the client’s inbox?">
                   Each Live run does submit one real entry, clearly marked as a health check by its test data. Use Safe mode if you only need to confirm the form fills, or Live on forms you’re authorized to monitor.
                 </Faq>
+                <Faq q="A monitor says “The last check could not be saved”. What does that mean?">
+                  The check ran, but FormPing couldn’t store what it found — usually a brief problem saving to our database. The figures on that card are from the last check we <em>did</em> save, so treat them as possibly out of date. Nothing is lost on your site’s end, and the monitor tries again at its next scheduled check. If the message stays up for more than a few checks, use <strong>Report a bug</strong> so the team can look.
+                </Faq>
                 <Faq q="Found a bug or have feedback?">
                   Use <strong>Report a bug</strong> in the footer — it reaches the team instantly. Admins can see and triage every report (resolve, reopen, or delete) from the Team page.
                 </Faq>

@@ -4,11 +4,21 @@
  * Backed by Supabase (`form_watch_runs` table, one row per run). Each schedule's
  * before/after history is isolated (by schedule_id) so several forms on the same
  * host don't collide. Newest-first, capped to the most recent MAX_RUNS.
- * Best-effort: errors logged, never thrown.
+ *
+ * The run row is an ESSENTIAL write: it IS the result, so `appendRun` reports
+ * whether it landed and the caller decides what to do about it. Reads and
+ * pruning stay best-effort — neither can lose a result. See lib/persistence.
+ * FR-87.
  */
 
 import type { FormRunRecord, FormFingerprint, FormRunStatus, FormWatchMode, RunTrigger } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
+import {
+  WRITE_OK,
+  bestEffortWriteFailed,
+  essentialWriteFailed,
+  type WriteOutcome,
+} from '@/lib/persistence';
 
 const MAX_RUNS = 100;
 /**
@@ -117,15 +127,21 @@ export async function latestRun(scheduleId: string): Promise<FormRunRecord | nul
   return data ? toRecord(data as FormRunRow) : null;
 }
 
-/** Prepend a new run record (keyed by its scheduleId), cap to MAX_RUNS. */
-export async function appendRun(record: FormRunRecord): Promise<void> {
+/**
+ * Prepend a new run record (keyed by its scheduleId), cap to MAX_RUNS.
+ *
+ * Returns whether the row landed. A caller that ignores this is claiming a run
+ * happened on the strength of a statement that may have been refused — which is
+ * precisely what FR-87 fixes, so the tickers check it.
+ */
+export async function appendRun(record: FormRunRecord): Promise<WriteOutcome> {
   const db = supabaseAdmin();
   const { error } = await db.from('form_watch_runs').insert(toRow(record));
   if (error) {
-    console.warn(`[formWatch/historyStore] append: ${error.message}`);
-    return;
+    return essentialWriteFailed('formWatch/historyStore', error.message);
   }
   await pruneToCap(record.scheduleId);
+  return WRITE_OK;
 }
 
 /**
@@ -157,7 +173,7 @@ async function pruneScheduledToCap(scheduleId: string): Promise<void> {
   if (error || !data || data.length === 0) return;
   const ids = (data as { id: string }[]).map((r) => r.id);
   const { error: delErr } = await db.from('form_watch_runs').delete().in('id', ids);
-  if (delErr) console.warn(`[formWatch/historyStore] prune scheduled: ${delErr.message}`);
+  if (delErr) bestEffortWriteFailed('formWatch/historyStore: prune scheduled', delErr.message);
 }
 
 /** Manual runs expire on time, not on count. */
@@ -170,5 +186,5 @@ async function pruneExpiredManual(scheduleId: string): Promise<void> {
     .eq('schedule_id', scheduleId)
     .eq('trigger_source', 'manual')
     .lt('ran_at', cutoff);
-  if (error) console.warn(`[formWatch/historyStore] prune expired manual: ${error.message}`);
+  if (error) bestEffortWriteFailed('formWatch/historyStore: prune expired manual', error.message);
 }

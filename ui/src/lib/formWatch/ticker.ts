@@ -21,6 +21,7 @@ import { recordResult } from './resultStore';
 import { hostFormShots } from '@/lib/formShots';
 import { runFormTest, type RawSiteResult } from './runner';
 import { onRunComplete } from './notify';
+import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
 
 /** How often the loop checks for due schedules. Override via env for tests. */
 const TICK_MS = Number(process.env.FORM_WATCH_TICK_MS) || 60_000;
@@ -213,17 +214,25 @@ async function runScheduleOnce(
     }
   }
 
-  // The history row is the ONE thing a manual run writes.
-  await appendRun(record);
+  // The history row is the ONE thing a manual run writes — and the unsaved-result
+  // flag is the SCHEDULE's, so a re-run does not touch it either way. Clearing it
+  // here would be worse than pointless: a re-run proves only that the history
+  // table accepts rows, so a successful one would wipe a warning raised by a
+  // failing results or rollup write and hide a scheduled failure that is still
+  // happening. A re-run must not alter the schedule, and this flag is part of
+  // what the schedule's card reports. FR-82 / FR-87.
+  const savedRun = await appendRun(record);
   if (manual) return record;
 
   // Durable per-URL result (survives stopping/deleting this monitor; only a
-  // project delete clears it). See formWatch/resultStore.
-  await recordResult(record, raw);
+  // project delete clears it). See formWatch/resultStore. Skipped when the run
+  // row itself was refused — writing the summary of a result we failed to store
+  // is what made this failure invisible in the first place. FR-87.
+  const savedResult = savedRun.ok ? await recordResult(record, raw) : savedRun;
 
   // Reschedule from now so intervals don't drift if a run was slow.
   const now = Date.now();
-  const updated: FormSchedule = {
+  const advanced: FormSchedule = {
     ...schedule,
     lastRunAt: ranAt,
     nextRunAt: new Date(now + schedule.intervalMs).toISOString(),
@@ -231,7 +240,16 @@ async function runScheduleOnce(
     lastReasonCode: record.reasonCode,
     lastFormFound: record.fingerprint.formFound,
   };
-  await upsertSchedule(updated);
+
+  if (savedRun.ok && savedResult.ok) {
+    clearSaveFailure('form', schedule.id);
+    await upsertSchedule(advanced);
+  } else {
+    // Keep the cadence, drop the claims — see keepCadenceOnly. The card holds
+    // the last result it can actually prove, and says why.
+    noteSaveFailure('form', schedule.id, failureReason(savedRun, savedResult));
+    await upsertSchedule(keepCadenceOnly(schedule, advanced, 'nextRunAt'));
+  }
 
   return record;
 }

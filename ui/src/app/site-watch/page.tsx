@@ -12,6 +12,8 @@ const UNIT_TO_MIN: Record<Unit, number> = { min: 1, hour: 60, day: 1440 };
 
 export default function SiteWatchPage() {
   const [schedules, setSchedules] = useState<SiteSchedule[]>([]);
+  /** Monitors whose latest result could not be saved, keyed by schedule id. FR-87. */
+  const [saveFailures, setSaveFailures] = useState<Record<string, { at: string }>>({});
   const [loading, setLoading] = useState(true);
 
   const [url, setUrl] = useState('');
@@ -37,8 +39,11 @@ export default function SiteWatchPage() {
     try {
       const res = await fetch('/api/site-watch').then((r) => r.json());
       setSchedules(Array.isArray(res?.schedules) ? res.schedules : []);
+      // Monitors whose last check could not be stored. FR-87.
+      setSaveFailures(res?.saveFailures && typeof res.saveFailures === 'object' ? res.saveFailures : {});
     } catch {
       setSchedules([]);
+      setSaveFailures({});
     } finally {
       setLoading(false);
     }
@@ -196,6 +201,7 @@ export default function SiteWatchPage() {
               >
                 <SiteCard
                   schedule={s}
+                  saveFailure={saveFailures[s.id]}
                   onStop={handleStop}
                   onTogglePause={handleTogglePause}
                   onDone={load}

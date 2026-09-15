@@ -100,6 +100,19 @@ function viewId(projectId: string, actor: string | null, atMs: number): string {
  * A `viewed` event carries a derived id, so repeat views inside the dedupe
  * window collide and are silently dropped rather than filling the log.
  */
+/**
+ * DELIBERATELY BEST-EFFORT, reviewed under FR-87.
+ *
+ * The audit that followed the 2026-09-08 data loss sorted every store write
+ * into "this IS the result" or "this describes it". An activity-log line is
+ * neither: it records that someone renamed a project, and losing one costs a
+ * line of history, not a monitoring answer a user will act on. Nothing reads it
+ * to decide whether a site is healthy.
+ *
+ * So this one keeps failing quietly on purpose — and says so here, rather than
+ * leaving the next reader to guess whether it was a decision or an oversight.
+ * See lib/persistence for the essential side of that split.
+ */
 export async function recordEvent(
   projectId: string,
   actor: string | null,

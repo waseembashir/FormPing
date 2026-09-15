@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
 import { friendlyNotes } from '@/lib/friendlyNotes';
 import { FormSummary, FormsOnPageLine, TrackingParamsLine } from '@/components/FormFactChips';
+import { UnsavedResultNotice } from '@/components/UnsavedResultNotice';
 
 const LEVEL_STYLE: Record<VerdictLevel | 'pending', { dot: string; text: string; label: string }> = {
   healthy: { dot: 'bg-ok', text: 'text-ok', label: 'Healthy' },
@@ -53,8 +54,12 @@ export function ScheduleCard({
   onFirstRunSeen,
   onDone,
   onHold,
+  saveFailure,
 }: {
   schedule: FormSchedule;
+  /** Set when this monitor's last run ran but could not be stored. The reason
+   *  stays server-side — see saveFailuresForClient. FR-87. */
+  saveFailure?: { at: string };
   onStop: (id: string) => Promise<void>;
   onTogglePause: (id: string, paused: boolean) => Promise<void>;
   /** Reload the list once this card has finished showing its "stopped" note. */
@@ -277,6 +282,13 @@ export function ScheduleCard({
   return (
     <div className={cx('rounded-xl border bg-panel/60', schedule.paused ? 'border-dashed border-line-strong' : 'border-line')}>
       <div className="p-4">
+        {/* Above the summary it qualifies — the reader must see "this may be
+            out of date" before reading the numbers. FR-87. */}
+        {saveFailure && (
+          <div className="mb-3">
+            <UnsavedResultNotice at={saveFailure.at} />
+          </div>
+        )}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">

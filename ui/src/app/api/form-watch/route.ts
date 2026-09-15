@@ -4,6 +4,7 @@ import { kickFormWatchTicker } from '@/lib/formWatch/ticker';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { requireRole } from '@/lib/auth/authorize';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
+import { saveFailuresForClient } from '@/lib/persistence';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,10 +50,16 @@ async function validateFormUrl(url: string): Promise<{ ok: true } | { ok: false;
   return { ok: true };
 }
 
-/** GET /api/form-watch — list all schedules. */
+/**
+ * GET /api/form-watch — list all schedules.
+ *
+ * `saveFailures` carries the monitors whose last run could not be stored, keyed
+ * by schedule id, so a card can say so instead of presenting a stale summary as
+ * current. In-memory and per-process — see lib/persistence. FR-87.
+ */
 export async function GET() {
   const schedules = await listSchedules();
-  return NextResponse.json({ schedules });
+  return NextResponse.json({ schedules, saveFailures: saveFailuresForClient('form') });
 }
 
 /**

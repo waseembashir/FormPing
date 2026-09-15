@@ -24,6 +24,16 @@ export async function register() {
     console.warn(`[instrumentation] resumeActiveWatches threw: ${err}`);
   }
 
+  // Schema guard — before any scheduler starts, confirm the database has the
+  // columns this build writes. Does not stop boot; logs loudly if it doesn't.
+  // FR-87.
+  try {
+    const { verifySchema } = await import('./lib/schemaGuard');
+    await verifySchema();
+  } catch (err) {
+    console.warn(`[instrumentation] verifySchema threw: ${err}`);
+  }
+
   // Form Watch scheduler — additive, independent of the monitor watches above.
   // Starts the recurring form-test loop; schedules persist on disk so this
   // simply picks up any that are due after a restart/redeploy.

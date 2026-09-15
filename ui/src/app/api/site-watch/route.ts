@@ -5,6 +5,7 @@ import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { checkUptime, hostResolves } from '@/lib/siteWatch/checks';
 import { requireRole } from '@/lib/auth/authorize';
 import type { SiteSchedule } from '@/lib/siteWatch/types';
+import { saveFailuresForClient } from '@/lib/persistence';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,10 +22,15 @@ function hostnameOf(url: string): string {
   }
 }
 
-/** GET /api/site-watch — list all site monitors. */
+/**
+ * GET /api/site-watch — list all site monitors.
+ *
+ * `saveFailures` carries the monitors whose last check could not be stored —
+ * see the Form Watch route for why. FR-87.
+ */
 export async function GET() {
   const schedules = await listSchedules();
-  return NextResponse.json({ schedules });
+  return NextResponse.json({ schedules, saveFailures: saveFailuresForClient('site') });
 }
 
 /**
