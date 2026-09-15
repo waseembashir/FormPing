@@ -22,12 +22,26 @@ export interface RunNowSpy {
  * runs a test — so a spec can assert that cancelling a confirmation ran nothing,
  * which is the whole point of the guard.
  */
-export async function mockFormWatch(page: Page, schedules: FormSchedule[]): Promise<RunNowSpy> {
+export async function mockFormWatch(
+  page: Page,
+  schedules: FormSchedule[],
+  /**
+   * Monitors whose last run could not be stored, keyed by schedule id — the
+   * shape `GET /api/form-watch` returns. Lets a spec reproduce a database
+   * refusing writes, which the hermetic environment has no way to cause for
+   * real. FR-87.
+   */
+  saveFailures: Record<string, { at: string }> = {},
+): Promise<RunNowSpy> {
   const calls: string[] = [];
 
   // The list the page renders.
   await page.route('**/api/form-watch', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ schedules }) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ schedules, saveFailures }),
+    }),
   );
 
   // Each card's history. Empty: these specs are about the controls, not results.
