@@ -30,12 +30,16 @@ export function buildSuggestions(record: FormRunRecord, changes: string[]): stri
       break;
     case 'NON_CONTACT_FORM_FOUND':
       out.push(
-        'A form is present but it did not score as a contact form (see the score + missing fields in the notes). If this IS the contact form (e.g. a quiz or booking form), switch this monitor to Landing-page mode so it tests the form on this URL directly.',
+        'A form is present but it did not score as a contact form. If this IS the contact form (e.g. a quiz or booking form), switch this monitor to Landing-page mode so it tests the form on this URL directly — the full scoring is on the URL\'s dashboard.',
       );
       break;
     case 'THIRD_PARTY_EMBED_FORM':
       out.push(
-        'This is a third-party form (named in the notes) — a recognised, expected setup, nothing is wrong. It runs on the provider\'s own domain, so FormPing can confirm it\'s present but can\'t submit through it. Open it and send a quick test entry now and then, or add the provider\'s own notification check for ongoing assurance.',
+        // The provider is named in the alert's own facts line now (FR-91). This
+        // used to say "named in the notes" — and notes were never sent to Slack,
+        // so the message pointed at detail it did not carry. That mismatch is
+        // what made a recognised embed read as an unidentified form.
+        'This is a recognised, expected setup — nothing is wrong. The form runs on the provider\'s own domain, so FormPing can confirm it is present but cannot submit through it. Open it and send a quick test entry now and then, or rely on the provider\'s own notifications for ongoing assurance.',
       );
       break;
     case 'VALIDATION_ERROR':
