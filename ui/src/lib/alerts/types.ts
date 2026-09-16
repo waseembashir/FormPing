@@ -13,7 +13,17 @@
  */
 
 export type AlertKind = 'change' | 'form' | 'site';
-export type AlertSeverity = 'info' | 'warning' | 'critical';
+/**
+ * How an alert should READ, not merely how bad it is.
+ *
+ * `notice` exists because the app already has a fourth state and the channels
+ * did not. A recognised third-party form is not a success — we submitted
+ * nothing — and it is not a fault either. The app has always drawn it in its own
+ * sky tone (`--fp-info`, "detected / recognised, not a problem"), while Slack
+ * collapsed it to `info` and rendered a green tick, which reads as "your form
+ * works" for a form that was never tested. One vocabulary now, everywhere. FR-91.
+ */
+export type AlertSeverity = 'notice' | 'info' | 'warning' | 'critical';
 
 /** What a sender hands to the dispatcher. */
 export interface AlertInput {
@@ -36,6 +46,32 @@ export interface AlertInput {
    * it, and it is a channel's job to decide how much of it it can show.
    */
   detail?: unknown;
+  /**
+   * What the run actually found, as short phrases — "Typeform form (embedded)",
+   * "6 fields", "found on /contact".
+   *
+   * Structured rather than folded into `summary` so each channel decides how
+   * many it can show, which is the same division of labour `detail` already
+   * uses. Senders keep these SHORT: a channel may render them verbatim. FR-91.
+   */
+  facts?: string[];
+  /**
+   * HOW we looked, when that changes what the result means — "Searched the whole
+   * site", "Landing-page mode". A site-wide search reports the form it judged to
+   * be the main one, and a reader deserves to know others may exist rather than
+   * inferring that one form is all there is. FR-91.
+   */
+  scope?: string;
+  /**
+   * What the reader must do by hand, AND why we could not do it.
+   *
+   * Rendered prominently, because it is the one part of a "detected" alert that
+   * is not merely informational: nothing was submitted, so nobody has confirmed
+   * this form delivers. Always states the reason — "runs on the provider's own
+   * domain", "a CAPTCHA blocks automated entry" — so it reads as an explanation
+   * rather than an apology. FR-91.
+   */
+  action?: string;
   /** Concrete next steps ("Renew the certificate before …"). */
   suggestions?: string[];
   /**
