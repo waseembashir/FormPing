@@ -17,7 +17,7 @@
  */
 
 import type { SiteSchedule, SiteCheckRecord } from './types';
-import { describeFailure } from './failures';
+import { siteCheckFacts, siteCheckScope, siteManualActionFor } from './alertFacts';
 import { dispatchAlert } from '@/lib/alerts/dispatch';
 import { lastAlertAt } from '@/lib/alerts/store';
 import { detailPathFor } from '@/lib/alerts/link';
@@ -94,29 +94,6 @@ function statusText(record: SiteCheckRecord): string {
   return `Down — ${downReason(record)}`;
 }
 
-/** SSL summary string for the details block. */
-function sslText(record: SiteCheckRecord): string {
-  const ssl = record.ssl;
-  if (!ssl) return 'n/a (not HTTPS)';
-  // Plain language, never the TLS library's own words. FR-86.
-  if (!ssl.ok || ssl.daysRemaining == null) return describeFailure('ssl', ssl.failure).text;
-  const expiry = ssl.validTo ? new Date(ssl.validTo).toLocaleDateString() : '?';
-  return ssl.daysRemaining <= 0
-    ? `EXPIRED (was valid to ${expiry})`
-    : `${ssl.daysRemaining} day${ssl.daysRemaining === 1 ? '' : 's'} left (expires ${expiry})`;
-}
-
-/** Domain-registration summary string for the details block. */
-function domainText(record: SiteCheckRecord): string {
-  const d = record.domain;
-  if (!d) return 'n/a';
-  if (!d.ok || d.daysRemaining == null) return describeFailure('domain', d.failure).text;
-  const expiry = d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : '?';
-  return d.daysRemaining <= 0
-    ? `EXPIRED (was valid to ${expiry})`
-    : `${d.daysRemaining} day${d.daysRemaining === 1 ? '' : 's'} left (expires ${expiry})`;
-}
-
 /**
  * Hand one alert to the shared dispatcher. Best-effort — never throws.
  *
@@ -141,6 +118,8 @@ async function postAlert(opts: {
   const { color, headerText, event, record, suggestions } = opts;
   const severity: AlertSeverity =
     color === COLOR.red ? 'critical' : color === COLOR.amber ? 'warning' : 'info';
+  // 'info' stays green here on purpose: for a site check, green means the site
+  // answered — that IS the good outcome, unlike a form we never submitted. FR-91.
 
   await dispatchAlert(
     {
@@ -148,11 +127,15 @@ async function postAlert(opts: {
       event,
       severity,
       title: headerText,
-      summary:
-        `${statusText(record)} · ${record.uptime.responseMs} ms · ` +
-        `SSL ${sslText(record)} · Domain ${domainText(record)}`,
+      // The verdict sentence only. The numbers move to `facts` so a channel can
+      // decide how many it shows, exactly as form alerts do. FR-91.
+      summary: statusText(record),
       site: record.host,
       url: record.url,
+      facts: siteCheckFacts(record),
+      // What this check covered — and, by saying so, what it did not.
+      scope: siteCheckScope(record),
+      action: siteManualActionFor(record) ?? undefined,
       suggestions,
       // One occurrence == this event for this schedule at this check time.
       dedupeKey: `site:${event}:${record.scheduleId}:${record.checkedAt}`,

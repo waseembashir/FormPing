@@ -208,7 +208,7 @@ async function runScheduleOnce(
   // BEFORE we overwrite "latest" so it can compare against the prior run.
   if (!manual) {
     try {
-      await onRunComplete(schedule, record);
+      await onRunComplete(schedule, record, raw);
     } catch (err) {
       console.warn(`[formWatch/ticker] onRunComplete threw for ${schedule.url}: ${err}`);
     }

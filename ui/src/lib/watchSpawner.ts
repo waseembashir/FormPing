@@ -17,6 +17,7 @@ import { recordChangeEvent } from './changeEventStore';
 import { siteKey } from './watchRegistry';
 import { dispatchAlert } from './alerts/dispatch';
 import { detailPathFor } from './alerts/link';
+import { changeManualActionFor, changeReportFacts, changeReportScope } from './changeAlertFacts';
 import type { AlertSeverity } from './alerts/types';
 import type { ChangeSeverity } from '@/types';
 

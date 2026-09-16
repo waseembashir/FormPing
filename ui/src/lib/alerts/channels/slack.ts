@@ -15,14 +15,22 @@
 import type { AlertInput } from '../types';
 import { sendGuarded, type SendResult } from '../rateLimit';
 
+/**
+ * The attachment bar, matched to the app's own status tokens so a message and a
+ * card never disagree about how serious something is. `notice` is the sky tone
+ * the app uses for "detected / recognised, not a problem" (--fp-info) — a
+ * third-party form must not arrive wearing a green tick it did not earn. FR-91.
+ */
 const COLOR: Record<string, string> = {
-  critical: '#dc2626',
-  warning: '#f59e0b',
-  info: '#10b981',
+  critical: '#ef4444',
+  warning: '#fbbf24',
+  notice: '#38bdf8',
+  info: '#34d399',
 };
 const EMOJI: Record<string, string> = {
   critical: '🚨',
   warning: '⚠️',
+  notice: 'ℹ️',
   info: '✅',
 };
 
@@ -30,6 +38,17 @@ const EMOJI: Record<string, string> = {
 const MAX_SECTION = 2600;
 /** How many suggestions to show before pointing at the record. */
 const MAX_SUGGESTIONS = 4;
+/**
+ * How many run facts to show, and how long that line may get.
+ *
+ * A channel decides how much of an alert it can carry, and Slack's answer is
+ * "not much": webhooks throttle, and a notification read on a phone competes
+ * with every other one. Five short facts is a glance; a paragraph is ignored.
+ * The senders already order them most-useful-first, so trimming from the end
+ * loses the least. FR-91.
+ */
+const MAX_FACTS = 5;
+const MAX_FACTS_CHARS = 240;
 
 export function isSlackConfigured(): boolean {
   return Boolean(process.env.SLACK_WEBHOOK_URL);
@@ -58,6 +77,19 @@ function buildMessage(alert: AlertInput, detailUrl: string | null, moreNote: str
 
   const lines: string[] = [];
   if (alert.summary) lines.push(escapeSlack(alert.summary));
+  // What the run found, on its own line so the verdict above it stays scannable.
+  const facts = (alert.facts ?? []).filter((f) => f && f.trim()).slice(0, MAX_FACTS);
+  if (facts.length) lines.push(truncate(escapeSlack(facts.join(' · ')), MAX_FACTS_CHARS));
+  // How we looked — a site-wide search reports the form it judged to be the
+  // main one, which is not the same as "this is the only form". FR-91.
+  if (alert.scope?.trim()) lines.push(`_${escapeSlack(truncate(alert.scope.trim(), 200))}_`);
+  // What a person still has to do. Slack colours the whole attachment, not a
+  // line, so the emphasis is carried by the marker and the bold lead-in — the
+  // bar itself stays the honest overall severity rather than turning red for a
+  // form that is merely untestable. FR-91.
+  if (alert.action?.trim()) {
+    lines.push(`🔴 *Needs a manual check* — ${escapeSlack(truncate(alert.action.trim(), 320))}`);
+  }
   if (alert.url) lines.push(`*URL:* <${alert.url}|${escapeSlack(alert.url)}>`);
   else if (alert.site) lines.push(`*Site:* ${escapeSlack(alert.site)}`);
   if (lines.length) {

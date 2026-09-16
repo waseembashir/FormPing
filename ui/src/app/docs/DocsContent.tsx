@@ -318,6 +318,12 @@ export default function DocsContent() {
                 <Faq q="Will scheduled Live checks spam the client’s inbox?">
                   Each Live run does submit one real entry, clearly marked as a health check by its test data. Use Safe mode if you only need to confirm the form fills, or Live on forms you’re authorized to monitor.
                 </Faq>
+                <Faq q="What will a Slack alert actually tell me?">
+                  The headline says what happened and to which site. Below it, a short line lists what the check found — the kind of form and who hosts it (“Typeform form (embedded)”), how many fields it has, which page it was found on, whether several forms share that page, and whether a CAPTCHA is present. Then a line saying how we looked: a whole-site search reports the form we judged to be the main one, so other forms may exist, while Landing-page mode checks only the URL you gave. If we weren’t confident we found the right form, the alert says so rather than sounding certain. It’s deliberately brief: the <strong className="text-ink">See the full detail in FormPing</strong> link opens that URL’s own dashboard, where the complete result, the screenshot and the history live.
+                </Faq>
+                <Faq q="Why does an alert sometimes say “Needs a manual check”?">
+                  Because we couldn’t complete the test ourselves, and the alert tells you why. The usual reason is a third-party form — a Typeform or HubSpot form runs on the provider’s own domain, and no browser can submit a form across domains, so we can confirm it’s there but not that an entry arrives. A CAPTCHA, a multi-step form we couldn’t walk to the end, or a firewall blocking us produce the same note. None of these means your form is broken, which is why the alert isn’t coloured like a failure — it means one test entry by hand is worth sending.
+                </Faq>
                 <Faq q="Why does a site say its domain expiry can’t be tracked?">
                   Some domain registries — many country domains, like .org.uk or .co.in — simply don’t publish an expiry date for anyone to read. When that’s the case FormPing says so plainly and stops trying, because no amount of checking will make the date appear. That’s different from “we couldn’t reach the registry just now”, which is temporary: nothing is wrong with the domain, and we check again a short while later rather than waiting for the next day.
                 </Faq>
