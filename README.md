@@ -126,6 +126,18 @@ The **app** defaults to `detect-only` in both the Form Tester and the Form Sched
 
 The same facts, in the same words, appear on the Form Tester result card, each Form Scheduler run, and the per-URL dashboard — one engine, one story. A scheduled check stores exactly what a manual test stores, so watching a URL makes its dashboard richer, never thinner; when a URL has both, the page shows the more recent one and says which it was.
 
+### Notifications carry what the run found, and link to where the rest is
+
+A Slack message is a ping, not the record — incoming webhooks throttle, and a message nobody reads is no better than one that says nothing. So an alert carries a short `facts` line built from the run itself: the embed provider behind a third-party form, the field count, the page it was found on, how many forms share that page, whether a CAPTCHA is present, and the engine's own hedge when it wasn't confident (FR-73). Most useful first, capped at five facts and ~240 characters, trimmed by whole facts rather than mid-phrase.
+
+Every alert — Form Watch, Site Watch and the Change Monitor — is assembled the same way: `facts` for what was found, `scope` for what was looked at, and `action` for what a person must still do by hand *and why we could not do it*. Scope matters as much as facts: a whole-site form search reports the form it judged to be the main one, an uptime check covers one URL and not the pages behind it, and a change report compares only the watched pages. Each of those results is easy to over-read, so each states its own limits.
+
+Severity is about how a result should READ, not merely how bad it is. There are four: `critical`, `warning`, `notice` and `info`, matched to the app's own `--fp-danger` / `--fp-warn` / `--fp-info` / `--fp-ok` tokens so a Slack message and a card never disagree. `notice` exists for the case that caused this: a recognised third-party form is not a success — nothing was submitted — and not a fault either, so it wears neither a green tick nor a red bar. The "needs a manual check" line carries the warning instead, and always states the reason.
+
+Internal identifiers never appear. A reason code like `THIRD_PARTY_EMBED_FORM` is an internal enum; the verdict label already says it in English.
+
+The "See the full detail" link resolves to the per-URL dashboard, built with the same `matchKey` + `encodeUrlKey` pair the app's own links use, so the two cannot drift. A unit test walks every path the builder can emit against the actual route files under `ui/src/app` — comparing a link builder to a list written from memory is how it came to point at a route that never existed.
+
 ### A failed check explains itself, and retries at a sensible interval
 
 When a check can't produce an answer, the reason is carried as a *kind* — `unreachable`, `rate_limited`, `not_published`, and so on — from the moment it happens. The raw message (`fetch failed`, a TLS socket error, an RDAP status) stays on the result for the server log, and no user surface renders it: the dashboard, the monitor card and the Slack alert all phrase the kind instead.
