@@ -1,0 +1,93 @@
+<!doctype html>
+<!--
+  Trimmed from fautons.com/contact-sales, captured 2026-09-28. FR-98 / FR-63.
+
+  A three-panel wizard: step 1 asks for a work email and a country, then a
+  "Continue ›" button reveals step 2. Only the current panel is in view; the
+  others sit at display:none until advanced to.
+
+  This fixture exists as the OTHER half of FR-98. That fix makes the engine
+  refuse hidden forms in landing-page mode, and a hidden panel is exactly what
+  a wizard is made of — so without this test, "never choose a hidden form"
+  could quietly kill the wizard walk FR-63 built, and nothing would notice
+  until a client's contact form stopped being monitored.
+
+  Kept faithful: the Continue button's text and its `›`, the select with a
+  hidden placeholder option, and the panels hidden by display:none rather than
+  by the `hidden` attribute. Trimmed: styling, scripts, step 3, and all but a
+  few of the country options.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Contact Sales: Book a Discovery Call | Fautons</title>
+    <style>
+      [data-cs-panel]:not([data-active]) { display: none; }
+    </style>
+  </head>
+  <body>
+    <nav class="sa-cs-rail" aria-label="Progress">
+      <span>Your email</span><span>Your info</span><span>Let's talk</span>
+    </nav>
+
+    <form class="sa-cs-body" data-cs-panel="0" data-active novalidate="">
+      <h1 class="sa-cs-title">Book a discovery call</h1>
+      <p class="sa-cs-sub">We'll match you with the right Fautons specialist.</p>
+
+      <div class="sa-cs-field">
+        <div class="sa-cs-field__l">
+          <label for="email">Work email<span class="sa-cs-field__req" aria-hidden="true"> *</span></label>
+        </div>
+        <div class="sa-cs-field__c">
+          <input id="email" class="sa-cs-input" type="email" name="email" placeholder="jane@example.com" data-cs-input="email" />
+        </div>
+      </div>
+
+      <div class="sa-cs-field">
+        <div class="sa-cs-field__l">
+          <label for="country">Country / Region<span class="sa-cs-field__req" aria-hidden="true"> *</span></label>
+        </div>
+        <div class="sa-cs-field__c">
+          <div class="sa-cs-select">
+            <select id="country" class="sa-cs-input is-placeholder" name="country" data-cs-input="country">
+              <option value="" hidden="">Select your country…</option>
+              <option value="United States">United States</option>
+              <option value="United Kingdom">United Kingdom</option>
+              <option value="India">India</option>
+            </select>
+          </div>
+          <p class="sa-cs-note">We'll route you to the regional team that handles your location.</p>
+        </div>
+      </div>
+
+      <button class="sa-cs-next" type="button" data-cs-next>Continue ›</button>
+    </form>
+
+    <!-- Step 2: hidden until "Continue ›" is clicked. -->
+    <form class="sa-cs-body" data-cs-panel="1" novalidate="">
+      <h2 class="sa-cs-title">Your info</h2>
+      <div class="sa-cs-field">
+        <label for="fullname">Full name<span aria-hidden="true"> *</span></label>
+        <input id="fullname" class="sa-cs-input" type="text" name="fullname" placeholder="Jane Doe" />
+      </div>
+      <div class="sa-cs-field">
+        <label for="company">Company</label>
+        <input id="company" class="sa-cs-input" type="text" name="company" placeholder="Acme Inc." />
+      </div>
+      <button class="sa-cs-next" type="button" data-cs-next>Continue ›</button>
+    </form>
+
+    <script>
+      // The real page advances panels in its own bundle; this is the same
+      // behaviour in four lines, so the walk has something to click.
+      document.querySelectorAll('[data-cs-next]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var panel = btn.closest('[data-cs-panel]');
+          panel.removeAttribute('data-active');
+          var next = panel.nextElementSibling;
+          if (next && next.hasAttribute('data-cs-panel')) next.setAttribute('data-active', '');
+        });
+      });
+    </script>
+  </body>
+</html>
