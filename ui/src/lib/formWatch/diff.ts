@@ -48,6 +48,11 @@ export function isRegression(prev: VerdictLevel | null, curr: VerdictLevel): boo
   // healthy: switching a native form to/from an embed is a notable change (surfaced
   // via changes[]) but NOT a health regression. Only slipping to attention/failing
   // regresses. FR-60.
-  const rank: Record<VerdictLevel, number> = { healthy: 2, detected: 2, attention: 1, failing: 0 };
+  // `limited` sits beside them: the check could not be completed, which is not
+  // a health verdict at all. Going from healthy to limited is a loss of
+  // coverage, reported as a change — but it is not the site getting worse, and
+  // calling it a regression would put "worse than last check" on a form nobody
+  // has any evidence against. FR-97.
+  const rank: Record<VerdictLevel, number> = { healthy: 2, detected: 2, limited: 2, attention: 1, failing: 0 };
   return rank[curr] < rank[prev];
 }

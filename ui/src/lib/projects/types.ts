@@ -31,7 +31,10 @@ export interface Project {
   updatedBy?: string | null;
 }
 
-export type FormHealthLevel = 'healthy' | 'detected' | 'attention' | 'failing' | 'pending';
+// Mirrors VerdictLevel plus the states a project row has that a run does not.
+// `limited` = the check could not be completed and nothing is known to be wrong
+// with the form. FR-97.
+export type FormHealthLevel = 'healthy' | 'detected' | 'limited' | 'attention' | 'failing' | 'pending';
 export type SiteUpState = 'up' | 'down' | 'blocked' | 'unknown';
 
 /** Derived health for one URL in a project (read from the existing monitors). */

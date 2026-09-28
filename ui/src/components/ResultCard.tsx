@@ -1,7 +1,7 @@
 'use client';
 import type { SiteResult } from '@/types';
 import { getReasonMessage, type Severity } from '@/lib/reasonMessages';
-import { runVerdict } from '@/lib/formWatch/verdict';
+import { runVerdict, type VerdictLevel } from '@/lib/formWatch/verdict';
 import { FormsOnPageLine } from './FormFactChips';
 import { LowConfidenceNote } from './formTester/FormEvidence';
 import { FormPanel } from './formTester/FormPanel';
@@ -52,10 +52,13 @@ function StatusMark({ ok }: { ok: boolean }) {
 }
 /** Mode-aware header badge — a healthy safe/detect run reads "OK", not amber
  *  "WARN". Mirrors the Scheduler verdict so both surfaces agree. FR-63. */
-function VerdictBadge({ level }: { level: 'healthy' | 'detected' | 'attention' | 'failing' }) {
+function VerdictBadge({ level }: { level: VerdictLevel }) {
   const map = {
     healthy: { cls: 'bg-ok/15 text-ok ring-ok/30', dot: 'bg-ok', label: 'OK' },
     detected: { cls: 'bg-info/15 text-info ring-info/30', dot: 'bg-info', label: 'Detected' },
+    // Not amber: the run could not be completed, which is not the same as a
+    // finding against the form. FR-97.
+    limited: { cls: 'bg-info/15 text-info ring-info/30', dot: 'bg-info', label: 'Not tested' },
     attention: { cls: 'bg-warn/15 text-warn ring-warn/30', dot: 'bg-warn', label: 'Attention' },
     failing: { cls: 'bg-danger/15 text-danger ring-danger/30', dot: 'bg-danger', label: 'Failed' },
   }[level];

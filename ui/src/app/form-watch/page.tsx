@@ -238,13 +238,14 @@ export default function FormWatchPage() {
  * attention was to scroll the whole list and read each card.
  *
  * So it now BREAKS THE NUMBER DOWN, in the app's canonical status vocabulary and
- * colours: healthy / detected / needs attention / failing / setting up. The
+ * colours: healthy / detected / not tested / needs attention / failing /
+ * setting up. The
  * counts are derived from the same `runVerdict` each card uses, so the summary
  * can never disagree with the rows beneath it.
  */
 function SchedulerStatus({ schedules }: { schedules: FormSchedule[] }) {
   const counts: Record<VerdictLevel | 'pending' | 'paused', number> = {
-    healthy: 0, detected: 0, attention: 0, failing: 0, pending: 0, paused: 0,
+    healthy: 0, detected: 0, limited: 0, attention: 0, failing: 0, pending: 0, paused: 0,
   };
   for (const s of schedules) {
     if (s.paused) { counts.paused += 1; continue; }
@@ -258,12 +259,16 @@ function SchedulerStatus({ schedules }: { schedules: FormSchedule[] }) {
     { n: counts.failing, label: 'failing', cls: 'bg-danger/12 text-danger ring-danger/30' },
     { n: counts.attention, label: 'need a look', cls: 'bg-warn/12 text-warn ring-warn/30' },
     { n: counts.detected, label: 'detected', cls: 'bg-info/12 text-info ring-info/30' },
+    // Counted apart from "need a look": these monitors found a form and could
+    // not complete the check, which is not a finding against the site. FR-97.
+    { n: counts.limited, label: 'not tested', cls: 'bg-info/12 text-info ring-info/30' },
     { n: counts.healthy, label: 'healthy', cls: 'bg-ok/12 text-ok ring-ok/30' },
     { n: counts.pending, label: 'setting up', cls: 'bg-idle/12 text-ink-muted ring-line-strong' },
     { n: counts.paused, label: 'paused', cls: 'bg-idle/12 text-ink-muted ring-line-strong' },
   ].filter((s) => s.n > 0);
 
   const active = schedules.length - counts.paused;
+  // `limited` does not spoil "all well": nothing is known to be wrong. FR-97.
   const allWell = counts.failing === 0 && counts.attention === 0;
 
   return (
