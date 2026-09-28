@@ -75,7 +75,34 @@ export async function extractForms(page: Page): Promise<FormInfo[]> {
           if (!inputs.includes(el)) inputs.push(el);
         });
       }
-      const fields = inputs.map((el) => {
+      // Drop honeypots: decoy inputs kept out of sight to catch bots. They are
+      // visually hidden yet NOT type="hidden", which distinguishes them from the
+      // legitimate hidden fields a form uses to carry UTM/tracking values (those
+      // are reported deliberately — FR-76). Keeping them out here keeps them out
+      // of the field list, the count and the labels: on fautons.com a `_gotcha`
+      // decoy sat immediately before the real email input and inherited its
+      // "Work email *" label, so a run advertised two fields with one name.
+      //
+      // Written inline, with no named helper, for the same reason as the
+      // location block below: esbuild wraps named functions in `__name()`, which
+      // does not exist inside page.evaluate and throws at runtime. FR-98.
+      const fields = inputs.filter((el) => {
+        const hp = el as HTMLInputElement;
+        if (hp.type === 'hidden' || hp.type === 'submit') return true;
+        const hpStyle = window.getComputedStyle(hp);
+        const hpRect = hp.getBoundingClientRect();
+        const outOfSight =
+          hpStyle.display === 'none' ||
+          hpStyle.visibility === 'hidden' ||
+          (hpRect.width === 0 && hpRect.height === 0) ||
+          hp.getAttribute('aria-hidden') === 'true' ||
+          hp.tabIndex === -1;
+        // Out of sight alone is not proof — a field inside an unopened wizard
+        // step is hidden too, and it is real. Require a decoy's own naming.
+        if (!outOfSight) return true;
+        const hpId = (hp.name + ' ' + hp.id + ' ' + hp.className).toLowerCase();
+        return !/gotcha|honey|bot[-_]?field|leave[-_]?blank|do[-_]?not[-_]?fill|url_field|winnie/.test(hpId);
+      }).map((el) => {
         const input = el as HTMLInputElement;
         const id = input.id || '';
         // Try to find associated label
@@ -361,11 +388,37 @@ export interface FindContactFormResult {
   hiddenMultiStep: boolean;
 }
 
+/**
+ * Is this a sign-in / account form rather than a way to contact the business?
+ *
+ * A login form is never the contact form, at any score, in any mode. On
+ * fautons.com the site's login modal was accepted as the contact form and
+ * monitored as one, on a client's site, on every check. The signals are
+ * unambiguous and cost nothing to check. FR-98.
+ */
+function isAuthForm(form: FormInfo): boolean {
+  const action = (form.action ?? '').toLowerCase();
+  if (/\/(auth|login|signin|sign-in|session|register|signup|sign-up|password|forgot)\b/.test(action)) return true;
+  if (form.fields.some((f) => f.type === 'password')) return true;
+  // `allText` is the form's own text; the nearest heading is what titles the
+  // modal it sits in ("Log in to Fautons"), which is often the clearest signal.
+  const words = [form.submitText, form.location?.heading, form.id, form.name]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return /\b(log ?in|sign ?in|sign ?up|create an account|reset your password)\b/.test(words);
+}
+
 export async function findContactForm(
   page: Page,
   config: AppConfig,
 ): Promise<FindContactFormResult> {
-  const rawForms = await extractForms(page);
+  const rawFormsAll = await extractForms(page);
+  const rawForms = rawFormsAll.filter((f) => !isAuthForm(f));
+  const authDropped = rawFormsAll.length - rawForms.length;
+  if (authDropped > 0) {
+    logger.debug(`Ignored ${authDropped} sign-in/account form(s) — never contact forms`);
+  }
   logger.debug(`Found ${rawForms.length} visible form(s) on contact page`);
 
   // Detect hosted/third-party embed forms (Typeform, HubSpot, …) up front so
@@ -466,14 +519,22 @@ export async function findContactForm(
     // page", so accept the best-scoring form — visible OR a hidden multi-step one
     // (FR-62) — even below the contact-form threshold. Non-landing runs keep the
     // strict threshold (auto-discovery, so precision matters).
-    if (config.landingPage && bestOverall) {
-      const hidden = !isVisible(bestOverall);
-      logger.debug(`Landing-page leniency: accepting form index=${bestOverall.index} score=${bestOverall.score}${hidden ? ' (hidden/multi-step)' : ''} (below threshold)`);
+    // Leniency accepts a form BELOW the contact-form threshold, because the user
+    // asserted the form is on this page. It must still respect the same
+    // visible-first order as the strict path above: a form a visitor can see
+    // beats one they cannot. Using `bestOverall` unconditionally is what let a
+    // hidden login modal outrank the page's one visible form. A hidden form is
+    // still allowed when it is the ONLY candidate — that is FR-62's hidden
+    // multi-step wizard, which is real and testable once revealed. FR-98.
+    const lenient = scored.find(isVisible) ?? bestOverall;
+    if (config.landingPage && lenient) {
+      const hidden = !isVisible(lenient);
+      logger.debug(`Landing-page leniency: accepting form index=${lenient.index} score=${lenient.score}${hidden ? ' (hidden/multi-step, no visible candidate)' : ''} (below threshold)`);
       return {
         form: {
-          ...bestOverall,
+          ...lenient,
           signals: [
-            ...bestOverall.signals,
+            ...lenient.signals,
             'accepted in landing-page mode (below contact-form threshold)',
             ...(hidden ? ['hidden/multi-step form (revealed via steps)'] : []),
           ],

@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  Trimmed from the real fautons.com homepage, captured 2026-09-28. FR-98.
+
+  This page is the shape that broke us: the ONLY visible form is a footer
+  newsletter sign-up, and the page also carries a LOGIN modal that is hidden
+  behind the `hidden` attribute until someone clicks "Log in".
+
+  Landing-page leniency picked the hidden login modal as the site's contact
+  form, then filled nothing (it is hidden, so it has no visible fields) and
+  reported "multi-step form found — needs attention" on a client's monitor,
+  every cycle.
+
+  Kept deliberately faithful in the parts that matter:
+    - the modal is hidden via the `hidden` ATTRIBUTE, not inline CSS
+    - `_gotcha` is a real Formspree-style honeypot: display:none, aria-hidden,
+      tabindex=-1 — and it sits immediately BEFORE the labelled email input,
+      which is how it ended up wearing that input's "Work email *" label
+    - both forms carry the same honeypot, so a fix cannot special-case one
+  The Formspree endpoint id is replaced with zeroes: the provider and the URL
+  shape are what detection reads, and a third party's real endpoint id has no
+  business being committed here. Do not restore it.
+  Trimmed: styling, scripts, page content, the modal's success view.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fautons — Corporate AI Training for Teams, Hands-On</title>
+  </head>
+  <body>
+    <main>
+      <h1>Corporate AI training for teams</h1>
+      <p>Hands-on programmes that stick.</p>
+      <a data-modal="login" role="button" tabindex="0">Log in</a>
+    </main>
+
+    <!-- The only VISIBLE form on the page: a footer newsletter sign-up. -->
+    <footer>
+      <h2>AI skills that actually stick: what works in real orgs</h2>
+      <form
+        class="sa-footer__newsform"
+        data-foot-news-form=""
+        action="https://formspree.io/p/000000000000000000/f/newsletter"
+        method="POST"
+      >
+        <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none" />
+        <input type="hidden" name="_subject" value="Footer Newsletter Signup" />
+        <label class="sr-only" for="foot-news-email">Work email</label>
+        <input id="foot-news-email" name="email" type="email" required="" placeholder="you@company.com" autocomplete="email" />
+        <button class="sa-footer__newsbtn" type="submit">Subscribe</button>
+      </form>
+    </footer>
+
+    <!-- HIDDEN until the user clicks "Log in". This is what we wrongly chose. -->
+    <div class="sa-modal" id="sa-modal-login" hidden="">
+      <div class="sa-modal__panel" data-stop="">
+        <button class="sa-modal__x" data-close="" aria-label="Close">✕</button>
+        <div class="sa-modal__body">
+          <div data-view="form">
+            <div class="sa-modal__brand"><span class="sa-brand__word">Fautons</span></div>
+            <h2 class="sa-modal__title">Log in to Fautons</h2>
+            <p class="sa-modal__sub">Enter your work email and we'll send you a secure sign-in link.</p>
+            <form data-demo-form="" action="/api/auth/request" method="POST">
+              <input type="hidden" name="_subject" value="Fautons sign-in link request" />
+              <input type="hidden" name="intent" value="sign-in" />
+              <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none" />
+              <label class="sa-f">
+                <span class="sa-f__label">Work email<i> *</i></span>
+                <input class="sa-f__input" type="email" name="email" placeholder="you@company.com" required="" />
+              </label>
+              <button class="sa-btn sa-btn--ink sa-btn--full" type="submit">Email me a sign-in link</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

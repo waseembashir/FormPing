@@ -57,10 +57,10 @@ The app is organized around **Projects** (a client and their URLs), with two too
 | **Projects** | Group a client's URLs into a project and see their form, uptime and SSL health at a glance. URLs you've tested or monitored but not grouped yet surface in an **Unassigned** bucket to assign or dismiss, so nothing is ever invisible. |
 | **Contact Forms** | **Form Tester** — run an on-demand test against a URL. On a whole-site run it finds *every* form across the site and reports them form-by-form (summary + a tab per form), each with a screenshot of the form it matched; results and the mode they were run in persist across refreshes. **Form Scheduler** — recurring form tests (daily by default) with alerts when a form changes or breaks. |
 | **Site Health** | **Uptime & SSL** — availability plus certificate and domain expiry monitoring. **Content Changes** — track content, SEO, form and script changes over time, with an optional AI summary of each diff. |
-
-Both schedulers carry a **Re-run** button: it checks that URL immediately in the monitor's own mode and adds one tagged row to its history, while leaving the schedule untouched — no reschedule, no alert, no change to the stored result or the uptime figure a monitor reports.
 | **Status pages** | A live, client-safe health page per client (and per single URL), shareable with no login. An internal, richer version is available to the team. |
 | **Team** | Manage who can do what (roles), and triage bug reports submitted from within the app. Every project keeps an **activity log** — who opened it, who added or removed a URL, who shared it, and when — readable by owners and admins. |
+
+Both schedulers carry a **Re-run** button: it checks that URL immediately in the monitor's own mode and adds one tagged row to its history, while leaving the schedule untouched — no reschedule, no alert, no change to the stored result or the uptime figure a monitor reports.
 
 Every action that changes or removes data is confirmed first, and the copy always makes clear what will happen — especially whether a form test will actually **submit**.
 
@@ -76,13 +76,17 @@ By default a run covers the **whole site**. It discovers the contact page using 
 
 Alongside that, the engine **inventories every other reachable page** and records **every** form it finds, each with its own live source URL. Only forms a visitor can actually see are reported — a hidden modal copy of a form is not listed as a second form — and a third-party form counts only when its embed is really on the page: a provider's tracking script on its own is evidence the site uses that vendor, not that a form is embedded. Each is classified — **contact, newsletter, search, login, or another lead form** such as a rental or demo request — so the report can say what a form is *for*, not just that one exists. A form that repeats across the site (a header search, a footer newsletter) is recognised as the same form, shown once, and marked **global**.
 
+**A sign-in form is never the contact form** — at any score, in any mode. A form that posts to an auth route, carries a password field, or is titled "Log in" / "Sign up" / "Reset your password" is dropped before scoring begins, so it can neither win discovery nor be tested. It is still *inventoried* as a login form, because knowing the site has one is useful; it is just never the form under test.
+
 For each form it reports the source page, native vs third-party embed (and which provider, iframe vs script), field count and names, single- vs multi-step, whether **that form** carries a CAPTCHA, and any hidden **UTM / click-id tracking** it captures — or flags a lead form that captures none, since those leads won't carry a campaign source.
+
+**Honeypots don't count as fields.** A decoy input planted to catch bots (`_gotcha` and friends — hidden from view, named to be recognisable) is left out of the field list, the count and the labels. A decoy is identified by being both out of sight *and* named like a trap, so a genuine field inside an unopened wizard step is never mistaken for one, and the legitimate hidden inputs that carry UTM values are still reported.
 
 ### 2. Filling them
 
 **Every lead form gets filled** with configurable test data — not just the main contact form. Search, newsletter and login inputs are recognised as utility forms and left untouched.
 
-**Multi-step wizards are walked**, step by step (fill → Next → fill) until the submit control is reached, even when the steps live outside the `<form>` element.
+**Multi-step wizards are walked**, step by step (fill → Next → fill) until the submit control is reached, even when the steps live outside the `<form>` element. The result reports the steps it traversed and the fields it actually filled as two separate figures, so what was reached and what was completed can never be read as the same claim.
 
 ### 3. Submitting — Live mode only
 
@@ -114,6 +118,8 @@ The **app** defaults to `detect-only` in both the Form Tester and the Form Sched
 
 **Landing-page mode** skips discovery and the site crawl, testing the form on the exact URL given — for standalone landing pages with an inline form and no separate `/contact` page. Detection is also more lenient there: since you've asserted the form is on this page, the best-scoring form is accepted even if it wouldn't clear the usual contact-form threshold (a quiz, assessment or booking form is still a real form) — and the result says plainly that it's a low-confidence match.
 
+Leniency lowers the *threshold*, not the standard. A form a visitor can see always beats one they cannot, so a hidden form is accepted only when it is the page's **only** candidate — the hidden multi-step wizard that leniency exists for.
+
 ### When a form isn't submitted, the result says *why*
 
 - **`FORM_NOT_FOUND`** — genuinely nothing: no native form and no known embed.
@@ -128,17 +134,17 @@ The same facts, in the same words, appear on the Form Tester result card, each F
 
 ### Notifications carry what the run found, and link to where the rest is
 
-A Slack message is a ping, not the record — incoming webhooks throttle, and a message nobody reads is no better than one that says nothing. So an alert carries a short `facts` line built from the run itself: the embed provider behind a third-party form, the field count, the page it was found on, how many forms share that page, whether a CAPTCHA is present, and the engine's own hedge when it wasn't confident (FR-73). Most useful first, capped at five facts and ~240 characters, trimmed by whole facts rather than mid-phrase.
+A Slack message is a ping, not the record — incoming webhooks throttle, and a message nobody reads is no better than one that says nothing. So an alert carries a short `facts` line built from the run itself: the embed provider behind a third-party form, the field count, the page it was found on, how many forms share that page, whether a CAPTCHA is present, and the engine's own hedge when it wasn't confident. Most useful first, capped at five facts and ~240 characters, trimmed by whole facts rather than mid-phrase.
 
-Every alert — Form Watch, Site Watch and the Change Monitor — is assembled the same way: `facts` for what was found, `scope` for what was looked at, and `action` for what a person must still do by hand *and why we could not do it*.
+Every alert — Form Watch, Site Watch and the Change Monitor — is assembled the same way: `facts` for what was found, `scope` for what was looked at, and `action` for what a person must still do by hand *and why it could not be done automatically*.
 
-Every claim in those lines is read from the run, never from its configuration. A mode says what a check is *for*; only the result says what it *did*. So the sentence comes from `submissionResult` and the reason code — "submitted and confirmed", "submitted, but no confirmation was seen", "filled, but the submission did NOT go through", "could not be filled" — with the mode as context. `runOutcome()` derives it in one place and a test walks every mode against every outcome the engine emits, because the first version of this line was built from the mode alone and told people a message had been submitted when the submit had failed. Scope matters as much as facts: a whole-site form search reports the form it judged to be the main one, an uptime check covers one URL and not the pages behind it, and a change report compares only the watched pages. Each of those results is easy to over-read, so each states its own limits.
+Every claim in those lines is read from the run, never from its configuration. A mode says what a check is *for*; only the result says what it *did*. So the sentence comes from `submissionResult` and the reason code — "submitted and confirmed", "submitted, but no confirmation was seen", "filled, but the submission did NOT go through", "could not be filled" — with the mode as context. `runOutcome()` derives it in one place, and a test walks every mode against every outcome the engine emits. Scope matters as much as facts: a whole-site form search reports the form it judged to be the main one, an uptime check covers one URL and not the pages behind it, and a change report compares only the watched pages. Each of those results is easy to over-read, so each states its own limits.
 
-Severity is about how a result should READ, not merely how bad it is. There are four: `critical`, `warning`, `notice` and `info`, matched to the app's own `--fp-danger` / `--fp-warn` / `--fp-info` / `--fp-ok` tokens so a Slack message and a card never disagree. `notice` exists for the case that caused this: a recognised third-party form is not a success — nothing was submitted — and not a fault either, so it wears neither a green tick nor a red bar. The "needs a manual check" line carries the warning instead, and always states the reason.
+Severity is about how a result should READ, not merely how bad it is. There are four: `critical`, `warning`, `notice` and `info`, matched to the app's own `--fp-danger` / `--fp-warn` / `--fp-info` / `--fp-ok` tokens so a Slack message and a card never disagree. `notice` covers the middle ground: a recognised third-party form is not a success — nothing was submitted — and not a fault either, so it wears neither a green tick nor a red bar. The "needs a manual check" line carries the warning instead, and always states the reason.
 
 Internal identifiers never appear. A reason code like `THIRD_PARTY_EMBED_FORM` is an internal enum; the verdict label already says it in English.
 
-The "See the full detail" link resolves to the per-URL dashboard, built with the same `matchKey` + `encodeUrlKey` pair the app's own links use, so the two cannot drift. A unit test walks every path the builder can emit against the actual route files under `ui/src/app` — comparing a link builder to a list written from memory is how it came to point at a route that never existed.
+The "See the full detail" link resolves to the per-URL dashboard, built with the same `matchKey` + `encodeUrlKey` pair the app's own links use, so the two cannot drift. A unit test walks every path the builder can emit against the actual route files under `ui/src/app`, so a link can only be emitted for a route that exists.
 
 ### A failed check explains itself, and retries at a sensible interval
 
@@ -148,11 +154,11 @@ That distinction also drives the retry. A domain expiry is re-read at most every
 
 ### A result that couldn't be stored is reported, not painted over
 
-A monitor's run record and the summary on its card are separate writes to separate tables. If the run record is refused — a missing column after a partial migration, a database blip — the summary must not be written anyway, or the card reports a fresh healthy check above a history that doesn't contain it.
+A monitor's run record and the summary on its card are separate writes to separate tables. If the run record is refused — a schema mismatch, a database blip — the summary must not be written anyway, or the card reports a fresh healthy check above a history that doesn't contain it.
 
 So writes are sorted into two kinds. **Essential** writes (the run record, the durable per-URL result, the daily rollup behind the uptime figures) report whether they landed; a failure is logged at `error` level and the monitor keeps the last result it can actually prove, advancing only its retry time. The card then says *"The last check could not be saved"* rather than showing stale figures as current. **Best-effort** writes (screenshots, Slack posts, the activity log, history pruning) still fail quietly on purpose, and say so where that choice is made.
 
-On boot a schema guard selects the columns each critical table is expected to have and logs a loud, unmissable error if any are missing — the condition that caused this, found in seconds rather than hours. It never stops the server: a monitoring tool that refuses to start is worse than one running with a stale column.
+On boot a schema guard selects the columns each critical table is expected to have and logs a loud, unmissable error if any are missing, so a schema drift is visible immediately rather than inferred later from wrong figures. It never stops the server: a monitoring tool that refuses to start is worse than one running with a stale column.
 
 ---
 
@@ -201,7 +207,7 @@ Enforcement is **server-side on every write** — the interface hides what a rol
 - **Web app** — Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS. A single design-token system drives the whole UI in one coherent dark theme.
 - **Engine** — TypeScript, [Playwright](https://playwright.dev) for real-browser form testing, and lightweight HTML parsing for fast change detection.
 - **Data** — PostgreSQL for structured data; captured page snapshots are kept on disk for diffing; form screenshots go to object storage, so only a URL ever reaches the browser.
-- **Testing** — [Vitest](https://vitest.dev) for the engine's detection and analysis logic, and [Playwright](https://playwright.dev) end-to-end tests for the web app.
+- **Testing** — [Vitest](https://vitest.dev) for the engine's detection and analysis logic, [Playwright](https://playwright.dev) end-to-end tests for the web app, and a Playwright-driven **fixture suite** that runs the real detection and filling code against saved pages.
 
 ---
 
@@ -211,6 +217,7 @@ Enforcement is **server-side on every write** — the interface hides what a rol
 formping/
 ├── src/            # the CLI engine — form detection, testing, change monitoring
 ├── tests/          # engine unit tests (Vitest)
+│   └── engine/     #   the same engine run against saved pages — fixtures + harness
 └── ui/             # the Next.js web app (App Router)
     └── src/
         ├── app/            # routes, pages, and API endpoints
@@ -233,6 +240,10 @@ npm install
 npx playwright install chromium
 npm test          # run the engine test suite
 ```
+
+> The engine and the web app pin their own Playwright versions, and `playwright install` keeps only the browsers its own version uses. Install the browser from **each** package — once at the root, once in `ui/`.
+
+**Fixture tests.** `tests/engine/` runs the real `findContactForm` / `fillForm` against saved HTML in `tests/engine/fixtures/`: a real Chromium, no network, no external site contacted. Each fixture is a *shape* of page — "a site whose only visible form is a newsletter, with a login modal hidden behind it" — and its test asserts what the engine must conclude about that shape. They run with `npm test` like any other suite.
 
 **Web app:**
 
@@ -335,6 +346,7 @@ npm run start -- --url https://yoursite.com --monitor watch --watch-interval 360
 | `LOW_CONFIDENCE_FORM` | Only a single-input form matched — not filled, shown for you to confirm |
 | `THIRD_PARTY_EMBED_FORM` | A hosted embed is present — exists, not auto-testable |
 | `FORM_AMBIGUOUS` | Multiple forms, low confidence |
+| `BLOCKED_BY_HOST` | The host refused every request — a hosting-provider IP block, not a site fault |
 | `CAPTCHA_DETECTED` | CAPTCHA widget found — aborted |
 | `ANTI_BOT_DETECTED` | Anti-bot challenge page — aborted |
 | `REQUIRED_FIELDS_UNSUPPORTED` | Could not fill required fields |
@@ -345,6 +357,8 @@ npm run start -- --url https://yoursite.com --monitor watch --watch-interval 360
 | `SUBMIT_FAILED` | Submit click failed |
 | `VALIDATION_ERROR` | Form showed validation errors |
 | `SERVER_ERROR` | The site's own backend returned 5xx — the form is broken, nothing delivered |
+| `SUBMISSION_BLOCKED_BY_ANTISPAM` | An anti-spam plugin or WAF rejected the submission (402/403/429) |
+| `PROXY_REJECTED_POST` | The outbound proxy, not the site, refused to forward the submission |
 | `NO_REDIRECT_NO_SUCCESS` | Submitted but no success signal |
 | `INLINE_SUCCESS_ONLY` | Inline success message detected |
 | `THANK_YOU_REDIRECT` | Redirected to a thank-you URL |
@@ -371,7 +385,7 @@ npm run start -- --url https://yoursite.com --monitor watch --watch-interval 360
 ## Contributing
 
 1. Branch off `main`.
-2. Make your change; keep the engine and the web app type-clean (`npm run lint` in each) and green — the engine unit tests (`npm test` at the root) **and** the web app's end-to-end tests (`npm run test:e2e` in `ui/`) must pass before you commit.
+2. Make your change; keep both halves type-clean and green before you commit — `npm run lint` and `npm test` at the root for the engine, and `npx tsc --noEmit` plus `npm run test:e2e` in `ui/` for the web app. These are the same four checks CI runs on every pull request.
 3. Open a pull request describing what changed and why.
 
 **CI runs on every push and PR** (GitHub Actions): the engine's typecheck + unit tests and the web app's typecheck + Playwright e2e must all be green before merge.
@@ -388,4 +402,4 @@ FormPing is for **authorized testing only**.
 - Never target third-party sites without permission, and never use it to spam or flood forms.
 - In live mode, submissions send **real** messages — use a test address you control.
 
-It deliberately cannot bypass CAPTCHA or anti-bot protections, doesn't handle file-upload fields, and may miss forms that use unusual, non-standard submit mechanisms.
+By design it never attempts to bypass a CAPTCHA or an anti-bot challenge: when one is detected the run stops and reports it.
