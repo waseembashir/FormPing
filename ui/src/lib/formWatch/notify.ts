@@ -16,7 +16,7 @@ import type { FormSchedule, FormRunRecord } from './types';
 import { latestRun } from './historyStore';
 import { compareFingerprints, isRegression } from './diff';
 import { buildSuggestions } from './suggestions';
-import { formRunFacts, formRunScope, manualActionFor } from './alertFacts';
+import { formRunFacts, formRunScope, manualActionFor, runOutcome } from './alertFacts';
 import { runVerdict } from './verdict';
 import { dispatchAlert } from '@/lib/alerts/dispatch';
 import { detailPathFor } from '@/lib/alerts/link';
@@ -62,20 +62,23 @@ export async function onRunComplete(
   // NOT a "needs attention" ping. FR-60.
   const isProblem = verdict.level === 'failing' || verdict.level === 'attention';
   /**
-   * A headline may only claim what the mode actually tested.
+   * A headline may only claim what the run actually achieved.
    *
-   * "Contact form OK" was sent for Detect-mode runs, which confirm that a form
-   * exists and do nothing else — no fill, no submit. Read at a glance in Slack,
-   * that says "your contact form works", which we had not established and could
-   * not have. Safe mode fills but never submits, so it cannot claim delivery
-   * either. Only Live mode actually puts a message through. FR-91.
+   * FR-91 made this mode-aware: "Contact form OK" had been sent for Detect runs,
+   * which confirm a form exists and nothing else. But mode-aware is not enough —
+   * a Safe run that filled nothing still read "Contact form filled OK". The
+   * claim now comes from the outcome, so a title cannot outrun the evidence
+   * however the modes and reason codes are combined in future. FR-96.
    */
+  const outcome = runOutcome(record);
   const okTitle =
-    record.mode === 'live'
+    outcome.submitted === 'confirmed'
       ? `Contact form OK — ${record.site}`
-      : record.mode === 'safe'
-        ? `Contact form filled OK — ${record.site}`
-        : `Contact form found — ${record.site}`;
+      : outcome.submitted === 'unconfirmed'
+        ? `Contact form submitted, no confirmation — ${record.site}`
+        : outcome.filled
+          ? `Contact form filled OK — ${record.site}`
+          : `Contact form found — ${record.site}`;
 
   const title =
     verdict.level === 'detected'
