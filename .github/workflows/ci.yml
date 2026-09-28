@@ -25,6 +25,12 @@ jobs:
       - run: npm ci
       - name: Typecheck (tsc)
         run: npm run lint
+      # The fixture suite under tests/engine/ runs the real detection and
+      # filling code in a real browser against saved pages, so this job needs
+      # Chromium just as the web job does. Installed from the root package,
+      # which pins its own Playwright version.
+      - name: Install Playwright browser + system deps
+        run: npx playwright install --with-deps chromium
       - name: Unit tests (Vitest)
         run: npm test
 
