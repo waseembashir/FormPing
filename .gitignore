@@ -53,3 +53,4 @@ Thumbs.db
 # Internal planning / process docs — kept local, never pushed to GitHub
 docs/architecture/
 WORKING_AGREEMENT.md
+AUDIT.md

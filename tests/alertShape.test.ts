@@ -75,11 +75,22 @@ describe('Form Watch — the search mode is always stated', () => {
     // dispatcher refactor and no alert carried it until FR-91. Without it,
     // "Contact form OK" on a Detect run reads as "your form works", which that
     // mode never tested.
+    //
+    // The outcomes are explicit here because FR-96: this test used to pass the
+    // default fixture (a third-party embed, nothing filled) and still assert
+    // "the form was filled" — it was asserting the bug. The mode is context; the
+    // claim has to match what the run actually did. Full grid in runOutcome.test.ts.
     expect(formRunScope(formRun({ mode: 'detect-only' }))).toMatch(
       /Detect mode — we only confirmed a form exists; nothing was filled or submitted/i,
     );
-    expect(formRunScope(formRun({ mode: 'safe' }))).toMatch(/filled, then deliberately not submitted/i);
-    expect(formRunScope(formRun({ mode: 'live' }))).toMatch(/a real message was submitted/i);
+    expect(
+      formRunScope(formRun({ mode: 'safe', reasonCode: 'SAFE_MODE_NO_SUBMIT' })),
+    ).toMatch(/filled, then deliberately not submitted/i);
+    expect(
+      formRunScope(
+        formRun({ mode: 'live', reasonCode: 'THANK_YOU_REDIRECT', submissionResult: 'success' }),
+      ),
+    ).toMatch(/a real message was submitted and confirmed/i);
   });
 
   it('states the mode AND the search together, in every combination', () => {

@@ -204,22 +204,94 @@ export function formRunFactsLine(record: FormRunRecord, raw?: unknown): string |
  * narrower promise: this exact URL, nothing else. Saying which one ran is the
  * difference between an accurate result and a misread one. FR-91.
  */
+/**
+ * What a run ACTUALLY did with the form — as opposed to what its mode is for.
+ *
+ * FR-91 added a mode sentence to stop alerts over-claiming, and it over-claimed:
+ * it was built from `record.mode` alone, so a Safe run that filled nothing still
+ * read "the form was filled", and — far worse — a Live run whose submit failed
+ * still read "a real message was submitted". Someone reading that believes a
+ * lead was delivered when it was not. FR-96.
+ *
+ * The engine already states both facts; they just have to be read instead of
+ * assumed:
+ *
+ *  - `submissionResult` is the engine's own word on the submit. Anything other
+ *    than 'not_attempted' means the form was filled AND a submit was tried.
+ *  - For the 'not_attempted' codes, the reason code says whether filling got
+ *    anywhere. Two of them are emitted from BOTH sides of the submit, which is
+ *    exactly why the reason code alone cannot be trusted: CAPTCHA_DETECTED and
+ *    ANTI_BOT_DETECTED appear pre-fill (runSingleSite ~285/~630) and post-submit
+ *    (~735/~748). `submissionResult` disambiguates them.
+ */
+type Submitted = 'confirmed' | 'unconfirmed' | 'failed' | 'none';
+
+/** Submit outcomes that prove the form was filled and a submit was attempted. */
+const ATTEMPTED: Record<string, Submitted> = {
+  success: 'confirmed',
+  validation_error: 'failed',
+  captcha_blocked: 'failed',
+  anti_bot_blocked: 'failed',
+  submit_failed: 'failed',
+  timeout: 'failed',
+};
+
+/**
+ * Reason codes that reach 'not_attempted' having ALREADY filled the form —
+ * filled, then stopped on purpose or blocked before the submit could fire.
+ */
+const FILLED_BUT_NOT_SUBMITTED = new Set([
+  'SAFE_MODE_NO_SUBMIT',
+  'SUBMIT_HELD_INCOMPLETE',
+  'CAPTCHA_DETECTED',
+]);
+
+export interface RunOutcome {
+  /** True when we know fields were filled, false when we know they were not. */
+  filled: boolean;
+  submitted: Submitted;
+}
+
+/** What the run did, read from the record rather than inferred from its mode. */
+export function runOutcome(record: FormRunRecord): RunOutcome {
+  const attempted = ATTEMPTED[record.submissionResult ?? ''];
+  if (attempted) {
+    // A submit outcome exists, so the form was necessarily filled first.
+    // NO_REDIRECT_NO_SUCCESS reports 'success' because the submit action
+    // completed — but nothing confirmed it, so it must not read as delivered.
+    const submitted: Submitted =
+      attempted === 'confirmed' && record.reasonCode === 'NO_REDIRECT_NO_SUCCESS'
+        ? 'unconfirmed'
+        : attempted;
+    return { filled: true, submitted };
+  }
+  return { filled: FILLED_BUT_NOT_SUBMITTED.has(record.reasonCode), submitted: 'none' };
+}
+
 export function formRunScope(record: FormRunRecord): string {
   const f = record.fingerprint;
+  const { filled, submitted } = runOutcome(record);
 
   /**
-   * WHAT the run did, which is the difference between "a form exists" and "a
-   * message was delivered". Detect mode confirms existence and nothing more, so
-   * a run of it can never be evidence that the form works — and an alert that
-   * omits the mode invites exactly that reading. The original Slack sender
-   * printed the mode; it was lost in the July 2026 dispatcher refactor and no
-   * alert has carried it since. FR-91.
+   * The mode stays as CONTEXT — it explains what this monitor is trying to do —
+   * but every claim in the sentence comes from the outcome. Detect mode is the
+   * one case where the mode IS the outcome: it fills nothing by design.
    */
   const mode =
     record.mode === 'live'
-      ? 'Live mode — a real message was submitted'
+      ? submitted === 'confirmed'
+        ? 'Live mode — a real message was submitted and confirmed'
+        : submitted === 'unconfirmed'
+          ? 'Live mode — the form was submitted, but no confirmation was seen'
+          : submitted === 'failed'
+            ? 'Live mode — the form was filled, but the submission did NOT go through'
+            : filled
+              ? 'Live mode — the form was filled, but nothing was submitted'
+              : 'Live mode — the form could not be filled, so nothing was submitted'
       : record.mode === 'safe'
-        ? 'Safe mode — the form was filled, then deliberately not submitted'
+        ? filled
+          ? 'Safe mode — the form was filled, then deliberately not submitted'
+          : 'Safe mode — the form could not be filled; nothing was submitted'
         : 'Detect mode — we only confirmed a form exists; nothing was filled or submitted';
 
   const where = f?.landingPageMode
@@ -240,6 +312,8 @@ export function formRunScope(record: FormRunRecord): string {
  * domain" reads as a fact about the web, which is what it is.
  */
 export function manualActionFor(record: FormRunRecord, raw?: unknown): string | null {
+  // Every case where the engine could not fill the form owes the reader a
+  // reason and an instruction — that is the whole point of this line. FR-96.
   const f = record.fingerprint;
   const provider = f?.embedProvider?.trim();
   const elsewhere = otherForms(record, raw);
@@ -273,7 +347,7 @@ export function manualActionFor(record: FormRunRecord, raw?: unknown): string | 
       return 'We could not submit this form: a CAPTCHA or anti-bot check blocks automated entries by design. Send one test entry by hand, or whitelist the tester so scheduled checks can complete.';
 
     case 'MULTI_STEP_FORM_DETECTED':
-      return 'We could not complete this form: it is a multi-step form whose later steps we could not reach this run. The form exists and looks healthy — confirm it end to end by hand.';
+      return 'We could not fill this form: it is a multi-step form, and none of its steps offered a field we could type into — usually custom inputs rather than standard ones. The form exists and may be perfectly healthy; confirm it end to end by hand.';
 
     case 'SUBMIT_HELD_INCOMPLETE':
       return 'We deliberately stopped before submitting: the run did not cleanly reach the final step, so sending a half-filled entry to a real inbox was the wrong call. Finish one entry by hand to confirm it delivers.';
@@ -283,6 +357,18 @@ export function manualActionFor(record: FormRunRecord, raw?: unknown): string | 
 
     case 'NON_CONTACT_FORM_FOUND':
       return 'We did not submit anything: the form we found did not score as a contact form. If it IS the contact form, switch this monitor to Landing-page mode so it tests this URL directly.';
+
+    case 'REQUIRED_FIELDS_UNSUPPORTED':
+      return 'We could not fill this form: one or more required fields use an input type the tester cannot complete. The form itself may be perfectly healthy — send one entry by hand to confirm it delivers.';
+
+    case 'VALIDATION_ERROR':
+      return 'We filled this form, but the site rejected the entry at validation. A required field may have been added or its rules changed — check the form, then send one entry by hand.';
+
+    case 'SUBMIT_FAILED':
+      return 'We filled this form, but the submit itself failed. The submit button or its handler may have changed — confirm by sending one entry by hand.';
+
+    case 'NO_REDIRECT_NO_SUCCESS':
+      return 'We submitted this form, but no confirmation of any kind appeared — no thank-you page, no success message. It may have delivered silently, or it may have failed silently. Check the inbox or CRM for the test entry.';
 
     case 'LOW_CONFIDENCE_FORM':
       return `We are not confident this is your contact form${

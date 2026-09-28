@@ -638,10 +638,13 @@ export async function runSingleSite(
       }
 
       if (filledFields.length === 0) {
-        // A hidden multi-step form is DETECTED but its fields live in steps that
-        // are revealed on "Next" — a blind fill can't reach them yet (walking the
-        // steps is Phase 2, FR-63). Report it as "found, multi-step", NOT the
-        // scary "could not fill required fields" that reads like a broken form. FR-64.
+        // Walking the steps IS supported (FR-63: fillForm clicks Next/Continue
+        // through up to MAX_WIZARD_STEPS). Reaching here means the walk ran and
+        // still filled nothing — every step extracted no fillable field. Report
+        // it as "found, multi-step, could not fill", NOT the scary "could not
+        // fill required fields" that reads like a broken form (FR-64), and NOT
+        // the old "not supported yet", which claimed a capability was missing
+        // that had already shipped. FR-96.
         if (baseResult.isMultiStep || hiddenMultiStep) {
           return {
             ...baseResult,
@@ -650,7 +653,7 @@ export async function runSingleSite(
             reasonCode: 'MULTI_STEP_FORM_DETECTED',
             notes: [
               ...baseResult.notes,
-              `Detected a multi-step form (${baseResult.fieldCount ?? 0} field(s) across its steps). The form was found, but stepping through to fill each panel isn't supported yet — verify it manually for now.`,
+              `Detected a multi-step form (${baseResult.fieldCount ?? 0} field(s) across its steps). We walked its steps but could not fill a single field on any of them — most often the inputs are custom components rather than standard fields we can type into. Check this one by hand.`,
             ],
             durationMs: Date.now() - start,
           };
