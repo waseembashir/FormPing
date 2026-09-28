@@ -13,7 +13,7 @@
 
 import type { FormRunStatus } from './types';
 
-export type VerdictLevel = 'healthy' | 'detected' | 'attention' | 'failing';
+export type VerdictLevel = 'healthy' | 'detected' | 'limited' | 'attention' | 'failing';
 
 export interface RunVerdict {
   level: VerdictLevel;
@@ -50,20 +50,36 @@ const FAILING = new Set([
   'REQUIRED_FIELDS_UNSUPPORTED',
   'ERROR',
 ]);
-// Needs a look, but not necessarily a broken form (external blocker / unclear).
-// The two FR-28 codes live here on purpose: something IS on the page (a
-// non-contact form, or a third-party embed) — it just isn't an auto-testable
-// contact form — so it's amber "worth a look", not a red "the form is broken".
-const ATTENTION = new Set([
+/**
+ * The check could not be completed, and nothing is known to be wrong with the
+ * site. These describe OUR limits or the site's own defences — not a fault the
+ * owner should act on.
+ *
+ * FR-60 settled this for third-party embeds: a recognised embed is `detected`,
+ * never amber, because nothing is broken. The same reasoning applies wherever
+ * the engine simply could not finish. Amber has to keep one meaning — a person
+ * should look because the form may be broken — or it stops carrying any. FR-97.
+ */
+const LIMITED = new Set([
+  // The site is defending itself against automated entry. That is the site
+  // working as intended, not a fault: a human filling the form is unaffected.
   'CAPTCHA_DETECTED',
   'ANTI_BOT_DETECTED',
+  // A firewall refused our request. It says what the host does with our traffic,
+  // not whether the form works — hosting providers routinely block cloud IPs.
   'BLOCKED_BY_HOST',
-  'NO_REDIRECT_NO_SUCCESS',
+  // A form exists; it did not score as a contact form. On a site that genuinely
+  // has no native contact form this is a permanent fact, not an incident.
   'NON_CONTACT_FORM_FOUND',
-  // A multi-step form was DETECTED but we can't fill/submit through its steps
-  // yet — the form exists (not a red "broken"), but monitoring can't confirm a
-  // submission, so it's amber "worth a look". FR-64.
+  // A multi-step form was found but its steps could not be walked this run. The
+  // form exists and may be perfectly healthy.
   'MULTI_STEP_FORM_DETECTED',
+]);
+// Needs a look: the run DID act on the form, and what came back is unclear or
+// incomplete. This is the narrow meaning of amber — something may be wrong.
+const ATTENTION = new Set([
+  // Submitted, but no confirmation was seen. The message may not have arrived.
+  'NO_REDIRECT_NO_SUCCESS',
   // Multi-step form was filled but the live submission was held back (not a
   // clean entry) — worth a look, not a breakage. FR-63.
   'SUBMIT_HELD_INCOMPLETE',
@@ -91,6 +107,11 @@ const LABELS: Record<string, string> = {
   VALIDATION_ERROR: 'Validation error',
   SERVER_ERROR: 'The site’s server errored — message not delivered',
   SUBMISSION_BLOCKED_BY_ANTISPAM: 'Filtered by anti-spam',
+  // Without a label here the raw code was shown to users — the same internal
+  // identifier leak removed from the dashboards and alerts elsewhere. The
+  // refusal happens before the request reaches the site, so the wording does
+  // not blame the form. FR-97.
+  PROXY_REJECTED_POST: 'Blocked before it reached the site',
   REQUIRED_FIELDS_UNSUPPORTED: 'Required fields could not be filled',
   NO_REDIRECT_NO_SUCCESS: 'Submitted — no confirmation seen',
   ERROR: 'Run error',
@@ -122,6 +143,7 @@ export function runVerdict(
       : { level: 'healthy', label };
   }
   if (FAILING.has(reasonCode)) return { level: 'failing', label };
+  if (LIMITED.has(reasonCode)) return { level: 'limited', label };
   if (ATTENTION.has(reasonCode)) return { level: 'attention', label };
   return { level: 'attention', label };
 }

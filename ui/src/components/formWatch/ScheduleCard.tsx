@@ -13,6 +13,9 @@ import { UnsavedResultNotice } from '@/components/UnsavedResultNotice';
 const LEVEL_STYLE: Record<VerdictLevel | 'pending', { dot: string; text: string; label: string }> = {
   healthy: { dot: 'bg-ok', text: 'text-ok', label: 'Healthy' },
   detected: { dot: 'bg-info', text: 'text-info', label: 'Third-party form detected' },
+  // The check could not be completed, and nothing is known to be wrong. It
+  // wears the info tone, never amber, and says so plainly. FR-97.
+  limited: { dot: 'bg-info', text: 'text-info', label: 'Could not be tested' },
   attention: { dot: 'bg-warn', text: 'text-warn', label: 'Needs attention' },
   failing: { dot: 'bg-danger', text: 'text-danger', label: 'Failing' },
   pending: { dot: 'bg-idle', text: 'text-ink-muted', label: 'Pending first run' },
@@ -101,8 +104,16 @@ export function ScheduleCard({
   const levels = recentRuns.map((r) => runVerdict(r.reasonCode, r.fingerprint.formFound, r.status, r.fingerprint.formConfidenceLevel).level);
   // A detected third-party embed is a fine outcome — count it as OK for the pass
   // rate and give it its own sky bar in the trend (not amber). FR-60.
-  const passPct = levels.length ? Math.round((levels.filter((l) => l === 'healthy' || l === 'detected').length / levels.length) * 100) : null;
-  const trendTones: TrendTone[] = levels.map((l) => (l === 'healthy' ? 'emerald' : l === 'detected' ? 'sky' : l === 'failing' ? 'red' : 'amber'));
+  // `limited` runs are excluded from the pass rate rather than counted against
+  // it: a run that could not be completed is absent evidence, not a failure, and
+  // scoring it either way would state something the run never established. FR-97.
+  const scored = levels.filter((l) => l !== 'limited');
+  const passPct = scored.length
+    ? Math.round((scored.filter((l) => l === 'healthy' || l === 'detected').length / scored.length) * 100)
+    : null;
+  const trendTones: TrendTone[] = levels.map((l) =>
+    l === 'healthy' ? 'emerald' : l === 'detected' || l === 'limited' ? 'sky' : l === 'failing' ? 'red' : 'amber',
+  );
 
   /**
    * Load the run history. Returns whether a Re-run is still in flight, which the

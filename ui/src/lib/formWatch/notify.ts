@@ -6,10 +6,15 @@
  * us a clean before/after comparison. Computes changes + suggestions, then hands
  * the result to the alert dispatcher.
  *
- * BEHAVIOUR PRESERVED: this still fires on EVERY run, success included, so the
- * "submitted OK" ping you asked for keeps arriving. What changed is only HOW it
- * is delivered — through the shared dispatcher, so it is deduped, rate-limited
- * and logged like every other alert instead of POSTing to Slack on its own.
+ * A run is only ANNOUNCED when it carries news: the first observation, a change
+ * of verdict, a change in the form itself, or a spaced reminder that a broken
+ * form is still broken. A monitor repeating an unchanged verdict every cycle is
+ * how a channel earns its mute, and a muted channel swallows the alert that
+ * mattered. The standing state lives on the monitor card, where it is there when
+ * someone looks instead of interrupting to say nothing new. FR-97.
+ *
+ * Every run is still STORED. This decides who gets interrupted, never what is
+ * recorded.
  */
 
 import type { FormSchedule, FormRunRecord } from './types';
@@ -18,7 +23,9 @@ import { compareFingerprints, isRegression } from './diff';
 import { buildSuggestions } from './suggestions';
 import { formRunFacts, formRunScope, manualActionFor, runOutcome } from './alertFacts';
 import { runVerdict } from './verdict';
+import { shouldNotify, verdictIdentity } from './alertGate';
 import { dispatchAlert } from '@/lib/alerts/dispatch';
+import { lastAlertAt } from '@/lib/alerts/store';
 import { detailPathFor } from '@/lib/alerts/link';
 import type { AlertSeverity } from '@/lib/alerts/types';
 
@@ -54,12 +61,14 @@ export async function onRunComplete(
       ? 'critical'
       : verdict.level === 'attention'
         ? 'warning'
-        : verdict.level === 'detected'
+        : verdict.level === 'detected' || verdict.level === 'limited'
           ? 'notice'
           : 'info';
 
   // `detected` (a recognised third-party embed) is informational, like `healthy` —
-  // NOT a "needs attention" ping. FR-60.
+  // NOT a "needs attention" ping. FR-60. `limited` joins it: the check could not
+  // be completed and nothing is known to be wrong with the site, so it is not a
+  // problem to report against the form's owner. FR-97.
   const isProblem = verdict.level === 'failing' || verdict.level === 'attention';
   /**
    * A headline may only claim what the run actually achieved.
@@ -83,9 +92,14 @@ export async function onRunComplete(
   const title =
     verdict.level === 'detected'
       ? `Third-party form detected — ${record.site}`
-      : !isProblem
-        ? okTitle
-        : `Contact form ${verdict.level === 'failing' ? 'failing' : 'needs attention'} — ${record.site}`;
+      : // A limited run says what we could not do, never what the site got wrong.
+        // "Needs attention" on a form with a CAPTCHA reads as an accusation about
+        // a site that is behaving exactly as its owner intended. FR-97.
+        verdict.level === 'limited'
+        ? `Form found — could not be tested — ${record.site}`
+        : !isProblem
+          ? okTitle
+          : `Contact form ${verdict.level === 'failing' ? 'failing' : 'needs attention'} — ${record.site}`;
 
   // The reason code used to be appended here, so a Slack message read
   // "Third-party form detected (THIRD_PARTY_EMBED_FORM)". That is an internal
@@ -94,6 +108,28 @@ export async function onRunComplete(
   const summaryParts = [verdict.label];
   if (regression) summaryParts.push('Worse than the previous check.');
   if (changes.length) summaryParts.push(`${changes.length} change${changes.length === 1 ? '' : 's'} since last check.`);
+
+  /**
+   * Is this worth interrupting someone for?
+   *
+   * `renotifyDue` is only consulted for a failing monitor, so the alert-log
+   * query is skipped entirely for every other outcome — the common case does no
+   * extra work.
+   */
+  const gate = shouldNotify({
+    current: verdictIdentity(verdict.level, record.reasonCode),
+    previous: prev && prevLevel ? verdictIdentity(prevLevel, prev.reasonCode) : null,
+    level: verdict.level,
+    changeCount: changes.length,
+    renotifyDue: verdict.level === 'failing' ? await renotifyDue(record.site) : false,
+  });
+
+  if (!gate.send) {
+    // Logged, not silent: when someone asks why no alert arrived, the answer is
+    // in the server log rather than inferred from an absence.
+    console.info(`[formWatch/notify] ${record.site}: no alert — ${gate.reason} (${verdict.label})`);
+    return;
+  }
 
   await dispatchAlert(
     {
@@ -117,7 +153,9 @@ export async function onRunComplete(
       // reason we could not do it for them.
       action: manualActionFor(record, raw) ?? undefined,
       suggestions,
-      // One occurrence == one run of this schedule.
+      // One occurrence == one run of this schedule. The gate above decides
+      // WHETHER a run is announced; this only stops the same run being sent
+      // twice, which is a different job and still needed.
       dedupeKey: `form:${schedule.id}:${record.ranAt}`,
       occurredAt: record.ranAt,
     },
@@ -126,4 +164,20 @@ export async function onRunComplete(
       detailPath: await detailPathFor('form', record.url),
     },
   );
+}
+
+/**
+ * True once the re-notify window has passed since the last problem alert for
+ * this site — the same spacing Site Watch uses for an ongoing outage, read from
+ * the same alert log, so the two monitors speak at one cadence rather than two.
+ *
+ * Returns true when nothing has ever been sent, so a first failure is never
+ * held back by a window that has not started.
+ */
+async function renotifyDue(site: string): Promise<boolean> {
+  const hours = Number(process.env.ALERT_RENOTIFY_HOURS);
+  const windowMs = (Number.isFinite(hours) && hours > 0 ? hours : 6) * 3_600_000;
+  const last = await lastAlertAt(site, ['form_problem']);
+  if (!last) return true;
+  return Date.now() - new Date(last).getTime() >= windowMs;
 }

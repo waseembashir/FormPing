@@ -117,6 +117,8 @@ export function testedStatus(result: SiteResult): FormStatus {
   }
   if (level === 'failing') return { label: 'Failed', tone: 'danger' };
   if (level === 'attention') return { label: 'Attention', tone: 'warn' };
+  // "Not tested" states the fact without implying fault. FR-97.
+  if (level === 'limited') return { label: 'Not tested', tone: 'info' };
   if (level === 'detected') return { label: 'Detected', tone: 'info' };
   if (result.mode === 'safe') return { label: 'Filled ✓', tone: 'ok' };
   return { label: 'Detected', tone: 'info' };

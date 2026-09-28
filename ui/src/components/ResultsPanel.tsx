@@ -256,7 +256,9 @@ export function ResultsPanel({ results, progress, logs, running, landingPage, mo
   // counts as OK — never a misleading "WARN". Matches the per-result badge. FR-63.
   const levels = results.map((r) => runVerdict(r.reasonCode, r.formFound, r.finalStatus, r.formConfidenceLevel).level);
   const ok = levels.filter((l) => l === 'healthy').length;
-  const detected = levels.filter((l) => l === 'detected').length;
+  // A run we could not complete is counted with the detected ones: present,
+  // not tested, nothing claimed against it. FR-97.
+  const detected = levels.filter((l) => l === 'detected' || l === 'limited').length;
   const attention = levels.filter((l) => l === 'attention').length;
   const failed = levels.filter((l) => l === 'failing').length;
 

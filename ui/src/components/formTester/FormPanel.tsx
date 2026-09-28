@@ -418,8 +418,18 @@ function SubmitOutcome({ result, onRetry }: { result?: SiteResult | null; onRetr
     );
   }
 
-  const tone: Tone = level === 'healthy' ? 'ok' : level === 'failing' ? 'danger' : level === 'detected' ? 'info' : 'warn';
-  const short = level === 'healthy' ? 'Submitted ✓' : level === 'failing' ? 'Failed' : level === 'detected' ? 'Detected' : 'Attention';
+  const tone: Tone =
+    level === 'healthy' ? 'ok' : level === 'failing' ? 'danger' : level === 'detected' || level === 'limited' ? 'info' : 'warn';
+  const short =
+    level === 'healthy'
+      ? 'Submitted ✓'
+      : level === 'failing'
+        ? 'Failed'
+        : level === 'limited'
+          ? 'Not tested'
+          : level === 'detected'
+            ? 'Detected'
+            : 'Attention';
   return (
     <div className="flex flex-wrap items-center gap-2 text-[13px]">
       <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ring-1 ${STATUS_PILL[tone]}`}>

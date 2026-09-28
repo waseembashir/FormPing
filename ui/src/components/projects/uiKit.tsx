@@ -54,6 +54,7 @@ export const TONE_EDGE: Record<Tone, string> = {
 export const FORM_TONE: Record<FormHealthLevel, Tone> = {
   healthy: 'emerald',
   detected: 'sky',
+  limited: 'sky',
   attention: 'amber',
   failing: 'red',
   pending: 'slate',
