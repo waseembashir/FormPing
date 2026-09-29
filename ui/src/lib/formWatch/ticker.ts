@@ -16,7 +16,7 @@
 
 import type { FormSchedule, FormRunRecord, FormRunStatus, RunTrigger } from './types';
 import { listSchedules, upsertSchedule, getSchedule } from './scheduleStore';
-import { appendRun } from './historyStore';
+import { appendRun, sweepExpiredManualRuns } from './historyStore';
 import { recordResult } from './resultStore';
 import { hostFormShots } from '@/lib/formShots';
 import { runFormTest, type RawSiteResult } from './runner';
@@ -259,6 +259,13 @@ async function tick(): Promise<void> {
   if (tickerState.ticking) return; // never overlap passes (shared across bundles)
   tickerState.ticking = true;
   try {
+    // Retention runs BEFORE the early return below. A re-run row on a paused or
+    // stopped monitor is exactly the case that never got deleted, and those
+    // schedules are never due — so a sweep placed after the return would miss
+    // precisely the rows it exists to remove. FR-93.
+    const swept = await sweepExpiredManualRuns();
+    if (swept > 0) console.log(`[formWatch/ticker] swept ${swept} expired re-run row(s)`);
+
     const schedules = await listSchedules();
     const now = Date.now();
     const due = schedules.filter((s) => !s.paused && new Date(s.nextRunAt).getTime() <= now);

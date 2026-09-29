@@ -9,7 +9,7 @@
 
 import type { SiteSchedule, SiteCheckRecord, DomainResult, RunTrigger } from './types';
 import { listSchedules, upsertSchedule, getSchedule } from './scheduleStore';
-import { appendCheck } from './historyStore';
+import { appendCheck, sweepExpiredManualChecks } from './historyStore';
 import { recordResult } from './resultStore';
 import { recordDaily } from './dailyStore';
 import { checkUptime, checkSsl, checkDomain } from './checks';
@@ -224,6 +224,11 @@ async function tick(): Promise<void> {
   if (tickerState.ticking) return;
   tickerState.ticking = true;
   try {
+    // Before the early return: a paused monitor is never due, and its expired
+    // re-run row is the one that would otherwise live forever. FR-93.
+    const swept = await sweepExpiredManualChecks();
+    if (swept > 0) console.log(`[siteWatch/ticker] swept ${swept} expired re-run row(s)`);
+
     const schedules = await listSchedules();
     const now = Date.now();
     const due = schedules.filter((s) => !s.paused && new Date(s.nextCheckAt).getTime() <= now);
