@@ -19,7 +19,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { outageWindow, outageDedupeKey } from '@/lib/alerts/monitoringOutage';
+// Imported from the policy module, not the dispatching one: pulling in the
+// dispatcher would drag the database client into this test's module graph, and
+// that package is installed only for the web app — so the engine's CI job,
+// which installs the root package alone, could not resolve it.
+import { outageWindow, outageDedupeKey } from '@/lib/alerts/outageWindow';
 import { runVerdict } from '@/lib/formWatch/verdict';
 
 const HOUR = 3_600_000;

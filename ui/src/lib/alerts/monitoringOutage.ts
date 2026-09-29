@@ -18,37 +18,13 @@
  *     cause is one thing even when forty schedules trip over it;
  *   - raised AGAIN each window while it persists, so it cannot be forgotten.
  *
- * "Once per window" needs no new machinery. The dispatcher already refuses a
- * duplicate `dedupeKey` — that unique constraint is what makes the pipeline
- * idempotent — so a key that changes only when the window rolls over gives
- * exactly this behaviour: the first monitor to hit the outage alerts, the rest
- * are deduped in silence, and the next window speaks again. FR-103.
+ * "Once per window" is decided in `outageWindow.ts`, which holds that policy
+ * with no I/O so it can be tested without standing in for a database. FR-103.
  */
 
 import { dispatchAlert } from './dispatch';
+import { outageDedupeKey } from './outageWindow';
 import type { AlertSeverity } from './types';
-
-/** The re-notify spacing used everywhere else, so one cadence, not two. */
-function windowMs(): number {
-  const h = Number(process.env.ALERT_RENOTIFY_HOURS);
-  return (Number.isFinite(h) && h > 0 ? h : 6) * 3_600_000;
-}
-
-/**
- * Which outage window a moment falls in.
- *
- * Exported for the tests: the whole "one alert per outage" guarantee rests on
- * this number being stable within a window and different across one, and that
- * is worth asserting directly rather than inferring from a dispatch count.
- */
-export function outageWindow(now: number = Date.now()): number {
-  return Math.floor(now / windowMs());
-}
-
-/** The key two monitors in the same window must agree on — and they do. */
-export function outageDedupeKey(now: number = Date.now()): string {
-  return `monitoring-blocked:${outageWindow(now)}`;
-}
 
 /**
  * Announce that submissions are being blocked before they reach the site.
