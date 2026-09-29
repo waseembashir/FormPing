@@ -176,6 +176,39 @@ async function pruneScheduledToCap(scheduleId: string): Promise<void> {
   if (delErr) bestEffortWriteFailed('formWatch/historyStore: prune scheduled', delErr.message);
 }
 
+/**
+ * Delete every expired re-run row, across ALL schedules.
+ *
+ * `pruneExpiredManual` below only ever runs inside a successful `appendRun`,
+ * and only for the schedule doing the writing. So a row is deleted the next
+ * time that particular monitor writes — not on any clock. A monitor that is
+ * paused or stopped writes nothing again, so its re-run row stays in Postgres
+ * indefinitely: invisible to every reader, but not gone.
+ *
+ * That gap matters because a re-run in Live mode submitted a real message to a
+ * client's form, and the row is the record of it. "Lives 24 hours, then
+ * disappears from the database" has to be true on disk, not only on screen.
+ *
+ * Called once per ticker pass, independent of any schedule. The read-side
+ * filter stays as well: the filter keeps the promise true to the user even if
+ * a sweep is skipped, and the sweep keeps it true on disk. FR-93.
+ */
+export async function sweepExpiredManualRuns(): Promise<number> {
+  const db = supabaseAdmin();
+  const cutoff = new Date(Date.now() - MANUAL_TTL_MS).toISOString();
+  const { data, error } = await db
+    .from('form_watch_runs')
+    .delete()
+    .eq('trigger_source', 'manual')
+    .lt('ran_at', cutoff)
+    .select('id');
+  if (error) {
+    bestEffortWriteFailed('formWatch/historyStore: sweep expired manual', error.message);
+    return 0;
+  }
+  return (data as { id: string }[] | null)?.length ?? 0;
+}
+
 /** Manual runs expire on time, not on count. */
 async function pruneExpiredManual(scheduleId: string): Promise<void> {
   const db = supabaseAdmin();
