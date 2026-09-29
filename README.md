@@ -245,7 +245,7 @@ npx playwright install chromium
 npm test          # run the engine test suite
 ```
 
-> The engine and the web app pin their own Playwright versions, and `playwright install` keeps only the browsers its own version uses. Install the browser from **each** package — once at the root, once in `ui/`.
+> The engine and the web app pin the **same** Playwright version deliberately, and both read one shared browser cache. Keeping them in step means a single browser download serves both, and installing from either package leaves the other working. Change one and you must change the other.
 
 **Fixture tests.** `tests/engine/` runs the real `findContactForm` / `fillForm` against saved HTML in `tests/engine/fixtures/`: a real Chromium, no network, no external site contacted. Each fixture is a *shape* of page — "a site whose only visible form is a newsletter, with a login modal hidden behind it" — and its test asserts what the engine must conclude about that shape. They run with `npm test` like any other suite.
 
