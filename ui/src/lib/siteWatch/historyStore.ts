@@ -142,6 +142,32 @@ async function pruneScheduledToCap(scheduleId: string): Promise<void> {
   if (delErr) bestEffortWriteFailed('siteWatch/historyStore: prune scheduled', delErr.message);
 }
 
+/**
+ * Delete every expired re-run row, across ALL schedules.
+ *
+ * The per-schedule prune below only runs inside a successful `appendCheck`, so
+ * a paused or stopped monitor — which never writes again — keeps its re-run row
+ * in Postgres forever. Invisible to readers, but not gone, which is not what
+ * the 24-hour retention promises.
+ *
+ * Called once per ticker pass, independent of any schedule. FR-93.
+ */
+export async function sweepExpiredManualChecks(): Promise<number> {
+  const db = supabaseAdmin();
+  const cutoff = new Date(Date.now() - MANUAL_TTL_MS).toISOString();
+  const { data, error } = await db
+    .from('site_watch_runs')
+    .delete()
+    .eq('trigger_source', 'manual')
+    .lt('checked_at', cutoff)
+    .select('id');
+  if (error) {
+    bestEffortWriteFailed('siteWatch/historyStore: sweep expired manual', error.message);
+    return 0;
+  }
+  return (data as { id: string }[] | null)?.length ?? 0;
+}
+
 /** Manual checks expire on time, not on count. */
 async function pruneExpiredManual(scheduleId: string): Promise<void> {
   const db = supabaseAdmin();
