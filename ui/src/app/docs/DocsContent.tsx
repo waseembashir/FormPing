@@ -208,6 +208,9 @@ export default function DocsContent() {
                   <strong>Landing-page mode.</strong> By default the tester searches your site to find the contact form (and tells you which page it tested if that differs from the URL you entered). Turn on <strong>Landing page</strong> when you want to test the exact URL you gave — a standalone landing page, or when the form is a quiz, assessment, or booking style that a whole-site search might skip. It tests only that page, and is lenient enough to accept those non-standard forms — but it still prefers a form people can actually see, so a pop-up that’s hidden until someone clicks is only used when it’s the one form on the page.
                 </Note>
                 <Note>
+                  <strong>A newsletter box won’t hide your real form.</strong> Lots of sites have a small email sign-up in the footer of every page. If your actual contact form is a <strong>Typeform, HubSpot, Jotform</strong> or similar, we report that — not the sign-up box that happens to share the page. Your real form is what you get told about.
+                </Note>
+                <Note>
                   <strong>We never test your login form.</strong> A sign-in or “create an account” form is a door for your customers, not a way for them to reach you — so it’s never the form we watch, even on a page where it’s the only form we can find. We’ll still tell you it’s there. The same goes for the invisible <strong>decoy boxes</strong> many forms hide to catch spam bots: we leave them alone and don’t count them, so the number of fields we report is the number your visitors actually fill in.
                 </Note>
                 <Note>
