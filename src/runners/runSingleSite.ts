@@ -9,6 +9,7 @@ import { submitForm } from '../forms/submitForm.js';
 import { detectCaptcha, detectAntiBot } from '../forms/detectSuccess.js';
 import { captureFormShot } from '../forms/captureFormShot.js';
 import { nativeFormFacts, embedFormFacts, shouldHoldMultiStepSubmit, buildFormsOnPage, detectTrackingParams, assessFormConfidence } from './formFacts.js';
+import { embedBeatsNativeForm, embedOverUtilityNote } from './embedPreference.js';
 import {
   newPage,
   closePage,
@@ -421,6 +422,34 @@ export async function runSingleSite(
       // as "form found" AND "could not fill". Report it plainly instead: no
       // contact form here, nothing filled, no self-contradiction.
       if (form.kind === 'search' || form.kind === 'newsletter' || form.kind === 'login') {
+        /**
+         * Before calling this page form-less: is there an embed on it?
+         *
+         * The guard below is right that a newsletter is not a contact form, and
+         * wrong to conclude the page has none. A footer sign-up appears on every
+         * page of most sites, so on an embed-only contact page it is the native
+         * form that gets matched — and the hosted contact form beside it was
+         * never consulted. That is how a site whose contact form is plainly
+         * visible was reported as having none. FR-95.
+         */
+        if (embedBeatsNativeForm(form.kind, embeds.length)) {
+          const names = embeds.map((e) => e.provider).join(', ');
+          return {
+            ...baseResult,
+            ...embedFormFacts(embeds),
+            finalUrl: page.url(),
+            captchaDetected: false,
+            finalStatus: 'warn',
+            reasonCode: 'THIRD_PARTY_EMBED_FORM',
+            notes: [
+              ...baseResult.notes,
+              embedOverUtilityNote(form.kind, names),
+              `It is a third-party embed FormPing can't auto-fill — verify it manually; monitoring can't submit through it.`,
+            ],
+            durationMs: Date.now() - start,
+          };
+        }
+
         const what =
           form.kind === 'search' ? 'a search box' : form.kind === 'newsletter' ? 'a newsletter sign-up' : 'a login form';
         const utilityFacts = nativeFormFacts(form, { hiddenMultiStep });
