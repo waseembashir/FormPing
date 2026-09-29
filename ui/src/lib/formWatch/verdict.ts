@@ -46,7 +46,6 @@ const FAILING = new Set([
   // The site's own backend returned 5xx — the form is genuinely broken. FR-73.
   'SERVER_ERROR',
   'SUBMISSION_BLOCKED_BY_ANTISPAM',
-  'PROXY_REJECTED_POST',
   'REQUIRED_FIELDS_UNSUPPORTED',
   'ERROR',
 ]);
@@ -74,6 +73,12 @@ const LIMITED = new Set([
   // A multi-step form was found but its steps could not be walked this run. The
   // form exists and may be perfectly healthy.
   'MULTI_STEP_FORM_DETECTED',
+  // OUR proxy refused to forward the submission — the request never reached the
+  // site, so nothing whatsoever is known about the form. Reporting this as the
+  // form failing accuses a client of a fault that is ours. The outage is still
+  // announced, loudly, but as an infrastructure alert aimed at us rather than a
+  // verdict against their site. FR-103.
+  'PROXY_REJECTED_POST',
 ]);
 // Needs a look: the run DID act on the form, and what came back is unclear or
 // incomplete. This is the narrow meaning of amber — something may be wrong.

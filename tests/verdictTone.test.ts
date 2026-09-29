@@ -25,6 +25,7 @@ describe('our limits are never reported as the site’s fault', () => {
     ['MULTI_STEP_FORM_DETECTED', 'the form exists; we could not walk its steps'],
     ['NON_CONTACT_FORM_FOUND', 'a permanent fact about a site with no native contact form'],
     ['BLOCKED_BY_HOST', 'a firewall refused us; it says nothing about the form'],
+    ['PROXY_REJECTED_POST', 'our own proxy refused to forward it — the request never arrived'],
   ])('%s is limited, not attention — %s', (code) => {
     expect(level(code)).toBe('limited');
   });
