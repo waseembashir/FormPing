@@ -25,6 +25,7 @@ import { formRunFacts, formRunScope, manualActionFor, runOutcome } from './alert
 import { runVerdict } from './verdict';
 import { shouldNotify, verdictIdentity } from './alertGate';
 import { dispatchAlert } from '@/lib/alerts/dispatch';
+import { reportSubmissionsBlocked } from '@/lib/alerts/monitoringOutage';
 import { lastAlertAt } from '@/lib/alerts/store';
 import { detailPathFor } from '@/lib/alerts/link';
 import type { AlertSeverity } from '@/lib/alerts/types';
@@ -108,6 +109,25 @@ export async function onRunComplete(
   const summaryParts = [verdict.label];
   if (regression) summaryParts.push('Worse than the previous check.');
   if (changes.length) summaryParts.push(`${changes.length} change${changes.length === 1 ? '' : 's'} since last check.`);
+
+  /**
+   * Our proxy refused to forward the submission, so it never reached the site.
+   * Nothing is known about this form, and announcing it against the client's
+   * name would blame them for our outage. It is reported instead as what it is
+   * — our monitoring being down — once per window, however many monitors trip
+   * over it. FR-103.
+   *
+   * This replaces the per-monitor alert rather than joining it: two messages
+   * about one run, one of them wrong, is worse than the one that is right.
+   */
+  if (record.reasonCode === 'PROXY_REJECTED_POST') {
+    await reportSubmissionsBlocked({
+      site: record.site,
+      url: record.url,
+      occurredAt: record.ranAt,
+    });
+    return;
+  }
 
   /**
    * Is this worth interrupting someone for?
