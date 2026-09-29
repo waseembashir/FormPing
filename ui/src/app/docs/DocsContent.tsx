@@ -243,7 +243,7 @@ export default function DocsContent() {
                 <P>Each monitor opens with a plain reading of where it stands — <strong>Up · responding normally</strong>, <strong>Down · we can’t reach it right now</strong> — followed by its certificate and domain status, an uptime % and a recent-checks sparkline. Above the list, a summary counts how many sites are up, down, challenged or have a certificate expiring soon, so you can see whether anything needs you without reading every card.</P>
                 <UL>
                   <LI>Adding a URL takes you straight to it and shows the first check as soon as it finishes.</LI>
-                  <LI><strong className="text-ink">Re-run</strong> checks the site right now and shows you the real result — live response time, status code and certificate — without disturbing your schedule, its next check, its uptime figure, or triggering any alert. It’s added to the history marked <strong>Re-run</strong>.</LI>
+                  <LI><strong className="text-ink">Re-run</strong> checks the site right now and shows you the real result — live response time, status code and certificate — without disturbing your schedule, its next check, its uptime figure, or triggering any alert. It’s added to the history marked <strong>Re-run</strong>, and clears itself after <strong>24 hours</strong> — a one-off check is a quick answer, not part of the record your schedule is building.</LI>
                   <LI><strong className="text-ink">Pause / Resume</strong> any time, keeping the history.</LI>
                 </UL>
                 <Note>A few heavily-protected sites return a challenge page to automated checks — FormPing classifies that as <em>reachable (challenged)</em>, not <em>down</em>, so it never cries wolf.</Note>
