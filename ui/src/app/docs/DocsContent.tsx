@@ -208,6 +208,9 @@ export default function DocsContent() {
                   <strong>Landing-page mode.</strong> By default the tester searches your site to find the contact form (and tells you which page it tested if that differs from the URL you entered). Turn on <strong>Landing page</strong> when you want to test the exact URL you gave — a standalone landing page, or when the form is a quiz, assessment, or booking style that a whole-site search might skip. It tests only that page, and is lenient enough to accept those non-standard forms — but it still prefers a form people can actually see, so a pop-up that’s hidden until someone clicks is only used when it’s the one form on the page.
                 </Note>
                 <Note>
+                  <strong>Forms with several steps are called out as such.</strong> If your form asks a few questions across <strong>more than one screen</strong>, we say so — even on a Detect run, which looks at your page without filling anything in. Because that run doesn’t click through, the fields it lists are the <strong>first step’s</strong> only, and the result tells you that rather than leaving you to assume. Run it in <strong>Safe</strong> or <strong>Live</strong> and we step through the form properly, then tell you how many steps there were and how far we got.
+                </Note>
+                <Note>
                   <strong>A newsletter box won’t hide your real form.</strong> Lots of sites have a small email sign-up in the footer of every page. If your actual contact form is a <strong>Typeform, HubSpot, Jotform</strong> or similar, we report that — not the sign-up box that happens to share the page. Your real form is what you get told about.
                 </Note>
                 <Note>
