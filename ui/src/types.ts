@@ -73,6 +73,8 @@ export interface SiteForm {
   kind: FormKind | 'third-party';
   about: string;
   formType: 'native' | 'third-party';
+  /** Whether this form is a wizard. Absent when nothing measured it. FR-94. */
+  isMultiStep?: boolean;
   provider?: string;
   /**
    * How a third-party form reaches the page. `container` means the provider
@@ -161,7 +163,11 @@ export interface SiteResult {
   embedKind?: 'iframe' | 'script' | 'container' | null;
   fieldCount?: number;
   fields?: DetectedFormField[];
-  isMultiStep?: boolean;
+isMultiStep?: boolean;
+  /** Steps the walk traversed; absent when nothing was filled. FR-94. */
+  stepsWalked?: number;
+  /** Whether the walk reached the final step. FR-94. */
+  reachedFinalStep?: boolean;
   landingPageMode?: boolean;
   /** How sure we are this is really the contact form — `low` when we matched
    *  something weak, so the card asks instead of claiming. FR-73. */
