@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { readTab, writeTab, TAB_KEYS } from '@/lib/tabCache';
 import { SiteCard } from '@/components/siteWatch/SiteCard';
 import { SiteWatchCommandBar, type Unit } from '@/components/siteWatch/SiteWatchCommandBar';
 import { AddToProjectModal } from '@/components/projects/AddToProjectModal';
@@ -36,14 +37,31 @@ export default function SiteWatchPage() {
   const pollHold = useRef(0);
 
   const load = useCallback(async () => {
+    // Show what this tab held last time straight away, then refresh behind it.
+    // A revisit used to blank the list for a full round trip. FR-105.
+    const remembered = readTab<{ schedules: SiteSchedule[]; saveFailures: Record<string, { at: string }> }>(TAB_KEYS.siteWatch);
+    if (remembered) {
+      setSchedules(remembered.schedules);
+      setSaveFailures(remembered.saveFailures);
+      setLoading(false);
+    }
     try {
       const res = await fetch('/api/site-watch').then((r) => r.json());
-      setSchedules(Array.isArray(res?.schedules) ? res.schedules : []);
+      const next = {
+        schedules: Array.isArray(res?.schedules) ? res.schedules : [],
       // Monitors whose last check could not be stored. FR-87.
-      setSaveFailures(res?.saveFailures && typeof res.saveFailures === 'object' ? res.saveFailures : {});
+        saveFailures: res?.saveFailures && typeof res.saveFailures === 'object' ? res.saveFailures : {},
+      };
+      setSchedules(next.schedules);
+      setSaveFailures(next.saveFailures);
+      writeTab(TAB_KEYS.siteWatch, next);
     } catch {
-      setSchedules([]);
-      setSaveFailures({});
+      // A failed refresh must not replace a good list with an empty one — that
+      // turns a blip into "you have no monitors".
+      if (!remembered) {
+        setSchedules([]);
+        setSaveFailures({});
+      }
     } finally {
       setLoading(false);
     }

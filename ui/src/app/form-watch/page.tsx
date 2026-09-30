@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { readTab, writeTab, TAB_KEYS } from '@/lib/tabCache';
 import { ScheduleCard } from '@/components/formWatch/ScheduleCard';
 import { SchedulerCommandBar } from '@/components/formWatch/SchedulerCommandBar';
 import { AddToProjectModal } from '@/components/projects/AddToProjectModal';
@@ -41,15 +42,32 @@ export default function FormWatchPage() {
   const pollHold = useRef(0);
 
   const load = useCallback(async () => {
+    // Show what this tab held last time straight away, then refresh behind it.
+    // A revisit used to blank the list for a full round trip. FR-105.
+    const remembered = readTab<{ schedules: FormSchedule[]; saveFailures: Record<string, { at: string }> }>(TAB_KEYS.formWatch);
+    if (remembered) {
+      setSchedules(remembered.schedules);
+      setSaveFailures(remembered.saveFailures);
+      setLoading(false);
+    }
     try {
       const res = await fetch('/api/form-watch').then((r) => r.json());
-      setSchedules(Array.isArray(res?.schedules) ? res.schedules : []);
+      const next = {
+        schedules: Array.isArray(res?.schedules) ? res.schedules : [],
       // Monitors whose last run could not be stored, so each card can say so
       // rather than showing an older summary as if it were current. FR-87.
-      setSaveFailures(res?.saveFailures && typeof res.saveFailures === 'object' ? res.saveFailures : {});
+        saveFailures: res?.saveFailures && typeof res.saveFailures === 'object' ? res.saveFailures : {},
+      };
+      setSchedules(next.schedules);
+      setSaveFailures(next.saveFailures);
+      writeTab(TAB_KEYS.formWatch, next);
     } catch {
-      setSchedules([]);
-      setSaveFailures({});
+      // A failed refresh must not replace a good list with an empty one — that
+      // turns a blip into "you have no monitors".
+      if (!remembered) {
+        setSchedules([]);
+        setSaveFailures({});
+      }
     } finally {
       setLoading(false);
     }

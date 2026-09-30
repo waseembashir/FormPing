@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { readTab, writeTab, TAB_KEYS } from '@/lib/tabCache';
 import { ROLE_LABEL, type Role } from '@/lib/auth/roles';
 import { refreshMe } from '@/lib/auth/useMe';
 import { BugInbox } from '@/components/team/BugInbox';
@@ -35,16 +36,27 @@ export default function TeamPage() {
   const [tab, setTab] = useState<'members' | 'bugs'>('members');
 
   const load = useCallback(async () => {
+    // Render the roster this tab last held, then refresh behind it. FR-105.
+    const remembered = readTab<{ users: TeamUser[]; me: Me | null }>(TAB_KEYS.team);
+    if (remembered) {
+      setUsers(remembered.users);
+      setMe(remembered.me);
+      setState('ready');
+    }
     try {
       const res = await fetch('/api/users', { cache: 'no-store' });
+      // A refused request is never softened by the cache: losing access must
+      // show as losing access, not as the roster someone saw a minute ago.
       if (res.status === 401 || res.status === 403) return setState('forbidden');
-      if (!res.ok) return setState('error');
+      if (!res.ok) return setState(remembered ? 'ready' : 'error');
       const data = await res.json();
-      setUsers(Array.isArray(data?.users) ? data.users : []);
-      setMe(data?.me ?? null);
+      const next = { users: Array.isArray(data?.users) ? data.users : [], me: data?.me ?? null };
+      setUsers(next.users);
+      setMe(next.me);
+      writeTab(TAB_KEYS.team, next);
       setState('ready');
     } catch {
-      setState('error');
+      if (!remembered) setState('error');
     }
   }, []);
 
