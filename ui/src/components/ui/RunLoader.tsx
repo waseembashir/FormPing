@@ -49,8 +49,8 @@ function CatTrack({ pct }: { pct: number | null }) {
           style={{ width: `${(clamped * 100).toFixed(1)}%` }}
         />
       )}
-      {/* eslint-disable-next-line @next/next/no-img-element -- animated GIF: next/image would freeze it */}
       {/* GIF faces left by default; scaleX(-1) mirrors it to run rightward. */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- animated GIF: next/image would freeze it */}
       <img
         src="/running-cat.gif"
         alt=""
