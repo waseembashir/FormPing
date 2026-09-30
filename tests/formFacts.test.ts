@@ -43,7 +43,10 @@ describe('nativeFormFacts (FR-64)', () => {
     expect(facts.formType).toBe('native');
     expect(facts.fieldCount).toBe(2);
     expect(facts.fields.map((f) => f.label)).toEqual(['Name', 'Email']);
-    expect(facts.isMultiStep).toBe(false);
+    // Nothing here measured step-ness, so nothing is claimed about it. This
+    // asserted `false` until FR-94, and `false` renders as "Single-step" —
+    // a statement about a form that was never examined for steps.
+    expect(facts.isMultiStep).toBeUndefined();
   });
 
   it('is multi-step when the form was hidden (multi-step widget)', () => {

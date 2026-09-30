@@ -88,7 +88,9 @@ For each form it reports the source page, native vs third-party embed (and which
 
 **Every lead form gets filled** with configurable test data — not just the main contact form. Search, newsletter and login inputs are recognised as utility forms and left untouched.
 
-**Multi-step wizards are walked**, step by step (fill → Next → fill) until the submit control is reached, even when the steps live outside the `<form>` element. The result reports the steps it traversed and the fields it actually filled as two separate figures, so what was reached and what was completed can never be read as the same claim.
+**A wizard is recognised before anything is filled.** A Next or Continue control is what makes a form multi-step, and that is read straight from the page — so a Detect run, which never fills, still reports the form's shape rather than guessing at it. Where nothing established the shape, nothing is claimed either way.
+
+**Multi-step wizards are walked**, step by step (fill → Next → fill) until the submit control is reached, even when the steps live outside the `<form>` element. The run reports how many steps it traversed and whether it reached the last one, so a card can say "3 steps" where the walk completed and "reached step 2" where it stopped — never a total it did not observe. The result reports the steps it traversed and the fields it actually filled as two separate figures, so what was reached and what was completed can never be read as the same claim.
 
 ### 3. Submitting — Live mode only
 

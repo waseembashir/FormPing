@@ -508,7 +508,10 @@ function RunRow({ run }: { run: FormRunRecord }) {
         if (!fp.formFound && !embed) return null;
         // Step-ness is only shown when actually known (new-format records);
         // legacy runs without the facts omit it rather than guess.
-        const stepKnown = fp.formType === 'native' || fp.isMultiStep === true;
+        // Knowing the form is native is not knowing whether it has steps.
+        // Deriving it that way rendered "Single-step" for a wizard nobody had
+        // measured — the exact claim FR-94 removes. Only a real boolean counts. FR-94.
+        const stepKnown = typeof fp.isMultiStep === 'boolean';
         return (
           <div className="mt-2 space-y-1.5 text-[11px] text-ink-muted">
             <div>

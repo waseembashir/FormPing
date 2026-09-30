@@ -32,6 +32,8 @@ export interface PreparedForm {
   rail: 'ok' | 'accent' | 'info';
   /** Known only for the tested form (the inventory doesn't walk each form's steps). */
   isMultiStep?: boolean;
+  stepsWalked?: number;
+  reachedFinalStep?: boolean;
   /** The tested form's full verdict sentence (e.g. "Submitted — no confirmation seen"). */
   detail?: string;
   /** Set on the tested form when the detector settled for a weak match: the
@@ -183,6 +185,8 @@ export function singleFormPrepared(result: SiteResult): PreparedForm | null {
     status,
     rail: status.tone === 'ok' ? 'ok' : status.tone === 'info' ? 'info' : 'accent',
     isMultiStep: result.isMultiStep,
+    stepsWalked: result.stepsWalked,
+    reachedFinalStep: result.reachedFinalStep,
     detail: runVerdict(result.reasonCode, result.formFound, result.finalStatus, result.formConfidenceLevel).label,
     ...(result.formConfidenceLevel === 'low' ? { lowConfidence: result.lowConfidenceReason ?? '' } : {}),
   };

@@ -72,16 +72,34 @@ export interface NativeFormFacts {
   fieldCount: number;
   /** Every meaningful field, global ones included so the UI can show + tag them. */
   fields: DetectedFormField[];
-  isMultiStep: boolean;
+  /**
+   * Whether the form is a wizard — `undefined` when nothing measured it.
+   *
+   * Deliberately three-valued. It was a plain boolean derived from
+   * `stepsTraversed`, which only exists after a fill, so Detect-only produced
+   * `false` rather than "unknown" and a genuine wizard was labelled
+   * "Single-step". A surface that shows this must render nothing when it is
+   * undefined rather than picking a default. FR-94.
+   */
+  isMultiStep?: boolean;
 }
 
 /** Facts for a hand-coded DOM `<form>` we detected. */
 export function nativeFormFacts(
   form: Pick<FormCandidate, 'fields'> & { kind?: string },
-  opts: { hiddenMultiStep: boolean; stepsTraversed?: number },
+  opts: {
+    hiddenMultiStep: boolean;
+    stepsTraversed?: number;
+    /** From `hasStepControl`, before any filling. Absent when not probed. */
+    stepControlFound?: boolean;
+  },
 ): NativeFormFacts {
   const fields = meaningfulFields(form.fields);
-  const isMultiStep = opts.hiddenMultiStep || (opts.stepsTraversed ?? 0) > 1;
+  // Any one of these is proof of a wizard; the absence of all three is only
+  // proof when we actually looked, which is what stepControlFound records.
+  const positive = opts.hiddenMultiStep || (opts.stepsTraversed ?? 0) > 1 || opts.stepControlFound === true;
+  const measured = opts.hiddenMultiStep || opts.stepsTraversed !== undefined || opts.stepControlFound !== undefined;
+  const isMultiStep = positive ? true : measured ? false : undefined;
   // Count what belongs to the form; list everything we saw. FR-73.
   return { formType: 'native', fieldCount: ownFields(fields, form.kind).length, fields, isMultiStep };
 }

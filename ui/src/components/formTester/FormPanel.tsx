@@ -4,6 +4,7 @@ import type { DetectedFormField, SiteResult, SubmitMode } from '@/types';
 import { runVerdict } from '@/lib/formWatch/verdict';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { aboutIsTitle, displayName, DOT, KindIcon, type PreparedForm, type Tone } from './formMeta';
+import { stepSummary } from '@/lib/stepSummary';
 import { EmbedUnreadableNote, formHref, FormShot, LowConfidenceNote, PageProtectionNote } from './FormEvidence';
 
 /**
@@ -75,7 +76,10 @@ export function FormPanel({
   /** Runs a real live submission for this form's URL; resolves the outcome. */
   onSubmitLiveTest?: (url: string) => Promise<SiteResult | null>;
 }) {
-  const { form, tested, status, rail, isMultiStep, detail, lowConfidence } = prepared;
+  const { form, tested, status, rail, isMultiStep, stepsWalked, reachedFinalStep, detail, lowConfidence } = prepared;
+  // One place decides what to say about steps, so the chip and the sentence
+  // below it can never tell different stories. FR-94.
+  const steps = stepSummary({ isMultiStep, stepsWalked, reachedFinalStep });
   const lead = rail !== 'info';
 
   // Per-form live submit (FR-76): confirm → submit → show the real outcome here.
@@ -225,7 +229,7 @@ export function FormPanel({
         {/* Type · fields · structure · security chips */}
         <div className="flex flex-wrap items-center gap-2">
           <Chip>{form.formType === 'third-party' ? `Third-party${form.provider ? ` · ${form.provider}` : ''}` : 'Native form'}</Chip>
-          {tested && typeof isMultiStep === 'boolean' && <Chip>{isMultiStep ? 'Multi-step' : 'Single-step'}</Chip>}
+          {steps.chip && <Chip>{steps.chip}</Chip>}
           {/* No number when we could not read the fields. "0 fields" appeared
               under a screenshot showing six, because an unreadable form was
               recorded as an empty one. FR-84. */}
@@ -243,6 +247,13 @@ export function FormPanel({
             </Chip>
           )}
         </div>
+
+        {/* Says what the step chip cannot: whether the fields listed above cover
+            the whole wizard or only its first step. Without this the count reads
+            as the form's total, which for an unwalked wizard it is not. FR-94. */}
+        {steps.note && (
+          <p className="text-xs leading-relaxed text-ink-muted">{steps.note}</p>
+        )}
 
         {/* Protection on the page, but not on this form — said as its own fact. FR-73. */}
         {hostedInOwnFrame && <EmbedUnreadableNote provider={form.provider} />}

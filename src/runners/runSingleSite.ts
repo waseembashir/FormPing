@@ -4,7 +4,7 @@ import { normalizeUrl } from '../utils/url.js';
 import { findContactPage } from '../discovery/findContactPage.js';
 import { findContactForm } from '../forms/findContactForm.js';
 import { inventorySiteForms } from '../forms/siteFormInventory.js';
-import { fillForm } from '../forms/fillForm.js';
+import { fillForm, hasStepControl } from '../forms/fillForm.js';
 import { submitForm } from '../forms/submitForm.js';
 import { detectCaptcha, detectAntiBot } from '../forms/detectSuccess.js';
 import { captureFormShot } from '../forms/captureFormShot.js';
@@ -487,7 +487,12 @@ export async function runSingleSite(
       // Attach the human-facing form facts (type / field count + names /
       // multi-step) so every downstream card — Tester and Scheduler, all modes —
       // can describe what was found. Refined after fill (stepsTraversed). FR-64.
-      const facts = nativeFormFacts(form, { hiddenMultiStep });
+      // Ask whether this is a wizard BEFORE anything is filled. Detect-only
+      // never fills, so without this the flag came out false rather than
+      // unknown and a genuine wizard was reported as "Single-step" — on the
+      // app's default mode, in the confident direction. FR-94.
+      const stepControlFound = await hasStepControl(page, form.index);
+      const facts = nativeFormFacts(form, { hiddenMultiStep, stepControlFound });
       baseResult.formType = facts.formType;
       baseResult.fieldCount = facts.fieldCount;
       baseResult.fields = facts.fields;
@@ -597,6 +602,11 @@ export async function runSingleSite(
       } = await fillForm(page, form, config);
       baseResult.errors.push(...fillErrors);
       if (wizardContainerUsed) baseResult.isMultiStep = true;
+      // Carry the walk out of the engine so a card can say how far it got.
+      // These existed only as note strings before, which meant every surface
+      // re-derived the story or went without it. FR-94.
+      baseResult.stepsWalked = stepsTraversed;
+      baseResult.reachedFinalStep = reachedSubmit;
       // For a walked wizard, the accurate field count is what the walk saw across
       // ALL steps (radio groups collapsed) — form-scoped detection only counted
       // the fields inside the <form>, missing earlier steps' fields. FR-63.

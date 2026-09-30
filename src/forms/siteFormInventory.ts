@@ -2,6 +2,7 @@ import type { Browser, Page } from 'playwright';
 import type { AppConfig, DetectedFormField, FormCandidate, FormKind, FormOutcome, SiteForm, TrackingParams } from '../types.js';
 import { extractForms, formAbout, type FormInfo } from './findContactForm.js';
 import { detectEmbeds } from './detectEmbeds.js';
+import { hasStepControl } from './fillForm.js';
 import { inspectEmbedFrames } from './inspectEmbedFrames.js';
 import { fillForm } from './fillForm.js';
 import { captureFormShot, captureEmbedShot } from './captureFormShot.js';
@@ -151,6 +152,14 @@ interface NativeRec {
   action: string;
   anchorId: string;
   shot: string | null;
+  /**
+   * Whether this form is a wizard — probed before anything is filled.
+   *
+   * The inventory never carried step information, so every form in the
+   * Tester's per-form report was silent about steps, including an obvious
+   * multi-step wizard sitting on its own page. FR-94.
+   */
+  isMultiStep: boolean;
   meaningful: DetectedFormField[];
   hiddenFields: { name: string; value: string }[];
   tracking: TrackingParams;
@@ -346,6 +355,7 @@ export async function inventorySiteForms(
           records.push({
             type: 'native',
             url,
+            isMultiStep: await hasStepControl(page, form.index),
             captcha: form.captcha,
             pageProtection,
             about: aboutOf(form),
@@ -470,7 +480,7 @@ export async function inventorySiteForms(
       continue;
     }
     byKey.set(key, {
-      url: rec.url, kind: rec.kind, about: rec.about, formType: 'native',
+      url: rec.url, kind: rec.kind, about: rec.about, formType: 'native', isMultiStep: rec.isMultiStep,
       // Count the form's own fields; a site-wide search input is listed but
       // never counted, so the number matches the form on screen. FR-73.
       fieldCount: ownFields(rec.meaningful, rec.kind).length, fields: rec.meaningful,

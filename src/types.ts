@@ -219,6 +219,12 @@ export interface SiteForm {
   /** Human "what it's about" — nearest heading, else submit-button text. */
   about: string;
   formType: 'native' | 'third-party';
+  /**
+   * Whether this form is a wizard. Absent when nothing measured it — a
+   * cross-origin embed cannot be probed, and an older stored run predates
+   * the probe. A surface must render nothing rather than pick a default. FR-94.
+   */
+  isMultiStep?: boolean;
   /** Provider when third-party (Typeform, HubSpot, …). */
   provider?: string;
   /**
@@ -346,7 +352,14 @@ export interface SiteResult {
   /** The detected native fields (label + type) — for "Name, Email, Message …". */
   fields?: DetectedFormField[];
   /** True when the native form sits in a hidden multi-step widget (FR-62). */
-  isMultiStep?: boolean;
+isMultiStep?: boolean;
+  /**
+   * Steps the walk actually traversed. Absent when nothing was filled — Detect
+   * mode sees that a wizard exists without learning how many steps it has. FR-94.
+   */
+  stepsWalked?: number;
+  /** Whether the walk reached the submit control, i.e. saw the last step. FR-94. */
+  reachedFinalStep?: boolean;
   /** How sure we are this is really the contact form. `low` means we matched
    *  something weak — accepted only because Landing-page mode asserted the form
    *  is here — so the card must ask "is this your form?" instead of showing a

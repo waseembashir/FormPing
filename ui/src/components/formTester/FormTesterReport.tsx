@@ -65,7 +65,14 @@ function prepare(forms: SiteForm[], result: SiteResult): PreparedForm[] {
     // inventoried, not matched against "is this the contact form?". FR-73.
     const lowConfidence =
       tested && result.formConfidenceLevel === 'low' ? (result.lowConfidenceReason ?? '') : undefined;
-    return { form, tested, status, rail, group, isMultiStep: tested ? result.isMultiStep : undefined, detail, lowConfidence };
+    return { form, tested, status, rail, group, // Every form reports its own step state now, not just the tested one: the
+    // inventory probes each form it finds, so a wizard on another page is no
+    // longer silent about being a wizard. FR-94.
+    isMultiStep: tested ? (result.isMultiStep ?? form.isMultiStep) : form.isMultiStep,
+    // Only the tested form was walked, so only it can report how far. Another
+    // form on another page is known to BE a wizard, nothing more. FR-94.
+    stepsWalked: tested ? result.stepsWalked : undefined,
+    reachedFinalStep: tested ? result.reachedFinalStep : undefined, detail, lowConfidence };
   });
   entries.sort((a, b) => a.group - b.group);
   return entries.map(({ group, ...rest }, i) => ({ ...rest, n: i + 1 }));
