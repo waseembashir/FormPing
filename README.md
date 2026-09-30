@@ -215,6 +215,7 @@ Enforcement is **server-side on every write** — the interface hides what a rol
 - **Web app** — Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS. A single design-token system drives the whole UI in one coherent dark theme.
 - **Engine** — TypeScript, [Playwright](https://playwright.dev) for real-browser form testing, and lightweight HTML parsing for fast change detection.
 - **Data** — PostgreSQL for structured data; captured page snapshots are kept on disk for diffing; form screenshots go to object storage, so only a URL ever reaches the browser.
+- **Linting** — [ESLint](https://eslint.org) with `next/core-web-vitals` on the web app, catching the hook-dependency, accessibility and Next-specific mistakes a typechecker cannot see.
 - **Testing** — [Vitest](https://vitest.dev) for the engine's detection and analysis logic, [Playwright](https://playwright.dev) end-to-end tests for the web app, and a Playwright-driven **fixture suite** that runs the real detection and filling code against saved pages.
 
 ---
@@ -394,7 +395,7 @@ npm run start -- --url https://yoursite.com --monitor watch --watch-interval 360
 ## Contributing
 
 1. Branch off `main`.
-2. Make your change; keep both halves type-clean and green before you commit — `npm run lint` and `npm test` at the root for the engine, and `npx tsc --noEmit` plus `npm run test:e2e` in `ui/` for the web app. These are the same four checks CI runs on every pull request.
+2. Make your change; keep both halves clean and green before you commit — `npm run lint` and `npm test` at the root for the engine, and `npm run lint`, `npx tsc --noEmit` plus `npm run test:e2e` in `ui/` for the web app. These are the same five checks CI runs on every pull request.
 3. Open a pull request describing what changed and why.
 
 **CI runs on every push and PR** (GitHub Actions): the engine's typecheck + unit tests and the web app's typecheck + Playwright e2e must all be green before merge.
