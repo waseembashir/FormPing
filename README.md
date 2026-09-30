@@ -259,6 +259,7 @@ npm test          # run the engine test suite
 cd ui
 npm install
 npm run dev       # http://localhost:3000
+npm run dev:wsl   # http://localhost:3001, when 3000 is taken
 ```
 
 **End-to-end tests** (Playwright) run the web app in a browser. They're hermetic — auth, database, and Slack are disabled for the run, so they need no secrets and touch no real services:
