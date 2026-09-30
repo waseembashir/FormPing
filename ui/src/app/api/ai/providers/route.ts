@@ -49,7 +49,7 @@ async function listProvidersViaCli(): Promise<ProviderInfo[]> {
       }
       try {
         resolve(JSON.parse(out.trim()) as ProviderInfo[]);
-      } catch (e) {
+      } catch {
         reject(new Error(`provider listing output not JSON: ${out.slice(0, 200)}`));
       }
     });

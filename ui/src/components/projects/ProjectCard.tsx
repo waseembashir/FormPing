@@ -7,7 +7,6 @@ import {
   overallStatus,
   Monogram,
   StatusPill,
-  StatusDot,
   FORM_TONE,
   UP_TONE,
   UP_LABEL,

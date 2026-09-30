@@ -5,7 +5,6 @@ import path from 'path';
 // Path resolution + the traversal guard + deletion live in ONE place so this
 // route and the project-delete cascade cannot drift apart (FR-21).
 import {
-  snapshotsRoot,
   hostnameOf,
   safeHostDir,
   dirSize,
