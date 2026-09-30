@@ -279,6 +279,29 @@ const SUBMIT_BUTTON_TEXT = /\b(?:submit|send(?:\s+message)?|send\s+it|contact\s+
  * = button|undefined). Some wizards put Next outside the <form>, so
  * we also look in the form's parent.
  */
+/**
+ * Is this form a wizard, without filling anything to find out?
+ *
+ * `isMultiStep` used to be derived from `stepsTraversed`, which only exists
+ * once `fillForm` has walked the form. Detect-only never fills, so the flag
+ * came out FALSE rather than unknown, and a genuine wizard was labelled
+ * "Single-step" — on the app's default mode, in the confident direction.
+ *
+ * The evidence was there all along: a Next control is what makes a form a
+ * wizard, and `findNextButton` already recognises one (including the
+ * arrow-suffixed "Continue ›" that fautons.com uses). Asking it before any
+ * fill costs one DOM query and answers the question honestly. FR-94.
+ */
+export async function hasStepControl(page: Page, formIndex: number, rootSelector?: string): Promise<boolean> {
+  try {
+    return (await findNextButton(page, formIndex, rootSelector)) !== null;
+  } catch {
+    // A detection probe must never take a run down: an unknown answer is
+    // handled by the caller, which then claims nothing either way.
+    return false;
+  }
+}
+
 async function findNextButton(page: Page, formIndex: number, rootSelector?: string): Promise<Locator | null> {
   // Pull all candidate buttons from the search scope, with metadata
   const candidates = await page.evaluate(

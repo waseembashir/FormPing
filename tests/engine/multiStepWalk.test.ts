@@ -14,7 +14,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { findContactForm } from '../../src/forms/findContactForm.js';
-import { fillForm } from '../../src/forms/fillForm.js';
+import { fillForm, hasStepControl } from '../../src/forms/fillForm.js';
 import { openFixture, startBrowser, stopBrowser, testConfig } from './harness.js';
 
 const FIXTURE = 'multi-step-wizard.html';
@@ -48,6 +48,17 @@ describe('a multi-step wizard is still found and still filled', () => {
     // And it did not stop at the first panel: the arrow-suffixed "Continue ›"
     // is recognised as an advance control, not as a submit.
     expect(result.stepsTraversed).toBeGreaterThan(1);
+    await page.close();
+  });
+
+  it('is recognised as a wizard without filling anything (FR-94)', async () => {
+    // What Detect-only can now answer. Before this, the flag was derived from
+    // a walk that never happened, so this fixture reported "Single-step".
+    const page = await openFixture(FIXTURE);
+    const { form } = await findContactForm(page, testConfig({ landingPage: true }));
+    expect(form).not.toBeNull();
+
+    expect(await hasStepControl(page, form!.index)).toBe(true);
     await page.close();
   });
 
