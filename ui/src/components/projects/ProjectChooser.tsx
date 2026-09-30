@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import type { Project } from '@/lib/projects/types';
 import { monogram } from './uiKit';
-import { cx } from '@/components/ui';
 
 /**
  * The shared "pick an existing project or create a new one, and add this URL to
