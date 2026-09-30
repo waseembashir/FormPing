@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ProjectRollup, ProjectWithRollup } from '@/lib/projects/types';
+import { readTab, writeTab, TAB_KEYS } from '@/lib/tabCache';
 import { ProjectsTable } from '@/components/projects/ProjectsTable';
 import { ProjectForm } from '@/components/projects/ProjectForm';
 import { UnassignedRow } from '@/components/projects/UnassignedRow';
@@ -55,13 +56,30 @@ export default function ProjectsPage() {
   const meName = me.name ?? null;
 
   const load = useCallback(async (q: string) => {
+    // Render what this tab showed last time, immediately, then refresh behind
+    // it. A revisit used to blank the page for a full round trip. FR-105.
+    const remembered = readTab<{ projects: ProjectWithRollup[]; unassigned: Unassigned | null }>(TAB_KEYS.projects(q));
+    if (remembered) {
+      setProjects(remembered.projects);
+      setUnassigned(remembered.unassigned);
+      setLoading(false);
+    }
     try {
       const res = await fetch(`/api/projects?q=${encodeURIComponent(q)}`, { cache: 'no-store' }).then((r) => r.json());
-      setProjects(Array.isArray(res?.projects) ? res.projects : []);
-      setUnassigned(res?.unassigned && Array.isArray(res.unassigned.urls) ? res.unassigned : null);
+      const next = {
+        projects: Array.isArray(res?.projects) ? res.projects : [],
+        unassigned: res?.unassigned && Array.isArray(res.unassigned.urls) ? res.unassigned : null,
+      };
+      setProjects(next.projects);
+      setUnassigned(next.unassigned);
+      writeTab(TAB_KEYS.projects(q), next);
     } catch {
-      setProjects([]);
-      setUnassigned(null);
+      // Keep whatever is on screen when a refresh fails: replacing a good list
+      // with an empty one turns a transient blip into "you have no projects".
+      if (!remembered) {
+        setProjects([]);
+        setUnassigned(null);
+      }
     } finally {
       setLoading(false);
     }

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
-    "dev:wsl": "WATCHPACK_POLLING=true next dev --port 3001",
+    "dev:wsl": "next dev --port 3001",
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "next lint",

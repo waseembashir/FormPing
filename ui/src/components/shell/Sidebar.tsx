@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
+import { forgetTab } from '@/lib/tabCache';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMe, canRole } from '@/lib/auth/useMe';
 import { ROLE_LABEL } from '@/lib/auth/roles';
@@ -199,6 +200,11 @@ function ProfileBlock({ collapsed }: { collapsed: boolean }) {
 
   const logout = async () => {
     setOpen(false);
+    // Drop every remembered tab payload before the session ends. The cache
+    // lives for the life of the page, and the page survives a sign-out — so
+    // without this the next person at this browser could see the previous
+    // one's projects for the frame before the refresh lands. FR-105.
+    forgetTab();
     await fetch('/api/auth/logout', { method: 'POST' });
     startTransition(() => {
       router.push('/login');
