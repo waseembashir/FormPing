@@ -66,6 +66,13 @@ export interface DomainResult {
 /** A recurring availability/SSL monitor for one site. */
 export interface SiteSchedule {
   id: string;
+  /**
+   * Whose work this is — the signed-in user's email at the moment it was
+   * created. Absent on rows that predate per-user isolation, which are legacy
+   * and stay visible to everyone until re-run or claimed. FR-74.
+   */
+  owner?: string;
+
   url: string;
   host: string;
   /** How often to check, in milliseconds. */
@@ -107,6 +114,13 @@ export interface SiteSchedule {
 /** One recorded check (uptime + optional SSL + optional domain). */
 export interface SiteCheckRecord {
   scheduleId: string;
+  /**
+   * Whose work this is — the signed-in user's email at the moment it was
+   * created. Absent on rows that predate per-user isolation, which are legacy
+   * and stay visible to everyone until re-run or claimed. FR-74.
+   */
+  owner?: string;
+
   url: string;
   host: string;
   checkedAt: string;

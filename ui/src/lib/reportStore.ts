@@ -51,13 +51,15 @@ function reportTs(report: { checkedAt?: string }): string {
 export async function saveReport(
   site: string,
   report: { checkedAt?: string } & Record<string, unknown>,
+  /** Whose watch produced this report. Absent for legacy/shared rows. FR-74. */
+  owner?: string,
 ): Promise<void> {
   const key = safeSegment(site);
   const ts = reportTs(report);
   const db = supabaseAdmin();
   const { error } = await db
     .from('change_reports')
-    .upsert({ site: key, report_ts: ts, report }, { onConflict: 'site,report_ts' });
+    .upsert({ site: key, report_ts: ts, report, owner: owner ?? null }, { onConflict: 'site,report_ts' });
   if (error) {
     console.warn(`[reportStore] saveReport: ${error.message}`);
     return;

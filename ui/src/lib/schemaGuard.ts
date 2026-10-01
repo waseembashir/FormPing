@@ -30,29 +30,34 @@ interface TableContract {
  * The writes that can lose a result if a column is missing. Read-only surfaces
  * are left out: a failed read shows an empty page, which is visible, and it
  * cannot destroy anything.
+ *
+ * `owner` joins the contract here, with the change that starts writing it —
+ * not with the migration that added it. A guard asserting a column nothing
+ * writes would fail loudly on any environment where the deploy arrived before
+ * the migration, for a column no code depended on. FR-74.
  */
 const CONTRACTS: TableContract[] = [
   {
     table: 'form_watch_runs',
     columns:
-      'schedule_id, url, site, mode, ran_at, status, reason_code, submission_result, duration_ms, fingerprint, notes, errors, trigger_source',
+      'schedule_id, url, site, mode, ran_at, status, reason_code, submission_result, duration_ms, fingerprint, notes, errors, trigger_source, owner',
   },
   {
     table: 'site_watch_runs',
-    columns: 'schedule_id, url, host, checked_at, uptime, ssl, domain, trigger_source',
+    columns: 'schedule_id, url, host, checked_at, uptime, ssl, domain, trigger_source, owner',
   },
   {
     table: 'form_watch_results',
-    columns: 'url_key, input_url, status, reason_code, form_found, mode, ran_at',
+    columns: 'url_key, input_url, status, reason_code, form_found, mode, ran_at, owner',
   },
   {
     table: 'site_watch_results',
     columns:
-      'url_key, input_url, classification, status_code, response_ms, ssl_days_remaining, ssl_valid, domain_days_remaining, checked_at',
+      'url_key, input_url, classification, status_code, response_ms, ssl_days_remaining, ssl_valid, domain_days_remaining, checked_at, owner',
   },
   {
     table: 'site_watch_daily',
-    columns: 'url_key, day, checks, up, down, blocked, resp_sum, resp_n, ssl_min',
+    columns: 'url_key, day, checks, up, down, blocked, resp_sum, resp_n, ssl_min, owner',
   },
 ];
 

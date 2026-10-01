@@ -73,6 +73,8 @@ function toEvent(r: ChangeEventRow): ChangeEvent {
 
 export interface RecordEventInput {
   site: string;
+  /** Whose watch produced this event. Absent for legacy/shared rows. FR-74. */
+  owner?: string;
   rootUrl?: string | null;
   mode: ChangeMode;
   /** ISO timestamp of the run. Defaults to now. */
@@ -90,6 +92,7 @@ export async function recordChangeEvent(input: RecordEventInput): Promise<void> 
     if (!input.site || input.site === 'unknown') return;
     const { error } = await supabaseAdmin().from('change_events').insert({
       site: input.site,
+      owner: input.owner ?? null,
       root_url: input.rootUrl ?? null,
       mode: input.mode,
       checked_at: input.checkedAt ?? new Date().toISOString(),

@@ -21,6 +21,7 @@ const normKey = urlKey;
 
 interface SiteScheduleRow {
   id: string;
+  owner: string | null;
   url: string;
   host: string;
   interval_ms: number;
@@ -44,7 +45,7 @@ interface SiteScheduleRow {
   last_domain_registrar: string | null;
 }
 const SS_COLS =
-  'id, url, host, interval_ms, created_at, last_checked_at, next_check_at, paused, consecutive_down, alerted_down, last_ssl_threshold_alerted, last_domain_threshold_alerted, last_classification, last_status_code, last_response_ms, last_ssl_days_remaining, last_ssl_valid, last_domain_days_remaining, last_domain_valid, last_domain_expiry, last_domain_checked_at, last_domain_registrar';
+  'id, url, host, interval_ms, created_at, last_checked_at, next_check_at, paused, consecutive_down, alerted_down, last_ssl_threshold_alerted, last_domain_threshold_alerted, last_classification, last_status_code, last_response_ms, last_ssl_days_remaining, last_ssl_valid, last_domain_days_remaining, last_domain_valid, last_domain_expiry, last_domain_checked_at, last_domain_registrar, owner';
 
 function toSchedule(r: SiteScheduleRow): SiteSchedule {
   return {
@@ -61,6 +62,7 @@ function toSchedule(r: SiteScheduleRow): SiteSchedule {
     lastSslThresholdAlerted: r.last_ssl_threshold_alerted,
     lastDomainThresholdAlerted: r.last_domain_threshold_alerted,
     lastClassification: (r.last_classification as UptimeClass) ?? undefined,
+    ...(r.owner ? { owner: r.owner } : {}),
     lastStatusCode: r.last_status_code,
     lastResponseMs: r.last_response_ms,
     lastSslDaysRemaining: r.last_ssl_days_remaining,
@@ -75,6 +77,7 @@ function toSchedule(r: SiteScheduleRow): SiteSchedule {
 function toRow(s: SiteSchedule): SiteScheduleRow {
   return {
     id: s.id,
+    owner: s.owner ?? null,
     url: s.url,
     host: s.host,
     interval_ms: s.intervalMs,

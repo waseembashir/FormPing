@@ -17,6 +17,13 @@ export type RunTrigger = 'scheduled' | 'manual';
 export interface FormSchedule {
   /** Stable unique id. */
   id: string;
+  /**
+   * Whose work this is — the signed-in user's email at the moment it was
+   * created. Absent on rows that predate per-user isolation, which are legacy
+   * and stay visible to everyone until re-run or claimed. FR-74.
+   */
+  owner?: string;
+
   /** The exact URL the user entered. */
   url: string;
   /** Hostname-only label for grouping/history. */
@@ -85,6 +92,13 @@ export interface FormFingerprint {
 /** One recorded run of a scheduled form test. */
 export interface FormRunRecord {
   scheduleId: string;
+  /**
+   * Whose work this is — the signed-in user's email at the moment it was
+   * created. Absent on rows that predate per-user isolation, which are legacy
+   * and stay visible to everyone until re-run or claimed. FR-74.
+   */
+  owner?: string;
+
   url: string;
   site: string;
   /** The mode this run used. */

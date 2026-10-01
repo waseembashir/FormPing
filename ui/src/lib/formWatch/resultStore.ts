@@ -81,6 +81,10 @@ export async function recordResult(record: FormRunRecord, raw?: unknown): Promis
     };
     const baseRow = {
       url_key: result.url,
+      // Derived from a run, so it inherits the owner the run carried — which
+      // the ticker took from the schedule. Ownership follows the monitor a
+      // person created, not the row that happened to produce this one. FR-74.
+      owner: record.owner ?? null,
       input_url: result.inputUrl,
       status: result.status,
       reason_code: result.reasonCode || null,

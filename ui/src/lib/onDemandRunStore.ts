@@ -70,7 +70,11 @@ const STATUSES = ['pass', 'fail', 'warn', 'error'] as const;
  * straight off the CLI's streamed stdout) and defensively extracts the fields.
  * Best-effort: never throws — a bad shape or storage error is logged and dropped.
  */
-export async function recordRun(raw: unknown): Promise<void> {
+export async function recordRun(
+  raw: unknown,
+  /** Who ran the test. Absent for legacy/shared rows. FR-74. */
+  owner?: string,
+): Promise<void> {
   try {
     if (!raw || typeof raw !== 'object') return;
     const r = raw as Record<string, unknown>;
@@ -101,6 +105,7 @@ export async function recordRun(raw: unknown): Promise<void> {
     };
 
     const baseRow = {
+      owner: owner ?? null,
       url_key: run.url,
       input_url: run.inputUrl,
       final_status: run.finalStatus,
