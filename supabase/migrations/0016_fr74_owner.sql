@@ -20,13 +20,22 @@
 -- column with no default does not rewrite the table and does not touch a single
 -- existing row.
 --
--- Run once per schema: `dev` first (verify), then `public`.
+-- Run once per schema: `public` first, then `dev` — the order the migrations
+-- README sets for every file here.
 --
--- The SQL editor runs against `public` unless told otherwise, so applying this
--- to `dev` means prefixing the run with `set search_path to dev;` in the same
--- query. Without it both runs land on `public` and the second is a no-op, which
--- looks like success — and `dev` is the schema local development writes to, so
--- the gap only surfaces when code starts using the column.
+-- That order is not arbitrary. The SQL editor runs against `public` unless told
+-- otherwise, so the run that needs `set search_path to dev;` in front of it is
+-- the SECOND one. Forget it there and the migration simply lands on `public` a
+-- second time, which is idempotent and harmless, leaving `dev` behind until
+-- local development notices. Reverse the order and the same slip puts an
+-- unverified change on production instead.
+--
+-- Either way the no-op looks like success, so confirm both schemas afterwards
+-- rather than trusting that two runs happened:
+--
+--   select table_schema, count(*) from information_schema.columns
+--    where column_name = 'owner' and table_schema in ('dev','public')
+--    group by table_schema;   -- expect 10 for each
 
 -- ── The four tool tabs' own data ────────────────────────────────────────────
 
