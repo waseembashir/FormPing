@@ -32,6 +32,13 @@ export interface ActiveWatchEntry {
   /** Hostname-only key (matches siteKey() in watchRegistry.ts). */
   site: string;
   url: string;
+  /**
+   * Who started this watch. Persisted with the watch itself because a watch
+   * outlives the request that created it — the server re-spawns it on boot,
+   * where there is no session to ask. Without this a resumed watch would write
+   * ownerless reports, and an ownerless row reads as legacy/shared. FR-74.
+   */
+  owner?: string;
   monitorMode: 'watch'; // only watch mode is persisted; snapshot/compare are one-offs
   maxPages: number;
   takeScreenshots: boolean;

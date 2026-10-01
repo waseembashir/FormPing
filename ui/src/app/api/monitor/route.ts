@@ -5,7 +5,7 @@ import {
   saveActiveWatch,
   loadAliveActiveWatches,
 } from '@/lib/activeWatchesStore';
-import { requireRole } from '@/lib/auth/authorize';
+import { requireRole, currentUser } from '@/lib/auth/authorize';
 
 export const runtime = 'nodejs';
 export const maxDuration = 600; // up to 10 min for watch cycles
@@ -14,6 +14,10 @@ export async function POST(request: NextRequest) {
   // Starting a change-monitor run is Member+ — viewers are read-only.
   const denied = await requireRole(request, 'member');
   if (denied) return denied;
+  // Whose watch this is, taken from the session that started it. A watch
+  // outlives its request — the server re-spawns it on boot — so the answer is
+  // persisted with the watch rather than asked for again later. FR-74.
+  const owner = (await currentUser(request))?.email;
 
   const body = (await request.json()) as {
     url: string;
@@ -84,6 +88,7 @@ export async function POST(request: NextRequest) {
       const child = spawnMonitor(
         {
           url,
+          ...(owner ? { owner } : {}),
           monitorMode,
           maxPages,
           takeScreenshots,
@@ -120,6 +125,7 @@ export async function POST(request: NextRequest) {
         void saveActiveWatch({
           site,
           url,
+          ...(owner ? { owner } : {}),
           monitorMode: 'watch',
           maxPages,
           takeScreenshots,
