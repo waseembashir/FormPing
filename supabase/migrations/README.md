@@ -37,9 +37,27 @@ set search_path to dev;
 -- …paste the same migration body here, run it…
 ```
 
-Run `public` first (production is the source of truth), then `dev`. Because the
-files are idempotent, re-applying a migration that a schema already has is a
-no-op.
+Run `public` first, then `dev`, and always in that order.
+
+The reason is the editor's default, not any precedence between the two schemas.
+The SQL Editor targets `public` unless told otherwise, so the run that depends
+on you remembering `set search_path` is the **second** one. Forget it there and
+the migration lands on `public` a second time — idempotent, harmless, and `dev`
+is simply left behind until local development notices. Reverse the order and the
+same slip applies an unverified change to **production**.
+
+Then verify, because a no-op looks exactly like success. Re-applying a migration
+a schema already has changes nothing and reports no error, so two runs that both
+hit `public` are indistinguishable from one run per schema until something
+breaks. Confirm the new column or table exists in both:
+
+```sql
+select table_schema, count(*)
+  from information_schema.columns
+ where column_name = 'your_new_column'
+   and table_schema in ('dev','public')
+ group by table_schema;
+```
 
 > New to the project / rebuilding `dev` from scratch? Run `0001` → `0004` in
 > order under `set search_path to dev;` first (create the schema with
