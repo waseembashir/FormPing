@@ -62,27 +62,36 @@ describe('a multi-step wizard is still found and still filled', () => {
     await page.close();
   });
 
-  /**
-   * CHARACTERISATION — this pins what the engine does TODAY, not what it should
-   * do. When FR-94 makes the walk fill later panels, this test will fail, and
-   * that failure is the signal to update it rather than a regression.
-   *
-   * The limitation: each panel of this wizard is its own `<form>` element, but
-   * `fillSingleStep` stays scoped to the form that was originally chosen. So the
-   * walk advances through the panels and fills nothing after the first one.
-   * The live run against fautons.com/contact-sales shows the same shape —
-   * "traversed 2 step(s)" alongside "Filled 2 field(s)", both from step 1.
-   */
-  it('today: advances past step 1 but does not fill later panels (FR-94)', async () => {
+  it('fills every panel, not only the one it started in (FR-94)', async () => {
+    /**
+     * This was a CHARACTERISATION test: it used to assert that the walk
+     * advanced past step 1 and filled nothing afterwards, because each panel of
+     * this wizard is its own <form> and filling stayed scoped to the form
+     * originally chosen. Its failure was the agreed signal that the behaviour
+     * had been fixed, so it now asserts the behaviour instead of the bug.
+     */
     const page = await openFixture(FIXTURE);
     const config = testConfig({ landingPage: true, mode: 'safe' });
     const { form } = await findContactForm(page, config);
     const result = await fillForm(page, form!, config);
 
     const labels = result.filledFields.map((f) => f.label).join(' ');
-    expect(labels).toMatch(/work email/i); // step 1 — filled
-    expect(labels).not.toMatch(/full name/i); // step 2 — reached, never filled
-    expect(result.stepsTraversed).toBeGreaterThan(1); // it DID walk past step 1
+    expect(labels).toMatch(/work email/i); // step 1
+    expect(labels).toMatch(/full name/i); // step 2 — previously never reached
+    expect(result.stepsTraversed).toBeGreaterThan(1);
+    await page.close();
+  });
+
+  it('counts a field once, however many panels the walk crossed', async () => {
+    // fieldsSeen drives the card's field count. Following panels must not make
+    // it double-count, or a wizard would report more fields than it has.
+    const page = await openFixture(FIXTURE);
+    const config = testConfig({ landingPage: true, mode: 'safe' });
+    const { form } = await findContactForm(page, config);
+    const result = await fillForm(page, form!, config);
+
+    const labels = result.filledFields.map((f) => f.label);
+    expect(new Set(labels).size).toBe(labels.length);
     await page.close();
   });
 });
