@@ -103,3 +103,38 @@ describe('derived rows inherit rather than invent', () => {
     expect(sent.rows.every((r) => r.owner === null)).toBe(true);
   });
 });
+
+describe('the inheritance rule itself', () => {
+  // The rule a ticker depends on, tested where it is named rather than through
+  // a ticker — reaching the ticker means standing up the engine, Slack and the
+  // database, and none of that is what could plausibly be wrong here.
+  it('passes the owner down from the schedule that triggered the run', async () => {
+    const { inheritedOwner } = await import('@/lib/ownership');
+    expect(inheritedOwner({ owner: 'owner@example.com' })).toEqual({ owner: 'owner@example.com' });
+  });
+
+  it('omits the key entirely for a legacy schedule, rather than inventing one', async () => {
+    // `{}` and not `{ owner: undefined }`: spreading the latter would overwrite
+    // an owner already on the target with undefined, which is how an owned row
+    // would quietly become shared.
+    const { inheritedOwner } = await import('@/lib/ownership');
+    expect(inheritedOwner({})).toEqual({});
+    expect(Object.keys(inheritedOwner({}))).toHaveLength(0);
+  });
+
+  it('survives a missing schedule instead of throwing mid-run', async () => {
+    // A run must still be recorded if the schedule is gone by the time its
+    // result lands. Losing the row would trade isolation for data loss.
+    const { inheritedOwner } = await import('@/lib/ownership');
+    expect(inheritedOwner(null)).toEqual({});
+    expect(inheritedOwner(undefined)).toEqual({});
+  });
+
+  it('treats an empty-string owner as nobody', async () => {
+    // Email comes from a session that can hand back ''. An empty owner matches
+    // no user, so a row stamped with it would be invisible to everyone — worse
+    // than legacy, which is at least visible.
+    const { inheritedOwner } = await import('@/lib/ownership');
+    expect(inheritedOwner({ owner: '' })).toEqual({});
+  });
+});
