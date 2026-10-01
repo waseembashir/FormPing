@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { recordRun } from '@/lib/onDemandRunStore';
 import { hostFormShots } from '@/lib/formShots';
-import { requireRole } from '@/lib/auth/authorize';
+import { requireRole, currentUser } from '@/lib/auth/authorize';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 min cap for batch runs
@@ -14,6 +14,10 @@ export async function POST(request: NextRequest) {
   // Running a form test is Member+ — viewers are read-only.
   const denied = await requireRole(request, 'member');
   if (denied) return denied;
+
+  // Who ran this test. Read here, at the top, because the result is persisted
+  // from inside a stream callback that no longer has the request to hand. FR-74.
+  const runOwner = (await currentUser(request))?.email;
 
   const body = await request.json() as {
     urls: string[];
@@ -111,7 +115,7 @@ export async function POST(request: NextRequest) {
             send({ type: 'result', result });
             // Persist the manual run so the Projects view can show it later.
             // Fire-and-forget + self-guarded — must never break the stream.
-            void recordRun(result);
+            void recordRun(result, runOwner);
           })
           .catch(() => { /* a result must never take the stream down */ });
       }

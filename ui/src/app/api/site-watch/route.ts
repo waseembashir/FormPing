@@ -3,7 +3,7 @@ import { listSchedules, upsertSchedule, findScheduleByUrl } from '@/lib/siteWatc
 import { kickSiteWatchTicker } from '@/lib/siteWatch/ticker';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { checkUptime, hostResolves } from '@/lib/siteWatch/checks';
-import { requireRole } from '@/lib/auth/authorize';
+import { requireRole, currentUser } from '@/lib/auth/authorize';
 import type { SiteSchedule } from '@/lib/siteWatch/types';
 import { saveFailuresForClient } from '@/lib/persistence';
 
@@ -97,9 +97,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Whose monitor this is. Taken at creation, from the session that asked for
+  // it — the only moment the answer is known for certain. A ticker running this
+  // schedule later has no request and no user to ask. FR-74.
+  const creator = (await currentUser(request))?.email;
   const now = Date.now();
   const schedule: SiteSchedule = {
     id: crypto.randomUUID(),
+    ...(creator ? { owner: creator } : {}),
     url,
     host: hostnameOf(url),
     intervalMs,

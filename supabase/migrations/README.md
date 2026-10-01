@@ -67,3 +67,15 @@ no-op.
 | `0002_phase2_history_reports.sql`| form/site watch run history, change_reports                   |
 | `0003_fr17_lifecycle.sql`        | form/site watch per-URL durable results                       |
 | `0004_fr20_daily_rollup.sql`     | site_watch_daily (rollup for 7d/30d/all-time charts)          |
+| `0005_fr21_change_events.sql`    | change_events — the change-tracking event stream               |
+| `0006_fr22_alerts.sql`           | alerts — the alert delivery log                                |
+| `0007_fr24_app_users.sql`        | app_users — per-user roles                                     |
+| `0008_fr26_bug_reports.sql`      | bug_reports — in-app "Report a bug" submissions                |
+| `0009_fr27_url_shares.sql`       | url_shares — per-URL public share tokens                       |
+| `0010_fr31_bug_report_status.sql`| bug_reports: status, resolved_by, resolved_at (triage)         |
+| `0011_fr30_project_attribution.sql`| projects: created_by, updated_by                             |
+| `0012_fr67_form_tester_detail.sql`| form_tester_runs: detail (full run detail, not just a verdict)|
+| `0013_fr67_scheduler_and_uptime_detail.sql`| form/site watch results: detail — the same for scheduled runs |
+| `0014_fr66_project_activity_log.sql`| project_events — who did what to a project, and when        |
+| `0015_fr82_manual_rerun.sql`     | form/site watch runs: trigger_source (scheduled vs re-run)     |
+| `0016_fr74_owner.sql`            | owner on the ten tool-tab tables, + an index on each schedule table |

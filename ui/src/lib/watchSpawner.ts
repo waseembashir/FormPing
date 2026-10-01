@@ -82,6 +82,8 @@ async function alertOnChanges(site: string, rootUrl: string, parsed: Record<stri
 
 export interface SpawnMonitorOptions {
   url: string;
+  /** Who this watch belongs to; stamped on every report and event it writes. FR-74. */
+  owner?: string;
   monitorMode: 'snapshot' | 'compare' | 'watch';
   maxPages: number;
   takeScreenshots: boolean;
@@ -160,6 +162,7 @@ export function spawnMonitor(
           // A baseline leaves no report — record an EVENT so Projects can show
           // "baseline captured" instead of looking untracked (FR-21).
           void recordChangeEvent({
+            owner: opts.owner,
             site,
             rootUrl: opts.url,
             mode: 'snapshot',
@@ -169,8 +172,9 @@ export function spawnMonitor(
         } else if ('details' in parsed && 'pagesScanned' in parsed) {
           // Persist regardless of whether a handler is attached. Fire-and-
           // forget; failures are logged inside saveReport.
-          void saveReport(site, parsed);
+          void saveReport(site, parsed, opts.owner);
           void recordChangeEvent({
+            owner: opts.owner,
             site,
             rootUrl: opts.url,
             mode: opts.monitorMode === 'watch' ? 'watch' : 'compare',
@@ -211,6 +215,7 @@ export function spawnMonitor(
         const parsed = JSON.parse(stdoutBuf.trim()) as Record<string, unknown>;
         if ('snapshotPath' in parsed) {
           void recordChangeEvent({
+            owner: opts.owner,
             site,
             rootUrl: opts.url,
             mode: 'snapshot',
@@ -218,8 +223,9 @@ export function spawnMonitor(
           });
           handlers.onSnapshot?.(parsed);
         } else if ('details' in parsed) {
-          void saveReport(site, parsed);
+          void saveReport(site, parsed, opts.owner);
           void recordChangeEvent({
+            owner: opts.owner,
             site,
             rootUrl: opts.url,
             mode: opts.monitorMode === 'watch' ? 'watch' : 'compare',

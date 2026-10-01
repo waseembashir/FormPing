@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listSchedules, upsertSchedule, findScheduleByUrl } from '@/lib/formWatch/scheduleStore';
 import { kickFormWatchTicker } from '@/lib/formWatch/ticker';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
-import { requireRole } from '@/lib/auth/authorize';
+import { requireRole, currentUser } from '@/lib/auth/authorize';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 import { saveFailuresForClient } from '@/lib/persistence';
 
@@ -124,9 +124,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: check.error }, { status: 422 });
   }
 
+  // Whose monitor this is. Taken at creation, from the session that asked for
+  // it — the only moment the answer is known for certain. A ticker running this
+  // schedule later has no request and no user to ask. FR-74.
+  const creator = (await currentUser(request))?.email;
   const now = Date.now();
   const schedule: FormSchedule = {
     id: crypto.randomUUID(),
+    ...(creator ? { owner: creator } : {}),
     url,
     site: hostnameOf(url),
     intervalMs,

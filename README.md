@@ -231,7 +231,10 @@ formping/
 ├── src/            # the CLI engine — form detection, testing, change monitoring
 ├── tests/          # engine unit tests (Vitest)
 │   └── engine/     #   the same engine run against saved pages — fixtures + harness
+├── supabase/
+│   └── migrations/ # plain SQL, applied by hand — read its README before adding one
 └── ui/             # the Next.js web app (App Router)
+    ├── e2e/        # end-to-end tests (Playwright)
     └── src/
         ├── app/            # routes, pages, and API endpoints
         ├── components/     # UI — a shared component kit + per-feature views
@@ -276,6 +279,8 @@ npm run test:e2e                  # boots the app and runs the e2e suite
 ```
 
 Configuration (auth, database, and optional integrations) is supplied through environment variables — copy `.env.example` and fill in your own values.
+
+**Database.** The app runs without one: with no Supabase variables set it falls back to JSON files on disk, which is enough to develop against. To use Postgres instead, apply the SQL in `supabase/migrations/` first — there is no migration framework, so they are applied by hand and in order. Read `supabase/migrations/README.md` before you do: production and development share one project and are kept apart by Postgres schema, and each migration is applied once per schema.
 
 ---
 

@@ -118,6 +118,7 @@ export async function recordResult(record: SiteCheckRecord): Promise<WriteOutcom
     };
     const baseRow = {
       url_key: result.url,
+      owner: record.owner ?? null, // inherited from the run. FR-74.
       input_url: result.inputUrl,
       classification: result.classification ?? null,
       status_code: result.statusCode,

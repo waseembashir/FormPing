@@ -15,6 +15,7 @@
 import { loadActiveWatches, saveActiveWatch } from './activeWatchesStore';
 import { registerWatch, getWatch } from './watchRegistry';
 import { spawnMonitor } from './watchSpawner';
+import { inheritedOwner } from './ownership';
 
 let resumed = false;
 
@@ -54,6 +55,9 @@ export async function resumeActiveWatches(): Promise<void> {
       const child = spawnMonitor(
         {
           url: entry.url,
+          // Recovered from the persisted watch — the boot path has no session,
+          // so this is the only place the original owner survives. FR-74.
+          ...inheritedOwner(entry),
           monitorMode: 'watch',
           maxPages: entry.maxPages,
           takeScreenshots: entry.takeScreenshots,

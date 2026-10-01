@@ -48,9 +48,10 @@ interface FormRunRow {
   errors: string[] | null;
   /** null on every row written before FR-82 — all of which were scheduled. */
   trigger_source: string | null;
+  owner: string | null;
 }
 const FR_COLS =
-  'schedule_id, url, site, mode, ran_at, status, reason_code, submission_result, duration_ms, fingerprint, notes, errors, trigger_source';
+  'schedule_id, url, site, mode, ran_at, status, reason_code, submission_result, duration_ms, fingerprint, notes, errors, trigger_source, owner';
 
 function toRecord(r: FormRunRow): FormRunRecord {
   return {
@@ -67,6 +68,7 @@ function toRecord(r: FormRunRow): FormRunRecord {
     notes: r.notes ?? [],
     errors: r.errors ?? [],
     trigger: r.trigger_source === 'manual' ? 'manual' : 'scheduled',
+    ...(r.owner ? { owner: r.owner } : {}),
   };
 }
 
@@ -85,6 +87,7 @@ function toRow(rec: FormRunRecord): FormRunRow {
     notes: rec.notes ?? [],
     errors: rec.errors ?? [],
     trigger_source: (rec.trigger ?? 'scheduled') satisfies RunTrigger,
+    owner: rec.owner ?? null,
   };
 }
 

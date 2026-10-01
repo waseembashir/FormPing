@@ -92,7 +92,13 @@ export async function recordDaily(record: SiteCheckRecord): Promise<WriteOutcome
       .eq('day', day)
       .maybeSingle();
     const next = fold((existing as DailyRow) ?? empty);
-    const { error } = await db.from('site_watch_daily').upsert({ url_key, day, ...next }, { onConflict: 'url_key,day' });
+    const { error } = await db
+      .from('site_watch_daily')
+      // The rollup is derived from a check, so it inherits that check's owner.
+      // A URL belongs to one project, so in practice this is already settled —
+      // but carrying it explicitly means the per-URL dashboard can scope the
+      // figures the same way it scopes everything else. FR-74.
+      .upsert({ url_key, day, owner: record.owner ?? null, ...next }, { onConflict: 'url_key,day' });
     if (error) return essentialWriteFailed('siteWatch/dailyStore', error.message);
     return WRITE_OK;
   } catch (err) {

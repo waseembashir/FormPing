@@ -15,6 +15,7 @@ import { recordDaily } from './dailyStore';
 import { checkUptime, checkSsl, checkDomain } from './checks';
 import { evaluateAndAlert } from './alerts';
 import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
+import { inheritedOwner } from '@/lib/ownership';
 import { isPermanent } from './failures';
 import { clearDomainRetry, domainRetryHeld, holdDomainRetry } from './domainBackoff';
 
@@ -124,6 +125,8 @@ async function checkSiteOnce(
   }
 
   const record: SiteCheckRecord = {
+    // A scheduled run has no request and nobody to ask — it inherits. FR-74.
+    ...inheritedOwner(schedule),
     scheduleId: schedule.id,
     url: schedule.url,
     host: schedule.host,

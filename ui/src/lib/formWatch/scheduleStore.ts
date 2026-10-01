@@ -27,6 +27,7 @@ const normKey = urlKey;
 
 interface FormScheduleRow {
   id: string;
+  owner: string | null;
   url: string;
   site: string;
   interval_ms: number;
@@ -41,7 +42,7 @@ interface FormScheduleRow {
   last_form_found: boolean | null;
 }
 const FS_COLS =
-  'id, url, site, interval_ms, mode, landing_page, created_at, last_run_at, next_run_at, paused, last_status, last_reason_code, last_form_found';
+  'id, url, site, interval_ms, mode, landing_page, created_at, last_run_at, next_run_at, paused, last_status, last_reason_code, last_form_found, owner';
 
 function toSchedule(r: FormScheduleRow): FormSchedule {
   return {
@@ -58,11 +59,13 @@ function toSchedule(r: FormScheduleRow): FormSchedule {
     lastStatus: (r.last_status as FormSchedule['lastStatus']) ?? undefined,
     lastReasonCode: r.last_reason_code ?? undefined,
     lastFormFound: r.last_form_found ?? undefined,
+    ...(r.owner ? { owner: r.owner } : {}),
   };
 }
 function toRow(s: FormSchedule): FormScheduleRow {
   return {
     id: s.id,
+    owner: s.owner ?? null,
     url: s.url,
     site: s.site,
     interval_ms: s.intervalMs,
