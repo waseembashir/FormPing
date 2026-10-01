@@ -22,6 +22,7 @@ import { hostFormShots } from '@/lib/formShots';
 import { runFormTest, type RawSiteResult } from './runner';
 import { onRunComplete } from './notify';
 import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
+import { inheritedOwner } from '@/lib/ownership';
 
 /** How often the loop checks for due schedules. Override via env for tests. */
 const TICK_MS = Number(process.env.FORM_WATCH_TICK_MS) || 60_000;
@@ -82,6 +83,8 @@ function toStatus(raw: RawSiteResult): FormRunStatus {
 function toRecord(schedule: FormSchedule, raw: RawSiteResult, ranAt: string, trigger: RunTrigger): FormRunRecord {
   return {
     trigger,
+    // A scheduled run has no request and nobody to ask — it inherits. FR-74.
+    ...inheritedOwner(schedule),
     scheduleId: schedule.id,
     url: schedule.url,
     site: schedule.site,
@@ -125,6 +128,7 @@ function toRecord(schedule: FormSchedule, raw: RawSiteResult, ranAt: string, tri
 function errorRecord(schedule: FormSchedule, ranAt: string, reason: string, trigger: RunTrigger): FormRunRecord {
   return {
     trigger,
+    ...inheritedOwner(schedule),
     scheduleId: schedule.id,
     url: schedule.url,
     site: schedule.site,
