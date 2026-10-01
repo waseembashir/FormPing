@@ -502,6 +502,48 @@ interface SingleStepResult {
 }
 
 /** Fill all currently-visible fields in one pass. Used inside the multi-step loop. */
+/**
+ * Which `<form>` holds the panel now on screen, ignoring ones already filled.
+ *
+ * A wizard is not always one form with hidden fieldsets. Some sites build each
+ * panel as its own sibling `<form>` and show one at a time — fautons.com does,
+ * with `<form data-cs-panel="0">`, `<form data-cs-panel="1">`, and so on.
+ *
+ * The walk advanced through those panels correctly but kept filling the form it
+ * started in, so every step after the first extracted no fields and completed
+ * nothing. The run then reported traversing three steps while filling two
+ * fields, both from step one — true statements that together read as a lie.
+ *
+ * The wizard-container path (FR-63) does not catch this: it only engages when
+ * the chosen form has NO visible fields on entry, and here panel one is full of
+ * them. So after each advance the panel has to be re-resolved rather than
+ * assumed. Ranked by how many fillable fields are actually visible, because the
+ * panel a person is looking at is the one with something to type in. FR-94.
+ */
+async function visibleStepForm(page: Page, exclude: Set<number>): Promise<number | null> {
+  const counts = await page.evaluate((skip: number[]) => {
+    const skipped = new Set(skip);
+    return Array.from(document.querySelectorAll('form')).map((f, i) => {
+      if (skipped.has(i)) return { i, n: -1 };
+      const style = getComputedStyle(f);
+      const rect = f.getBoundingClientRect();
+      const shown = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+      if (!shown) return { i, n: -1 };
+      const n = Array.from(f.querySelectorAll('input, textarea, select')).filter((el) => {
+        const input = el as HTMLInputElement;
+        if (input.type === 'hidden' || input.type === 'submit' || input.disabled) return false;
+        const s = getComputedStyle(input);
+        const r = input.getBoundingClientRect();
+        return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+      }).length;
+      return { i, n };
+    });
+  }, [...exclude]);
+
+  const best = counts.filter((c) => c.n > 0).sort((a, b) => b.n - a.n)[0];
+  return best ? best.i : null;
+}
+
 async function fillSingleStep(
   page: Page,
   form: FormCandidate,
@@ -732,9 +774,15 @@ export async function fillForm(
     }
   }
 
+  // The panel currently on screen. It starts as the chosen form and moves as
+  // the walk advances, because a wizard built from sibling <form> elements puts
+  // each step in a different one. FR-94.
+  let activeForm = form;
+  const panelsFilled = new Set<number>([form.index]);
+
   for (let step = 1; step <= MAX_WIZARD_STEPS; step++) {
     stepsTraversed = step;
-    const stepResult = await fillSingleStep(page, form, config, step, rootSelector);
+    const stepResult = await fillSingleStep(page, activeForm, config, step, rootSelector);
     filledFields.push(...stepResult.filledFields);
     skippedFields.push(...stepResult.skippedFields);
     for (const k of stepResult.fieldKeys) fieldKeySeen.add(k);
@@ -748,14 +796,21 @@ export async function fillForm(
     }
 
     // Look for a Next button — if none, we're on the final step (at submit).
-    const nextBtn = await findNextButton(page, form.index, rootSelector);
+    const nextBtn = await findNextButton(page, activeForm.index, rootSelector);
     if (!nextBtn) {
       reachedSubmit = true;
       if (step > 1) logger.info(`Multi-step form: completed ${step} step(s)`);
       break;
     }
 
-    logger.info(`Multi-step form: step ${step} filled — clicking Next to advance`);
+    // Say what the step actually did. This read "step N filled" whatever
+    // happened, so a step that filled nothing still announced success. FR-94.
+    const filledHere = stepResult.filledFields.length;
+    logger.info(
+      filledHere > 0
+        ? `Multi-step form: step ${step} filled ${filledHere} field(s) — clicking Next to advance`
+        : `Multi-step form: step ${step} had nothing to fill — clicking Next to advance`,
+    );
     try {
       await nextBtn.click({ timeout: 5000 });
       // Wait for new fields to render. Animations, transitions, lazy
@@ -767,6 +822,19 @@ export async function fillForm(
     } catch (err) {
       logger.warn(`Failed to advance from step ${step}: ${shortenError(err)}`);
       break;
+    }
+
+    // Follow the wizard to wherever the next panel lives. A container-scoped
+    // walk already spans every step, so this only applies to the form-scoped
+    // path — where staying put is what made every step after the first fill
+    // nothing at all. FR-94.
+    if (!rootSelector) {
+      const nextPanel = await visibleStepForm(page, panelsFilled);
+      if (nextPanel !== null && nextPanel !== activeForm.index) {
+        logger.info(`Multi-step form: step ${step + 1} is a separate form element — following it`);
+        activeForm = { ...activeForm, index: nextPanel };
+        panelsFilled.add(nextPanel);
+      }
     }
   }
 
