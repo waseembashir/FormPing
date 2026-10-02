@@ -11,6 +11,8 @@ import {
   removeSnapshotsForHost,
 } from '@/lib/snapshotFiles';
 import { requireRole } from '@/lib/auth/authorize';
+import { ownerScope } from '@/lib/ownerScope';
+import { siteVisibleTo } from '@/lib/changeEventStore';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +23,20 @@ export async function GET(request: NextRequest) {
   }
   const host = hostnameOf(url);
   if (!host) return Response.json({ error: 'invalid url' }, { status: 400 });
+
+  // Snapshots are files keyed by host with no owner on disk, so visibility is
+  // answered by the change events each snapshot writes as it is taken. Without
+  // this, someone else's monitoring is announced by a count: "2 snapshots for
+  // example.com, last 7m ago, 46 KB" tells you a colleague is watching that
+  // site and roughly how much they have captured. No content leaks, but the
+  // fact of the work does, which is what per-user isolation is meant to stop.
+  //
+  // Answered as "none" rather than as a refusal, because the honest response to
+  // "how many snapshots do I have here" is zero.
+  const scope = await ownerScope(request);
+  if (!(await siteVisibleTo(host, scope))) {
+    return Response.json({ host, count: 0, latest: null, totalBytes: 0 });
+  }
 
   const dir = safeHostDir(host);
   if (!dir || !existsSync(dir)) {
@@ -59,6 +75,14 @@ export async function DELETE(request: NextRequest) {
   }
   const host = hostnameOf(body.url);
   if (!host) return Response.json({ error: 'invalid url' }, { status: 400 });
+
+  // The read side only leaks a count; this one DESTROYS files, so it matters
+  // more. Without the same check a member could clear snapshots belonging to
+  // someone whose work they cannot even see -- and the owner would find their
+  // baselines gone with nothing to explain it, which is worse than any leak.
+  if (!(await siteVisibleTo(host, await ownerScope(request)))) {
+    return Response.json({ error: 'no snapshots to clear' }, { status: 404 });
+  }
 
   const dir = safeHostDir(host);
   if (!dir) return Response.json({ error: 'invalid host' }, { status: 400 });
