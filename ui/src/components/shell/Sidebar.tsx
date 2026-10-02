@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { forgetTab } from '@/lib/tabCache';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMe, canRole } from '@/lib/auth/useMe';
+import { RELEASES } from '@/lib/releases';
+import { isUnread, lastSeenVersion } from '@/lib/releasesSeen';
 import { ROLE_LABEL } from '@/lib/auth/roles';
 import { cx } from '@/components/ui/cx';
 import { BrandMark } from './BrandMark';
@@ -275,6 +277,7 @@ function UtilityItem({
   active,
   collapsed,
   onNavigate,
+  dot,
 }: {
   icon: ReactNode;
   label: string;
@@ -283,6 +286,8 @@ function UtilityItem({
   active?: boolean;
   collapsed: boolean;
   onNavigate?: () => void;
+  /** A dot saying there is something here you have not seen. */
+  dot?: boolean;
 }) {
   const activate = () => {
     onClick?.();
@@ -291,8 +296,9 @@ function UtilityItem({
 
   if (collapsed) {
     const inner = (
-      <span className={cx('flex h-10 w-10 items-center justify-center rounded-lg transition-colors', active ? 'bg-accent/15 text-accent-soft' : 'text-ink-faint hover:bg-panel hover:text-ink')}>
+      <span className={cx('relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors', active ? 'bg-accent/15 text-accent-soft' : 'text-ink-faint hover:bg-panel hover:text-ink')}>
         <svg viewBox="0 0 20 20" fill="currentColor" className="h-[19px] w-[19px]" aria-hidden>{icon}</svg>
+        {dot && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent ring-2 ring-rail" aria-hidden />}
       </span>
     );
     return (
@@ -314,6 +320,7 @@ function UtilityItem({
     <>
       <svg viewBox="0 0 20 20" fill="currentColor" className={cx('h-[18px] w-[18px] shrink-0', active ? 'text-accent-soft' : 'text-ink-faint group-hover:text-ink-muted')} aria-hidden>{icon}</svg>
       <span className="truncate">{label}</span>
+      {dot && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent" aria-label="Unread" />}
     </>
   );
   return href ? (
@@ -340,6 +347,22 @@ export function Sidebar({
   const pathname = usePathname();
   const me = useMe();
   const isAdmin = canRole(me.role, 'admin');
+
+  /**
+   * Whether there is a release this browser has not been shown.
+   *
+   * Starts false and is set after mount, because the answer lives in
+   * localStorage and the server cannot know it -- rendering a dot on the server
+   * would make it appear and then vanish on hydration, which looks like a bug.
+   *
+   * Re-read when the route changes, so visiting the page clears the dot without
+   * a reload.
+   */
+  const [hasUnreadRelease, setHasUnreadRelease] = useState(false);
+  useEffect(() => {
+    const newest = RELEASES[0]?.version;
+    setHasUnreadRelease(newest ? isUnread(newest, lastSeenVersion()) : false);
+  }, [pathname]);
 
   return (
     <aside className={cx('relative flex h-full w-full flex-col bg-rail', className)}>
@@ -412,7 +435,7 @@ export function Sidebar({
       {/* Secondary — utilities (Docs, What's new, Team & access [admin+], Report a bug). */}
       <div className={cx('space-y-1 border-t border-line py-2', collapsed ? 'px-2' : 'px-3')}>
         <UtilityItem icon={ICON.docs} label="Docs" href="/docs" active={pathname === '/docs'} collapsed={collapsed} onNavigate={onNavigate} />
-        <UtilityItem icon={ICON.whatsNew} label="What's new" href="/whats-new" active={pathname === '/whats-new'} collapsed={collapsed} onNavigate={onNavigate} />
+        <UtilityItem icon={ICON.whatsNew} label="What's new" href="/whats-new" active={pathname === '/whats-new'} collapsed={collapsed} onNavigate={onNavigate} dot={hasUnreadRelease} />
         {isAdmin && (
           <UtilityItem icon={ICON.team} label="Team & access" href="/team" active={pathname === '/team'} collapsed={collapsed} onNavigate={onNavigate} />
         )}
