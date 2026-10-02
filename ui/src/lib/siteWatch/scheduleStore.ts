@@ -8,6 +8,7 @@
 
 import type { SiteSchedule, UptimeClass } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
+import { ownerFilterExpression, visibleTo } from '@/lib/ownership';
 import { urlKey } from '@/lib/projects/projectStore';
 
 /**
@@ -102,13 +103,32 @@ function toRow(s: SiteSchedule): SiteScheduleRow {
   };
 }
 
-export async function listSchedules(): Promise<SiteSchedule[]> {
-  const { data, error } = await supabaseAdmin().from('site_watch_schedules').select(SS_COLS);
+/**
+ * Every monitor, or only those `scope` may see when one is given.
+ *
+ * Optional, defaulting to the old behaviour, for the same reason as the form
+ * side: the TICKER calls this with no argument and must keep seeing every
+ * monitor, including other people's -- it runs them on a timer with nobody
+ * signed in. Narrowing it here would stop every uptime check firing, and a
+ * site that silently stops being monitored is the worst failure this app has,
+ * because the whole point is noticing when something breaks.
+ */
+export async function listSchedules(scope?: string): Promise<SiteSchedule[]> {
+  let query = supabaseAdmin().from('site_watch_schedules').select(SS_COLS);
+
+  const filter = ownerFilterExpression(scope);
+  if (filter) query = query.or(filter);
+
+  const { data, error } = await query;
   if (error) {
     console.warn(`[siteWatch/scheduleStore] list: ${error.message}`);
     return [];
   }
-  return (data as SiteScheduleRow[]).map(toSchedule);
+
+  const rows = (data as SiteScheduleRow[]).map(toSchedule);
+  // Also the only correct path when the address was one the expression builder
+  // declined to put in a query -- see ownerFilterExpression.
+  return scope ? rows.filter((s) => visibleTo(scope, s.owner)) : rows;
 }
 
 export async function getSchedule(id: string): Promise<SiteSchedule | undefined> {

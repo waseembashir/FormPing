@@ -99,3 +99,32 @@ describe('the shared Projects view is never scoped', () => {
     }
   });
 });
+
+describe('the tickers read schedules unscoped', () => {
+  it('both tickers call listSchedules with no owner argument', async () => {
+    // A ticker runs on a timer with nobody signed in, so it has no owner to
+    // scope by and must see every schedule, including other people's. If one
+    // ever started passing a scope, every monitor belonging to anyone else
+    // would simply stop being run.
+    //
+    // That failure is silent in the worst way: no error, no empty page, just
+    // checks that quietly never happen — on the one feature whose entire job
+    // is noticing when something breaks. Nothing else in the suite would catch
+    // it, because the stores and routes would all still be correct.
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+
+    for (const ticker of ['formWatch', 'siteWatch']) {
+      const src = readFileSync(
+        fileURLToPath(new URL(`../ui/src/lib/${ticker}/ticker.ts`, import.meta.url)),
+        'utf8',
+      );
+      const at = src.indexOf('listSchedules(');
+      expect(at, `${ticker} ticker should still list schedules`).toBeGreaterThan(-1);
+      expect(
+        src.slice(at + 'listSchedules('.length, at + 'listSchedules('.length + 1),
+        `${ticker} ticker must call listSchedules() with no argument`,
+      ).toBe(')');
+    }
+  });
+});
