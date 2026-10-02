@@ -39,6 +39,7 @@ const NAV: NavGroup[] = [
   ] },
   { group: 'Team', items: [
     { id: 'access-roles', label: 'Access & roles' },
+    { id: 'your-work', label: 'What you see' },
     { id: 'alerts', label: 'Alerts' },
   ] },
   { group: 'Help', items: [
@@ -98,7 +99,7 @@ export default function DocsContent() {
             </button>
             {signedIn ? (
               <Link href="/" className="rounded-lg bg-gradient-to-b from-accent to-accent-strong px-3.5 py-2 text-xs font-semibold text-white shadow ring-1 ring-accent-soft/20 hover:brightness-110">
-                Open app →
+                ← Back to app
               </Link>
             ) : (
               <Link href="/login" className="rounded-lg bg-gradient-to-b from-accent to-accent-strong px-3.5 py-2 text-xs font-semibold text-white shadow ring-1 ring-accent-soft/20 hover:brightness-110">
@@ -299,6 +300,17 @@ export default function DocsContent() {
                   ]}
                 />
                 <P>Permissions are enforced for real — not just hidden buttons. A viewer genuinely can’t make changes, and only Admins &amp; Owners can remove or delete URLs and projects. Role changes take effect immediately. Admins and the Owner get a <strong>Team</strong> page to manage users and roles.</P>
+              </Section>
+
+              <Section id="your-work" title="What you see" eyebrow="Team">
+                <P>Several people use FormPing at once, so the testing tabs show <strong className="text-ink">your own work only</strong>. Projects shows <strong className="text-ink">everyone’s</strong>. The split is deliberate: your own screen stays about what you are doing, while the team keeps a single shared picture of what is covered.</P>
+                <UL>
+                  <LI><strong className="text-ink">Form Tester, Form Scheduler, Uptime &amp; SSL, Content Changes</strong> — the tests, schedules, runs and logs you set up. A colleague monitoring forty URLs doesn’t fill your screen, and you don’t fill theirs.</LI>
+                  <LI><strong className="text-ink">Projects</strong> — every URL the team has added, with its latest result and history, whoever ran it, plus <strong>who set each monitor up</strong>. This is where you check whether a site is already covered before adding it again, and where you see what a colleague’s test actually found.</LI>
+                  <LI><strong className="text-ink">Alerts</strong> go to the shared channel as always, tagging whoever set up the monitor. Everyone sees the problem; the tag says whose it is to pick up.</LI>
+                </UL>
+                <P>So nothing is hidden from the team — results stay visible to everyone through Projects. What changes is only which tests crowd <em>your</em> tabs.</P>
+                <P>Two things worth knowing. Monitors created before this change belong to nobody, so they stay visible to everyone until someone re-creates them. And the Form Tester remembers your last run in <strong>your browser</strong>, so signing in on a different computer shows an empty tab — your saved results in Projects are unaffected.</P>
               </Section>
 
               <Section id="alerts" title="Alerts" eyebrow="Team">
