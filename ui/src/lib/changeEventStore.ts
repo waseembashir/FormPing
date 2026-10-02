@@ -21,6 +21,7 @@
 
 import type { ChangeSeverity } from '@/types';
 import { supabaseAdmin } from '@/lib/supabase';
+import { ownerFilterExpression, visibleTo } from '@/lib/ownership';
 
 /** How many events to keep per site. Slim rows, so this is generous: at watch
  *  mode's hourly cadence it is roughly 11 weeks of continuous history. */
@@ -52,9 +53,10 @@ interface ChangeEventRow {
   changes_found: number;
   severity: string | null;
   summary: string | null;
+  owner?: string | null;
 }
 const COLS =
-  'id, site, root_url, mode, checked_at, pages_scanned, pages_changed, changes_found, severity, summary';
+  'id, site, root_url, mode, checked_at, pages_scanned, pages_changed, changes_found, severity, summary, owner';
 
 function toEvent(r: ChangeEventRow): ChangeEvent {
   return {
@@ -149,7 +151,12 @@ export async function loadChangeEvents(
 }
 
 /** The most recent event per site, for a set of sites (Projects status line). */
-export async function latestEventsForSites(sites: string[]): Promise<Map<string, ChangeEvent>> {
+/**
+ * `scope` is optional; omitting it returns every owner's events, which is what
+ * the shared Projects health view depends on. Only the Content Changes tab
+ * passes one.
+ */
+export async function latestEventsForSites(sites: string[], scope?: string): Promise<Map<string, ChangeEvent>> {
   const uniq = Array.from(new Set(sites)).filter((s) => s && s !== 'unknown');
   const out = new Map<string, ChangeEvent>();
   if (uniq.length === 0) return out;
@@ -166,6 +173,11 @@ export async function latestEventsForSites(sites: string[]): Promise<Map<string,
     return out;
   }
   for (const row of data as ChangeEventRow[]) {
+    // Filtered here rather than in the query: this fetches the newest rows for
+    // a SET of sites and keeps the first per site, so narrowing it in SQL would
+    // interact with that limit per site rather than overall. At this scale the
+    // row set is small and the check is a string comparison.
+    if (!visibleTo(scope, row.owner ?? undefined)) continue;
     if (!out.has(row.site)) out.set(row.site, toEvent(row));
   }
   return out;
@@ -206,4 +218,41 @@ export async function listTrackedUrls(limit = 500): Promise<string[]> {
 export async function removeChangeEvents(site: string): Promise<void> {
   const { error } = await supabaseAdmin().from('change_events').delete().eq('site', site);
   if (error) console.warn(`[changeEventStore] removeChangeEvents: ${error.message}`);
+}
+
+/**
+ * Whether `scope` may see this site's change-monitoring activity at all.
+ *
+ * Snapshots are files on disk keyed by host, with no owner recorded anywhere,
+ * so they cannot be filtered directly. But every snapshot writes a change event
+ * as it is taken -- that is how Projects knows a baseline was captured -- and
+ * those events DO carry an owner. So the events answer the question the files
+ * cannot.
+ *
+ * This is exact rather than approximate: a snapshot that was taken has an event,
+ * and an event that exists was stamped with whoever took it. A host whose events
+ * are all ownerless is legacy and stays visible to everyone, consistent with the
+ * rest of per-user isolation.
+ *
+ * Returns true when there is no scope, which is the unfiltered default the
+ * shared views rely on.
+ */
+export async function siteVisibleTo(site: string, scope?: string): Promise<boolean> {
+  if (!scope) return true;
+  if (!site || site === 'unknown') return false;
+
+  let query = supabaseAdmin().from('change_events').select('owner').eq('site', site);
+
+  const filter = ownerFilterExpression(scope);
+  if (filter) query = query.or(filter);
+
+  const { data, error } = await query.limit(50);
+  if (error) {
+    // A failed lookup must not reveal the site by defaulting to visible, and
+    // must not hide a person's own work either. Hiding is the safer of the two:
+    // a missing count is visibly odd, a leak is silent.
+    console.warn(`[changeEventStore] siteVisibleTo: ${error.message}`);
+    return false;
+  }
+  return (data as { owner: string | null }[]).some((r) => visibleTo(scope, r.owner ?? undefined));
 }
