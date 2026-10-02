@@ -220,6 +220,13 @@ export async function extractForms(page: Page): Promise<FormInfo[]> {
           if (el.querySelector('input,select,textarea,label,button')) continue;
           const t = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
           if (!t || t.length > 60) continue;
+          // A title is words. This branch accepts any short, prominent line
+          // sitting above the fields, and the two things most reliably styled
+          // that way are NOT titles: the required-field asterisk, and a badge
+          // like "50%" or "20% off". Both are short, both are bold, both sit
+          // right above the first input. Requiring two letters together rules
+          // them out while keeping every real title, including one-word ones.
+          if (!/[A-Za-z]{2}/.test(t)) continue;
           const cs = window.getComputedStyle(el);
           const size = parseFloat(cs.fontSize) || 0;
           const weight = parseInt(cs.fontWeight, 10) || 400;
@@ -264,6 +271,12 @@ export async function extractForms(page: Page): Promise<FormInfo[]> {
           }
         }
       }
+
+      // Last word on it, whichever branch above won. A semantic <h3> can hold a
+      // bare glyph too, and a title made of punctuation is worse than none: the
+      // report prints it as the form's name, so a reader is told the form is
+      // called "*" rather than that we could not name it.
+      if (heading && !/[A-Za-z]{2}/.test(heading)) heading = '';
 
       // ── CAPTCHA, scoped to THIS form (FR-73). A widget must live inside the
       // form's own subtree to count. We deliberately do NOT fall back to a

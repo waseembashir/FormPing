@@ -111,7 +111,10 @@ export async function POST(request: NextRequest) {
       function emitResult(raw: unknown) {
         queue = queue
           .then(async () => {
-            const result = await hostFormShots(raw);
+            // The Form Tester's OWN folder. Uploading clears the folder, so
+            // sharing the scheduler's would mean every scheduled check deleted
+            // the screenshots this run's stored result points at. FR-73/FR-82.
+            const result = await hostFormShots(raw, { variant: 'tester' });
             send({ type: 'result', result });
             // Persist the manual run so the Projects view can show it later.
             // Fire-and-forget + self-guarded — must never break the stream.

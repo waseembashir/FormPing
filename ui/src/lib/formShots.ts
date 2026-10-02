@@ -39,6 +39,24 @@ import { supabaseAdmin, supabaseEnabled, supabaseSchema } from './supabase';
 import { urlKey } from './projects/projectStore';
 
 const BUCKET = 'form-shots';
+
+/**
+ * Which kind of run produced a screenshot, and therefore which folder it owns.
+ *
+ * Every kind needs its own, because uploading clears the folder first — see
+ * `shotFolder`. A scheduled run uses the plain folder; the other two sit beside
+ * it.
+ */
+export type ShotVariant = 'manual' | 'tester';
+
+/**
+ * Every folder a URL can own, so a sweep cannot miss one.
+ *
+ * Listed once and iterated rather than written out at each call site: adding a
+ * variant and forgetting to delete it leaves images nothing points at, in a
+ * bucket nobody looks in, for a URL the user believes they removed.
+ */
+const SHOT_VARIANTS: (ShotVariant | undefined)[] = [undefined, 'manual', 'tester'];
 /** Total time a whole run's uploads may take before we give up and ship the
  *  result without them. Evidence never delays a verdict by more than this. */
 const UPLOAD_BUDGET_MS = 5000;
@@ -111,9 +129,12 @@ function fingerprint(key: string): string {
  * so the path can't be derived from a client's URL — see `objectName`.
  *
  * Built from the same `urlKey` the runs table uses, so both agree on what "the
- * same URL" means (protocol, www and trailing slash all normalised away).
+ * same URL" means: case, `www.` and a trailing slash are normalised away. The
+ * PROTOCOL is not — `urlKey`'s format is persisted in `url_key` columns across
+ * five tables and cannot change without orphaning every existing row, so
+ * http and https URLs keep separate folders.
  */
-export function shotFolder(url: string, variant?: 'manual'): string {
+export function shotFolder(url: string, variant?: ShotVariant): string {
   const key = urlKey(url);
   let host = 'unknown-site';
   let page = 'home';
@@ -125,12 +146,21 @@ export function shotFolder(url: string, variant?: 'manual'): string {
   } catch {
     /* unparseable — the shot is still worth keeping, just less findable */
   }
-  // A re-run gets a sibling folder rather than the URL's own. Each run clears
-  // its folder before uploading, so writing a manual run into the shared one
-  // would delete the images the stored scheduled result still points at — the
-  // run would keep its verdict and lose its evidence. Still one folder per URL
-  // per kind, so this stays bounded exactly as the main folder is. FR-82.
-  const suffix = variant === 'manual' ? '-rerun' : '';
+  // Each KIND of run gets its own folder, because each clears its folder before
+  // uploading. Sharing one means whichever ran last deletes the images the other
+  // one's stored result still points at: the older run keeps its verdict and
+  // loses its evidence, which reads as a broken image rather than as anything
+  // explicable.
+  //
+  // That is not hypothetical. The Form Tester and the Scheduler wrote to the
+  // same folder, so every scheduled check destroyed the Tester's screenshots for
+  // any URL that was also monitored — the Tester's stored URLs answered 400
+  // while the Scheduler's, in the identical folder, answered 200. A URL with no
+  // schedule on it was unaffected, which is why this looked intermittent.
+  //
+  // Still one folder per URL per kind, so storage stays bounded exactly as
+  // before. FR-82 introduced this for re-runs; the Tester needed it too.
+  const suffix = variant === 'manual' ? '-rerun' : variant === 'tester' ? '-tester' : '';
   return `${envFolder()}/${host}/${page}-${fingerprint(key)}${suffix}`;
 }
 
@@ -216,11 +246,11 @@ async function upload(
 export async function removeShots(url: string): Promise<void> {
   if (!supabaseEnabled()) return;
   // Same sweep a repeat run does before uploading — one implementation, so the
-  // two can never disagree about what "this URL's screenshots" means. Both
-  // folders go: the scheduled one and the Re-run sibling (FR-82), or deleting a
-  // run would leave the re-run's images behind with nothing pointing at them.
-  await clearFolder(shotFolder(url));
-  await clearFolder(shotFolder(url, 'manual'));
+  // two can never disagree about what "this URL's screenshots" means. EVERY
+  // folder goes: the scheduled one, the Re-run sibling and the Form Tester's.
+  // Missing one leaves images nothing points at, for a URL the user believes
+  // they deleted — which is why the list is iterated rather than spelled out.
+  for (const variant of SHOT_VARIANTS) await clearFolder(shotFolder(url, variant));
 }
 
 /** The shot-carrying shape of a result, as far as this module cares. */
@@ -242,7 +272,7 @@ interface ShotBearing {
  *
  * Never throws, and never takes longer than the upload budget.
  */
-export async function hostFormShots<T>(raw: T, opts?: { variant?: 'manual' }): Promise<T> {
+export async function hostFormShots<T>(raw: T, opts?: { variant?: ShotVariant }): Promise<T> {
   if (!raw || typeof raw !== 'object') return raw;
   const result = raw as ShotBearing;
 
