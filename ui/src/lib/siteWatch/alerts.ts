@@ -132,6 +132,9 @@ async function postAlert(opts: {
       summary: statusText(record),
       site: record.host,
       url: record.url,
+      // See formWatch/notify — the check inherited its owner from the schedule
+      // that triggered it. FR-55.
+      owner: record.owner,
       facts: siteCheckFacts(record),
       // What this check covered — and, by saying so, what it did not.
       scope: siteCheckScope(record),

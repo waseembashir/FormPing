@@ -160,6 +160,11 @@ export async function onRunComplete(
       summary: summaryParts.join(' '),
       site: record.site,
       url: record.url,
+      // Whoever set this monitor up gets @mentioned. The run inherited its
+      // owner from the schedule that triggered it, so a scheduled failure
+      // reaches the person who asked for the check rather than a channel
+      // addressed to nobody. FR-55.
+      owner: record.owner,
       // What this run actually found, from the rebuilt engine: the provider
       // behind an embed, the field count, the page it was found on, how many
       // forms compete for attention there, and the engine's own doubt. Before

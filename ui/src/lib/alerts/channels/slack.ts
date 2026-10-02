@@ -66,7 +66,12 @@ function escapeSlack(s: string): string {
  * Build the message. `moreNote` is how the caller says "there is more detail
  * than fits here" — it is always rendered, so nothing is ever dropped silently.
  */
-function buildMessage(alert: AlertInput, detailUrl: string | null, moreNote: string | null) {
+function buildMessage(
+  alert: AlertInput,
+  detailUrl: string | null,
+  moreNote: string | null,
+  mention: string | null,
+) {
   const sev = alert.severity ?? 'info';
   const blocks: Array<Record<string, unknown>> = [
     {
@@ -76,6 +81,12 @@ function buildMessage(alert: AlertInput, detailUrl: string | null, moreNote: str
   ];
 
   const lines: string[] = [];
+  // Whose monitor this is, first, so the person who can act on it sees their
+  // own name before reading anything else. Deliberately NOT passed through
+  // escapeSlack: that escapes the angle brackets, and `&lt;@U123&gt;` is text
+  // Slack prints rather than a mention it delivers -- an alert that looks
+  // addressed to someone and notifies nobody.
+  if (mention) lines.push(`${mention} — your monitor`);
   if (alert.summary) lines.push(escapeSlack(alert.summary));
   // What the run found, on its own line so the verdict above it stays scannable.
   const facts = (alert.facts ?? []).filter((f) => f && f.trim()).slice(0, MAX_FACTS);
@@ -133,12 +144,12 @@ function buildMessage(alert: AlertInput, detailUrl: string | null, moreNote: str
  */
 export async function sendToSlack(
   alert: AlertInput,
-  opts: { detailUrl?: string | null; moreNote?: string | null } = {},
+  opts: { detailUrl?: string | null; moreNote?: string | null; mention?: string | null } = {},
 ): Promise<SendResult> {
   const webhook = process.env.SLACK_WEBHOOK_URL;
   if (!webhook) return { ok: false, note: 'skipped — SLACK_WEBHOOK_URL not set' };
 
-  const payload = buildMessage(alert, opts.detailUrl ?? null, opts.moreNote ?? null);
+  const payload = buildMessage(alert, opts.detailUrl ?? null, opts.moreNote ?? null, opts.mention ?? null);
   return sendGuarded('slack', () =>
     fetch(webhook, {
       method: 'POST',
@@ -153,6 +164,7 @@ export function __buildSlackPayload(
   alert: AlertInput,
   detailUrl: string | null = null,
   moreNote: string | null = null,
+  mention: string | null = null,
 ) {
-  return buildMessage(alert, detailUrl, moreNote);
+  return buildMessage(alert, detailUrl, moreNote, mention);
 }
