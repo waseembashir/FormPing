@@ -9,6 +9,7 @@
 
 import type { FormSchedule } from './types';
 import { supabaseAdmin } from '@/lib/supabase';
+import { ownerFilterExpression, visibleTo } from '@/lib/ownership';
 import { urlKey } from '@/lib/projects/projectStore';
 
 /**
@@ -81,13 +82,33 @@ function toRow(s: FormSchedule): FormScheduleRow {
   };
 }
 
-export async function listSchedules(): Promise<FormSchedule[]> {
-  const { data, error } = await supabaseAdmin().from('form_watch_schedules').select(FS_COLS);
+/**
+ * Every schedule, or only those `scope` may see when one is given.
+ *
+ * The parameter is optional and defaults to the old behaviour deliberately.
+ * The TICKER calls this with no argument and must keep seeing every schedule,
+ * including other people's -- it runs them on a timer with nobody signed in.
+ * Narrowing this function by default would stop every scheduled monitor
+ * firing, and "monitors silently stopped running" looks nothing like its cause.
+ * So the filter is something a caller opts into, and only a request does.
+ */
+export async function listSchedules(scope?: string): Promise<FormSchedule[]> {
+  let query = supabaseAdmin().from('form_watch_schedules').select(FS_COLS);
+
+  const filter = ownerFilterExpression(scope);
+  if (filter) query = query.or(filter);
+
+  const { data, error } = await query;
   if (error) {
     console.warn(`[formWatch/scheduleStore] list: ${error.message}`);
     return [];
   }
-  return (data as FormScheduleRow[]).map(toSchedule);
+
+  const rows = (data as FormScheduleRow[]).map(toSchedule);
+  // Belt and braces, and the only correct path if the address was one the
+  // expression builder refused to put in a query. Re-checking rows the
+  // database already narrowed costs nothing and cannot be wrong.
+  return scope ? rows.filter((s) => visibleTo(scope, s.owner)) : rows;
 }
 
 export async function getSchedule(id: string): Promise<FormSchedule | undefined> {
