@@ -5,6 +5,7 @@ import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { requireRole, currentUser } from '@/lib/auth/authorize';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 import { saveFailuresForClient } from '@/lib/persistence';
+import { ownerScope } from '@/lib/ownerScope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,14 +52,19 @@ async function validateFormUrl(url: string): Promise<{ ok: true } | { ok: false;
 }
 
 /**
- * GET /api/form-watch — list all schedules.
+ * GET /api/form-watch — the schedules the caller may see.
+ *
+ * That is every schedule until per-user isolation is switched on, and the
+ * caller's own plus any legacy ownerless ones once it is. `ownerScope` returns
+ * undefined in both the flag-off and nobody-signed-in cases, which is what
+ * keeps this endpoint behaving exactly as it always has by default.
  *
  * `saveFailures` carries the monitors whose last run could not be stored, keyed
  * by schedule id, so a card can say so instead of presenting a stale summary as
  * current. In-memory and per-process — see lib/persistence. FR-87.
  */
-export async function GET() {
-  const schedules = await listSchedules();
+export async function GET(request: NextRequest) {
+  const schedules = await listSchedules(await ownerScope(request));
   return NextResponse.json({ schedules, saveFailures: saveFailuresForClient('form') });
 }
 
