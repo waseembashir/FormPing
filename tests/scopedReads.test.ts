@@ -14,7 +14,12 @@
  * becomes a limit on other people's rows. There is no error and no empty-state
  * distinction — the tab simply looks like you have never run anything.
  *
- * So this pins the ORDER of the query, not just the result.
+ * So this pins that the narrowing happens IN THE QUERY.
+ *
+ * (The builder's call order is incidental: PostgREST sends filters and the
+ * limit as separate parameters and the database applies WHERE before LIMIT
+ * regardless. What matters is that the filter reaches the query at all rather
+ * than being applied to the rows afterwards.)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -48,16 +53,15 @@ beforeEach(() => {
 });
 
 describe('loadReports narrows by owner in the query', () => {
-  it('applies the owner filter before the limit', async () => {
+  it('sends the owner filter to the database alongside the limit', async () => {
     const { loadReports } = await import('@/lib/reportStore');
     await loadReports('example.com', 50, 'owner@example.com');
 
     const or = calls.chain.indexOf('or');
     const limit = calls.chain.indexOf('limit');
 
-    expect(or, 'a scoped read must narrow in the query').toBeGreaterThan(-1);
+    expect(or, 'a scoped read must narrow in the query, not afterwards').toBeGreaterThan(-1);
     expect(limit, 'the query should still be limited').toBeGreaterThan(-1);
-    expect(or, 'the owner filter must come before the limit').toBeLessThan(limit);
   });
 
   it('keeps ownerless reports in that filter', async () => {
