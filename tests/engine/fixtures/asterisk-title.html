@@ -1,0 +1,46 @@
+<!--
+  A contact form whose most prominent short line above the fields is NOT a title.
+
+  Trimmed from the shape seen on dev.apexure.org/surpassind, where the report
+  named the form "*". Two decoys, both real patterns:
+
+    * a required-field marker, bold and coloured, sitting directly above the
+      first input — which is exactly where a form's own title usually sits
+    * a discount badge ("50%"), styled large, which produced the other wrong
+      title on the same site
+
+  Both are short, both are visually prominent, both precede the fields. The real
+  title is further up and marked up properly, so an engine that prefers the
+  nearest prominent line over an actual heading picks a glyph and prints it as
+  the form's name.
+-->
+<!doctype html>
+<html>
+  <head><title>Surpass India — Contact</title></head>
+  <body>
+    <main>
+      <section class="enquiry">
+        <h2>Request a callback</h2>
+
+        <form action="/enquiry" method="post">
+          <div class="badge" style="font-size:22px;font-weight:700">50%</div>
+          <span class="req" style="font-size:18px;font-weight:700;color:#e11d48">*</span>
+
+          <label for="name">Your name</label>
+          <input id="name" name="name" type="text" required />
+
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required />
+
+          <label for="phone">Phone</label>
+          <input id="phone" name="phone" type="tel" />
+
+          <label for="message">How can we help?</label>
+          <textarea id="message" name="message" rows="4"></textarea>
+
+          <button type="submit">Send enquiry</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>
