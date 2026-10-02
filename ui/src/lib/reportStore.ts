@@ -12,6 +12,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase';
+import { ownerFilterExpression, visibleTo } from '@/lib/ownership';
 
 /**
  * How many reports to keep per site.
@@ -90,19 +91,42 @@ export async function removeReports(site: string): Promise<void> {
   if (error) console.warn(`[reportStore] removeReports: ${error.message}`);
 }
 
-/** Load stored reports for a site, newest-first, up to `limit` (default 50). */
-export async function loadReports(site: string, limit = 50): Promise<StoredReport[]> {
-  const { data, error } = await supabaseAdmin()
+/**
+ * Stored reports for a site, newest-first, up to `limit` (default 50).
+ *
+ * `scope` is optional and omitting it returns everything, which is what the
+ * shared Projects views rely on -- they aggregate across all owners so the team
+ * can see which sites are already covered. Only the Content Changes tab passes
+ * a scope.
+ *
+ * `owner` has to be selected now even though nothing outside this function
+ * reads it: the filtering happens on the row, before it becomes a StoredReport,
+ * so the public shape is unchanged.
+ *
+ * The scope is applied IN THE QUERY rather than to the results, because `limit`
+ * is applied by the database first. Filtering afterwards would mean a person
+ * whose reports happen to sit behind fifty of someone else's saw an empty tab
+ * while having plenty of their own -- the limit would silently become a limit
+ * on other people's rows.
+ */
+export async function loadReports(site: string, limit = 50, scope?: string): Promise<StoredReport[]> {
+  let query = supabaseAdmin()
     .from('change_reports')
-    .select('report_ts, report')
-    .eq('site', safeSegment(site))
-    .order('report_ts', { ascending: false })
-    .limit(limit);
+    .select('report_ts, report, owner')
+    .eq('site', safeSegment(site));
+
+  const filter = ownerFilterExpression(scope);
+  if (filter) query = query.or(filter);
+
+  const { data, error } = await query.order('report_ts', { ascending: false }).limit(limit);
   if (error) {
     console.warn(`[reportStore] loadReports: ${error.message}`);
     return [];
   }
-  return (data as { report_ts: string; report: unknown }[]).map((r) => ({
+  const rows = (data as { report_ts: string; report: unknown; owner: string | null }[]).filter((r) =>
+    visibleTo(scope, r.owner ?? undefined),
+  );
+  return rows.map((r) => ({
     timestamp: r.report_ts,
     report: r.report,
   }));

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { siteKey } from '@/lib/watchRegistry';
 import { loadReports } from '@/lib/reportStore';
+import { ownerScope } from '@/lib/ownerScope';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,6 @@ export async function GET(request: NextRequest) {
   const limit = limitRaw ? Math.max(1, Math.min(200, parseInt(limitRaw, 10) || 50)) : 50;
 
   const site = siteKey(url);
-  const reports = await loadReports(site, limit);
+  const reports = await loadReports(site, limit, await ownerScope(request));
   return NextResponse.json({ site, reports });
 }

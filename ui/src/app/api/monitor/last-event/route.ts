@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { siteKey } from '@/lib/watchRegistry';
 import { latestEventsForSites } from '@/lib/changeEventStore';
+import { ownerScope } from '@/lib/ownerScope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,6 @@ export async function GET(request: NextRequest) {
   const site = siteKey(url);
   if (!site || site === 'unknown') return NextResponse.json({ event: null });
 
-  const latest = await latestEventsForSites([site]);
+  const latest = await latestEventsForSites([site], await ownerScope(request));
   return NextResponse.json({ event: latest.get(site) ?? null });
 }
