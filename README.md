@@ -29,6 +29,7 @@ Find, fill and verify contact forms on sites you own or are authorized to test, 
 - [Roles & access](#roles--access)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
+- [How a run flows](#how-a-run-flows)
 - [Getting started](#getting-started)
 - [Command-line engine](#command-line-engine)
 - [Reference](#reference)
@@ -248,6 +249,87 @@ formping/
 ```
 
 The root package is the engine; `ui/` is the web app and has its own dependencies.
+
+---
+
+## How a run flows
+
+Three paths through the app, each expanded below. They share the same engine and the same stores — what differs is who starts a run and what happens to the result.
+
+<details>
+<summary><strong>A form test, start to finish</strong> — the Form Tester</summary>
+
+```mermaid
+flowchart LR
+    A[Form Tester tab] -->|POST /api/run| B[Route]
+    B -->|spawns| C[CLI engine]
+    C --> D[Find the contact page]
+    D --> E[Find the form on it]
+    E --> F[Fill it<br/>submit only in Live mode]
+    F -->|streams results| B
+    B --> G[Screenshots to object storage]
+    B --> H[Result stored]
+    H --> I[Projects]
+```
+
+The route spawns the engine as a child process and streams its output back to the browser, so a long run reports progress rather than finishing in silence. Each result passes through a step that swaps the engine's inline screenshots for hosted URLs, which is why the heavy bytes stop at the server and never reach the browser.
+
+The tab itself keeps what you see in the browser; the stored result is what Projects reads. That is why clearing the tab does not remove anything from Projects.
+
+</details>
+
+<details>
+<summary><strong>A scheduled check</strong> — Form Scheduler and Uptime &amp; SSL</summary>
+
+```mermaid
+flowchart LR
+    A[Ticker<br/>every 60s] --> B{Any schedule due?}
+    B -->|no| A
+    B -->|yes| C[Run the same engine]
+    C --> D[History row]
+    C --> E[Durable per-URL result]
+    C --> F{Does this carry news?}
+    F -->|verdict changed| G[Alert, mentioning the owner]
+    F -->|same as last time| H[Recorded, no alert]
+    E --> I[Projects]
+```
+
+The ticker runs on its own timer with nobody signed in, so it reads every schedule regardless of who created it. A run inherits its owner from the schedule that triggered it, which is how a scheduled failure reaches the person who asked for the check.
+
+Two rows are written per run and they answer different questions: the history row is what happened on this check, the durable per-URL result is the latest state of that URL. The second survives the monitor being stopped, which is why Projects still shows a result for a URL nobody is watching any more.
+
+An alert is sent when the run carries news — a first check, a changed verdict, a change in the form itself, or a spaced reminder that a problem persists.
+
+</details>
+
+<details>
+<summary><strong>A content-change run</strong> — snapshot, compare, watch</summary>
+
+```mermaid
+flowchart LR
+    A[Content Changes tab] -->|POST /api/monitor| B[Route]
+    B -->|spawns| C[Change monitor]
+    C --> D[Crawl the site from its homepage]
+    D --> E{Mode}
+    E -->|snapshot| F[Baseline saved<br/>event recorded]
+    E -->|compare| G[Diff against the baseline]
+    E -->|watch| H[Compare on a loop]
+    G --> I[Report stored]
+    H --> I
+    I --> J[Alert, mentioning the owner]
+    F --> K[Projects]
+    I --> K
+```
+
+Tracking is per hostname rather than per URL, because the monitor crawls a whole site from its homepage. URLs sharing a host therefore share their change history.
+
+A snapshot writes no report — there is nothing to compare yet — so it records an event instead. That event is what lets Projects show a freshly baselined URL as tracked rather than untouched.
+
+A watch outlives the request that started it. The server re-spawns active watches when it restarts, recovering each one's settings and owner from disk, since that path has no signed-in user to ask.
+
+</details>
+
+---
 
 ---
 
