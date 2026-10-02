@@ -1,0 +1,35 @@
+-- FR-55 — the cached Slack user id, so an alert can @mention whoever set the monitor up.
+--
+-- Alerts are routed by the `owner` column FR-74 added: the email of the person
+-- who created the monitor. Slack cannot be told to mention an email, only a user
+-- id, and the only way to turn one into the other is `users.lookupByEmail`.
+--
+-- This column is that lookup's CACHE, not a field anybody is expected to fill
+-- in. A bot token resolves the id the first time a person's monitor alerts, and
+-- the answer is kept here. Three reasons that matters:
+--
+--   * no per-user setup -- a new teammate is mentioned correctly on their first
+--     alert, with nobody remembering to configure them. The alternative we
+--     considered was a hand-maintained list, which fails silently and fails
+--     exactly when somebody new starts relying on it
+--   * it survives a Slack outage, a revoked token or a removed scope: a cached
+--     id still mentions correctly while lookups are failing
+--   * `users.lookupByEmail` is rate limited, and an alert storm is precisely
+--     when we would hit that limit
+--
+-- Still editable by hand, which is the escape hatch for an address Slack cannot
+-- resolve -- somebody whose Slack account uses a different email from their
+-- Google one.
+--
+-- NULL means "not resolved yet", not "no Slack account". Nothing reads this
+-- column until the code that populates it ships, so applying this changes no
+-- behaviour at all.
+--
+-- Additive and idempotent: a nullable column with no default does not rewrite
+-- the table and does not touch a single existing row, so there is nothing to
+-- undo.
+--
+-- Run once per schema: `public` first, then `dev` -- see the README in this
+-- folder for why that order, and verify both afterwards.
+
+alter table app_users add column if not exists slack_user_id text;
