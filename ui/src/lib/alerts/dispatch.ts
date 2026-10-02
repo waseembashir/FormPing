@@ -21,6 +21,7 @@
 
 import { logAlert, recordDelivery } from './store';
 import { sendToSlack } from './channels/slack';
+import { mentionFor } from './slackMentions';
 import type { AlertDelivery, AlertInput } from './types';
 
 /** App base URL, for deep-linking a notification back to where the detail lives. */
@@ -61,7 +62,16 @@ export async function dispatchAlert(
     // 3. Fan out. Each channel is independently guarded and allowed to fail.
     const base = appBaseUrl();
     const detailUrl = base && opts.detailPath ? `${base}${opts.detailPath}` : null;
-    const slack = await sendToSlack(alert, { detailUrl, moreNote: opts.moreNote ?? null });
+    // Who to @mention, resolved HERE rather than inside the Slack channel so
+    // that building a message stays free of the database. The channel module is
+    // exercised by the engine test suite, which installs the root package only
+    // -- pulling Supabase into it breaks CI rather than anything a user sees.
+    //
+    // Null for every failure: no owner, no bot token, an address Slack does not
+    // know, somebody who left the channel, Slack unreachable. All of them mean
+    // "post it unmentioned", which is exactly today's behaviour. FR-55.
+    const mention = await mentionFor(alert.owner);
+    const slack = await sendToSlack(alert, { detailUrl, moreNote: opts.moreNote ?? null, mention });
     delivery.slack = { ok: slack.ok, note: slack.note, at: new Date().toISOString() };
 
     // 4. Persist the outcome for debugging (best-effort; never blocks).

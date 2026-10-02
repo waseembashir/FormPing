@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser, requireRole } from '@/lib/auth/authorize';
+import { buildBugReportPayload } from '@/lib/alerts/bugReportMessage';
 import {
   insertBugReport,
   listBugReports,
@@ -19,8 +20,6 @@ interface Report {
   reporter: string | null;
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
 /** Best-effort Slack ping so a report is seen immediately. Never throws. */
 async function pingSlack(r: Report): Promise<void> {
   // Bug reports go to their OWN channel if BUG_REPORT_SLACK_WEBHOOK_URL is set;
@@ -28,34 +27,7 @@ async function pingSlack(r: Report): Promise<void> {
   const webhook = process.env.BUG_REPORT_SLACK_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL;
   if (!webhook) return;
 
-  // Structured message: a red bar (no emoji) + Name / Email / Message laid out so
-  // it's clear WHO reported it and WHAT they need. Slack caps a section at 3000
-  // chars, so the message is trimmed well under.
-  const message = esc(r.message).slice(0, 2800);
-  const payload = {
-    attachments: [
-      {
-        color: '#dc2626', // red bar
-        blocks: [
-          { type: 'header', text: { type: 'plain_text', text: 'New bug report', emoji: false } },
-          {
-            type: 'section',
-            fields: [
-              { type: 'mrkdwn', text: `*Name*\n${r.name ? esc(r.name) : '—'}` },
-              { type: 'mrkdwn', text: `*Email*\n${r.email ? esc(r.email) : '—'}` },
-            ],
-          },
-          { type: 'section', text: { type: 'mrkdwn', text: `*Message*\n${message}` } },
-          {
-            type: 'context',
-            elements: [
-              { type: 'mrkdwn', text: `Page: ${r.page ? esc(r.page) : 'n/a'}${r.reporter ? `  ·  signed in as ${esc(r.reporter)}` : ''}` },
-            ],
-          },
-        ],
-      },
-    ],
-  };
+  const payload = buildBugReportPayload(r);
   try {
     await fetch(webhook, {
       method: 'POST',

@@ -41,6 +41,17 @@ export interface AlertInput {
   /** The monitored URL, when applicable. */
   url?: string | null;
   /**
+   * Whose monitor this is — the email of whoever set it up, carried straight
+   * from the row that raised the alert (FR-74). Used to @mention them so an
+   * alert reaches a person rather than a channel.
+   *
+   * Absent for alerts nobody owns: legacy monitors created before ownership
+   * existed, and system-level alerts like the monitoring-outage notice, which
+   * is about the app itself and belongs to everyone. Those still alert, just
+   * unmentioned. FR-55.
+   */
+  owner?: string | null;
+  /**
    * The COMPLETE structured payload — the whole change report, the whole run
    * record, whatever the sender has. Never pre-trimmed: the inbox keeps all of
    * it, and it is a channel's job to decide how much of it it can show.

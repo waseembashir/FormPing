@@ -47,7 +47,12 @@ const num = (v: unknown): number => (typeof v === 'number' ? v : 0);
  *
  * Only fires when something actually changed — a clean compare is not news.
  */
-async function alertOnChanges(site: string, rootUrl: string, parsed: Record<string, unknown>): Promise<void> {
+async function alertOnChanges(
+  site: string,
+  rootUrl: string,
+  parsed: Record<string, unknown>,
+  owner: string | undefined,
+): Promise<void> {
   const changesFound = num(parsed.changesFound);
   if (changesFound <= 0) return;
 
@@ -67,6 +72,9 @@ async function alertOnChanges(site: string, rootUrl: string, parsed: Record<stri
       summary: typeof parsed.summary === 'string' ? parsed.summary : undefined,
       site,
       url: rootUrl,
+      // Carried from the watch's options, which is also where a watch resumed
+      // after a restart recovers it -- that path has no session to ask. FR-55.
+      owner,
       dedupeKey: `change:${site}:${checkedAt}`,
       occurredAt: checkedAt,
     },
@@ -185,7 +193,7 @@ export function spawnMonitor(
             severity: topSeverity(parsed),
             summary: typeof parsed.summary === 'string' ? parsed.summary : null,
           });
-          void alertOnChanges(site, opts.url, parsed);
+          void alertOnChanges(site, opts.url, parsed, opts.owner);
 
           handlers.onReport?.(parsed);
         }
@@ -236,7 +244,7 @@ export function spawnMonitor(
             severity: topSeverity(parsed),
             summary: typeof parsed.summary === 'string' ? parsed.summary : null,
           });
-          void alertOnChanges(site, opts.url, parsed);
+          void alertOnChanges(site, opts.url, parsed, opts.owner);
 
           handlers.onReport?.(parsed);
         }
