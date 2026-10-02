@@ -103,6 +103,17 @@ export interface StatusSite {
   dailyUptime: UptimeDay[];
   /** Incidents (days with any downtime) in the selected window. */
   incidents: number;
+  /**
+   * Who set up the form monitor, and who set up the uptime monitor — separate,
+   * because one person can watch a page's contact form while another watches
+   * the same page's uptime.
+   *
+   * INTERNAL ONLY. Both are omitted from the public client status page, which
+   * is shared with people outside the team and has no business naming staff.
+   * Absent on monitors created before per-user isolation. FR-74.
+   */
+  formOwner?: string;
+  siteOwner?: string;
   /** SSL certificate summary, or null when SSL isn't monitored. */
   ssl: { valid: boolean; daysRemaining: number | null } | null;
   /** Contact-form health: true = working, false = attention, null = not monitored. */

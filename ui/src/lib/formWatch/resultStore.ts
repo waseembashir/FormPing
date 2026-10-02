@@ -19,6 +19,8 @@ import { WRITE_OK, essentialWriteFailed, type WriteOutcome } from '@/lib/persist
 import { extractFormRunDetail, type FormRunDetail } from '@/lib/formRunDetail';
 
 export interface FormWatchResult {
+  /** Whose monitor produced this result — survives the schedule being stopped. FR-74. */
+  owner?: string;
   /** Normalized + lowercased URL — the map key (matches health.ts key()). */
   url: string;
   /** The URL as stored on the schedule. */
@@ -36,6 +38,7 @@ export interface FormWatchResult {
 }
 
 interface FormResultRow {
+  owner?: string | null;
   url_key: string;
   input_url: string;
   status: string;
@@ -45,11 +48,12 @@ interface FormResultRow {
   ran_at: string;
   detail?: FormRunDetail | null;
 }
-const BASE_COLS = 'url_key, input_url, status, reason_code, form_found, mode, ran_at';
+const BASE_COLS = 'url_key, input_url, status, reason_code, form_found, mode, ran_at, owner';
 const COLS = `${BASE_COLS}, detail`;
 
 function rowToResult(r: FormResultRow): FormWatchResult {
   return {
+    ...(r.owner ? { owner: r.owner } : {}),
     url: r.url_key,
     inputUrl: r.input_url,
     status: r.status as FormRunStatus,

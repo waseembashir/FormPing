@@ -292,6 +292,11 @@ export async function buildClientStatus(
         incidents: incidentDays(win),
         ssl,
         formWorking: formWorking(h, internal),
+        // Attribution is the point of the shared view: everyone should be able
+        // to see that a URL is already covered and by whom, so nobody sets up a
+        // second monitor for it. The name is public even when the detail is not.
+        ...(internal && h.form.owner ? { formOwner: h.form.owner } : {}),
+        ...(internal && h.site.owner ? { siteOwner: h.site.owner } : {}),
         ...(hasPrev ? { uptimePrevPct: uptimePct(prev!), incidentsPrev: incidentDays(prev!) } : {}),
         ...(showUptime ? { lastCheckedAt: h.site.lastCheckedAt ?? null } : {}),
         ...(internal && h.change?.tracked === true ? { changeTracked: true } : {}),

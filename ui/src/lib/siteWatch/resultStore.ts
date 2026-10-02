@@ -17,6 +17,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { WRITE_OK, essentialWriteFailed, type WriteOutcome } from '@/lib/persistence';
 
 export interface SiteWatchResult {
+  /** Whose monitor produced this result — survives the schedule being stopped. FR-74. */
+  owner?: string;
   /** Normalized + lowercased URL — the map key. */
   url: string;
   inputUrl: string;
@@ -55,6 +57,7 @@ export interface SiteCheckDetail {
 }
 
 interface SiteResultRow {
+  owner?: string | null;
   url_key: string;
   input_url: string;
   classification: string | null;
@@ -67,11 +70,12 @@ interface SiteResultRow {
   detail?: SiteCheckDetail | null;
 }
 const BASE_COLS =
-  'url_key, input_url, classification, status_code, response_ms, ssl_days_remaining, ssl_valid, domain_days_remaining, checked_at';
+  'url_key, input_url, classification, status_code, response_ms, ssl_days_remaining, ssl_valid, domain_days_remaining, checked_at, owner';
 const COLS = `${BASE_COLS}, detail`;
 
 function rowToResult(r: SiteResultRow): SiteWatchResult {
   return {
+    ...(r.owner ? { owner: r.owner } : {}),
     url: r.url_key,
     inputUrl: r.input_url,
     classification: (r.classification as UptimeClass) ?? undefined,

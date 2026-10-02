@@ -43,6 +43,13 @@ export interface UrlHealth {
   /** Contact-form health, from Form Watch (if this URL is monitored there). */
   form: {
     monitored: boolean;
+    /**
+     * Whose monitor this is. Per-SIGNAL rather than per-URL on purpose: one
+     * person can watch a page's contact form while somebody else watches the
+     * same page's uptime, so a single owner for the URL would be a guess.
+     * Absent on work that predates per-user isolation. FR-74.
+     */
+    owner?: string;
     /** True when NOT actively monitored but a persisted last result exists
      *  (the monitor was stopped/deleted; the result stays until project delete). */
     stopped?: boolean;
@@ -66,6 +73,8 @@ export interface UrlHealth {
   /** Uptime + SSL, from Site Watch (if this URL is monitored there). */
   site: {
     monitored: boolean;
+    /** Whose monitor this is — see `form.owner`. FR-74. */
+    owner?: string;
     /** True when NOT actively monitored but a persisted last result exists. */
     stopped?: boolean;
     upState?: SiteUpState;
