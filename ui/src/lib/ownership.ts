@@ -32,3 +32,38 @@ export interface Owned {
 export function inheritedOwner(source: Owned | null | undefined): Owned {
   return source?.owner ? { owner: source.owner } : {};
 }
+
+/**
+ * Whether a row is visible to the person asking.
+ *
+ * `scope` is whose view this is, or `undefined` when the question does not
+ * apply — the feature is off, or nobody is signed in. Both of those mean "show
+ * everything", which is what the app did before any of this existed.
+ *
+ * A row with no owner is visible to everyone. Those rows predate per-user
+ * isolation and nothing can say now who made them, so they stay shared until
+ * someone re-runs or claims them. Hiding them would make work disappear for
+ * everybody at once, on the deploy that switched the feature on.
+ */
+export function visibleTo(scope: string | undefined, owner: string | undefined): boolean {
+  if (!scope) return true;
+  if (!owner) return true;
+  return owner === scope;
+}
+
+/**
+ * The PostgREST `or=` expression that selects what `scope` may see, or null
+ * when the query should not be narrowed at all.
+ *
+ * Returns null for an address containing a comma, parenthesis, quote or
+ * backslash. PostgREST parses that expression as a comma-separated list, so
+ * such a character would change the filter's MEANING rather than be matched
+ * literally — a filter that silently selects the wrong rows is far worse than
+ * one that does not run. Google-verified addresses on an allow-listed domain
+ * cannot contain them, so this should never trigger; the caller falls back to
+ * filtering in memory with `visibleTo`, which is always correct.
+ */
+export function ownerFilterExpression(scope: string | undefined): string | null {
+  if (!scope || /[,()"\\]/.test(scope)) return null;
+  return `owner.is.null,owner.eq.${scope}`;
+}
