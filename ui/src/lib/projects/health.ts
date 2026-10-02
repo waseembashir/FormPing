@@ -77,6 +77,7 @@ function buildHealth(
     if (fs) {
       form = {
         monitored: true,
+        ...(fs.owner ? { owner: fs.owner } : {}),
         level: fs.lastStatus
           ? runVerdict(fs.lastReasonCode ?? '', fs.lastFormFound ?? false, fs.lastStatus).level
           : 'pending',
@@ -96,6 +97,9 @@ function buildHealth(
       form = {
         monitored: false,
         stopped: true,
+        // A stopped monitor still belongs to whoever set it up -- the durable
+        // result outlives the schedule, and so does its attribution.
+        ...(fr.owner ? { owner: fr.owner } : {}),
         level: v.level,
         reasonCode: fr.reasonCode,
         label: v.label,
@@ -113,6 +117,7 @@ function buildHealth(
     if (ss) {
       site = {
         monitored: true,
+        ...(ss.owner ? { owner: ss.owner } : {}),
         upState: ss.lastClassification ?? 'unknown',
         statusCode: ss.lastStatusCode ?? null,
         responseMs: ss.lastResponseMs ?? null,
@@ -128,6 +133,7 @@ function buildHealth(
       site = {
         monitored: false,
         stopped: true,
+        ...(sr.owner ? { owner: sr.owner } : {}),
         upState: sr.classification ?? 'unknown',
         statusCode: sr.statusCode,
         responseMs: sr.responseMs,
