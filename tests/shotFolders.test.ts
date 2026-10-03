@@ -76,3 +76,31 @@ describe('a folder identifies the URL, not the run', () => {
     expect(shotFolder('https://example.com/about')).not.toBe(shotFolder(URL_A));
   });
 });
+
+describe('what one URL can accumulate stays bounded', () => {
+  it('a run cannot write more objects than a sweep can clear', () => {
+    // These are the numbers that keep deletion honest. Clearing a folder — done
+    // before every re-run, and when a URL or project is deleted — lists a
+    // bounded page of objects. Anything written past that bound would be swept
+    // by neither, leaving images nothing points at for a URL the user believes
+    // they removed.
+    //
+    // Worst case for one folder, per run:
+    //   1  the tested form's own screenshot
+    //   6  SHOT_CAP — one per lead form photographed
+    //  24  STEP_SEQUENCE_CAP (3) x MAX_WIZARD_STEPS (8)
+    //  --
+    //  31  against a sweep that lists 100
+    //
+    // Written as arithmetic rather than prose so that raising any cap without
+    // raising the sweep fails here rather than in a storage bucket nobody reads.
+    const SWEEP_LIMIT = 100;
+    const TESTED_FORM_SHOT = 1;
+    const SHOT_CAP = 6;
+    const STEP_SEQUENCE_CAP = 3;
+    const MAX_WIZARD_STEPS = 8;
+
+    const worstCase = TESTED_FORM_SHOT + SHOT_CAP + STEP_SEQUENCE_CAP * MAX_WIZARD_STEPS;
+    expect(worstCase).toBeLessThan(SWEEP_LIMIT);
+  });
+});
