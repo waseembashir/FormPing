@@ -599,6 +599,7 @@ export async function runSingleSite(
         reachedSubmit,
         wizardContainerUsed,
         fieldsSeen,
+        stepShots,
       } = await fillForm(page, form, config);
       baseResult.errors.push(...fillErrors);
       if (wizardContainerUsed) baseResult.isMultiStep = true;
@@ -607,6 +608,8 @@ export async function runSingleSite(
       // re-derived the story or went without it. FR-94.
       baseResult.stepsWalked = stepsTraversed;
       baseResult.reachedFinalStep = reachedSubmit;
+      // Empty unless the Form Tester asked for them AND the form had steps.
+      if (stepShots.length) baseResult.stepShots = stepShots;
       // For a walked wizard, the accurate field count is what the walk saw across
       // ALL steps (radio groups collapsed) — form-scoped detection only counted
       // the fields inside the <form>, missing earlier steps' fields. FR-63.

@@ -215,6 +215,12 @@ export default function DocsContent() {
                   <strong>A newsletter box won’t hide your real form.</strong> Lots of sites have a small email sign-up in the footer of every page. If your actual contact form is a <strong>Typeform, HubSpot, Jotform</strong> or similar, we report that — not the sign-up box that happens to share the page. Your real form is what you get told about.
                 </Note>
                 <Note>
+                  <strong>A multi-step form is photographed step by step — in the modes that fill it.</strong> Safe and Live walk a wizard and keep a picture of each step as we complete it, so you can see exactly what was entered and how far the walk got. <strong className="text-ink">Detect can only ever show the first step</strong>: it fills nothing, and a wizard will not move past step one until that step’s required fields are completed. If a wizard reveals a further panel only after it is sent, Live is the only mode that reaches it, because Live is the only one that sends.
+                </Note>
+                <Note>
+                  <strong>We say how many steps we walked, not how many the form has.</strong> Reaching a form’s send button is the end of what can be filled, which is not always the end of the form — some wizards show another panel once submitted. So a result reads “walked 3 steps”, describing what we did, rather than claiming a total we did not measure.
+                </Note>
+                <Note>
                   <strong>We never test your login form.</strong> A sign-in or “create an account” form is a door for your customers, not a way for them to reach you — so it’s never the form we watch, even on a page where it’s the only form we can find. We’ll still tell you it’s there. The same goes for the invisible <strong>decoy boxes</strong> many forms hide to catch spam bots: we leave them alone and don’t count them, so the number of fields we report is the number your visitors actually fill in.
                 </Note>
                 <Note>

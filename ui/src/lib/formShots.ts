@@ -255,6 +255,8 @@ export async function removeShots(url: string): Promise<void> {
 
 /** The shot-carrying shape of a result, as far as this module cares. */
 interface ShotBearing {
+  /** One per step of a multi-step walk — same hosting path as every other shot. */
+  stepShots?: unknown;
   formShot?: unknown;
   /** The URL this run was ABOUT — keys the folder, and matches the runs table. */
   normalizedUrl?: unknown;
@@ -262,7 +264,7 @@ interface ShotBearing {
   /** Where the tested form was found — names its screenshot inside that folder. */
   resolvedContactPage?: unknown;
   finalUrl?: unknown;
-  siteForms?: { shot?: unknown; url?: unknown }[];
+  siteForms?: { shot?: unknown; url?: unknown; stepShots?: unknown }[];
 }
 
 /**
@@ -286,10 +288,32 @@ export async function hostFormShots<T>(raw: T, opts?: { variant?: ShotVariant })
   if (typeof result.formShot === 'string' && DATA_URL.test(result.formShot)) {
     slots.push({ get: () => result.formShot as string, set: (v) => { result.formShot = v; }, page: testedPage });
   }
+  // A wizard's steps, in order. Named by their position rather than by a page,
+  // because every step shares one URL — "step 2" is the only thing that
+  // distinguishes them, and a reader looking at four images needs to know which
+  // came first.
+  if (Array.isArray(result.stepShots)) {
+    const steps = result.stepShots as (string | undefined)[];
+    steps.forEach((shot, i) => {
+      if (typeof shot === 'string' && DATA_URL.test(shot)) {
+        slots.push({ get: () => steps[i] as string, set: (v) => { steps[i] = v; }, page: `step-${i + 1}` });
+      }
+    });
+  }
   if (Array.isArray(result.siteForms)) {
     for (const form of result.siteForms) {
       if (form && typeof form.shot === 'string' && DATA_URL.test(form.shot)) {
         slots.push({ get: () => form.shot as string, set: (v) => { form.shot = v; }, page: str(form.url) ?? testedPage });
+      }
+      // A wizard anywhere on the site, not only the one that was tested. The
+      // inventory walks lead forms too, so its steps are just as real.
+      if (form && Array.isArray(form.stepShots)) {
+        const steps = form.stepShots as (string | undefined)[];
+        steps.forEach((shot, i) => {
+          if (typeof shot === 'string' && DATA_URL.test(shot)) {
+            slots.push({ get: () => steps[i] as string, set: (v) => { steps[i] = v; }, page: `step-${i + 1}` });
+          }
+        });
       }
     }
   }
@@ -313,5 +337,20 @@ export async function hostFormShots<T>(raw: T, opts?: { variant?: ShotVariant })
   ]);
 
   slots.forEach((slot, i) => slot.set(hosted?.[i] ?? undefined));
+
+  // A dropped upload leaves a hole in the step array, and a hole renders as a
+  // gap in a sequence that is supposed to read in order. Better to show three
+  // steps than four with one missing — the count is already reported separately
+  // and honestly.
+  if (Array.isArray(result.stepShots)) {
+    result.stepShots = (result.stepShots as (string | undefined)[]).filter(Boolean);
+  }
+  if (Array.isArray(result.siteForms)) {
+    for (const form of result.siteForms) {
+      if (form && Array.isArray(form.stepShots)) {
+        form.stepShots = (form.stepShots as (string | undefined)[]).filter(Boolean);
+      }
+    }
+  }
   return raw;
 }

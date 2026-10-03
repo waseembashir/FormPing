@@ -51,15 +51,22 @@ describe('a wizard nobody walked', () => {
   });
 });
 
-describe('a wizard walked to the end', () => {
-  it('reports the number of steps, because reaching submit makes it known', () => {
+describe('a wizard walked to the submit control', () => {
+  it('says what the walk did, not how many steps the form has', () => {
+    // Reaching the submit control is the end of the FILLABLE sequence, not
+    // necessarily the end of the form. A real wizard shows three tabs, ends its
+    // second step in a submit control, and reveals the third only once sent — a
+    // run that does not submit can never see it.
+    //
+    // "3 steps" there would state a total we never measured, on a screen that
+    // visibly contradicts it. "walked 3 steps" is what we actually know.
     expect(stepSummary({ isMultiStep: true, stepsWalked: 3, reachedFinalStep: true })).toEqual({
-      chip: 'Multi-step · 3 steps',
+      chip: 'Multi-step · walked 3 steps',
       note: null,
     });
   });
 
-  it('adds no caveat — the fields listed do cover the whole form', () => {
+  it('adds no caveat — the fields listed do cover every step we walked', () => {
     expect(stepSummary({ isMultiStep: true, stepsWalked: 4, reachedFinalStep: true }).note).toBeNull();
   });
 });
@@ -77,5 +84,29 @@ describe('a wizard that stopped part-way', () => {
     expect(stepSummary({ isMultiStep: true, stepsWalked: 2, reachedFinalStep: false }).note).toMatch(
       /stopped before the final step/i,
     );
+  });
+});
+
+describe('an unwalked wizard explains its missing screenshots', () => {
+  it('says there are none, rather than leaving the gap unexplained', () => {
+    // Someone who knows this form has four steps sees one screenshot and
+    // reasonably concludes something failed. Nothing failed — nothing was
+    // attempted. An absence with no explanation reads as a defect.
+    const s = stepSummary({ isMultiStep: true, stepsWalked: 1 });
+    expect(s.note).toMatch(/screenshots?/i);
+  });
+
+  it('names the mode that would walk it, so the sentence ends in something to do', () => {
+    // A note that only states a limitation leaves the reader stuck. This one
+    // tells them which mode produces what they are looking for.
+    const s = stepSummary({ isMultiStep: true, stepsWalked: 1 });
+    expect(s.note).toMatch(/safe mode/i);
+  });
+
+  it('stays quiet once the walk actually happened', () => {
+    // A completed walk HAS its sequence, so repeating the instruction would be
+    // telling somebody to do what they just did.
+    const done = stepSummary({ isMultiStep: true, stepsWalked: 3, reachedFinalStep: true });
+    expect(done.note).toBeNull();
   });
 });

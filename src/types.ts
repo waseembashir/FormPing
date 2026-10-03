@@ -85,6 +85,20 @@ export interface AppConfig {
    * standalone landing pages whose form is inline and which have no separate
    * /contact page. Defaults to false — normal discovery behaviour. */
   landingPage: boolean;
+  /**
+   * Capture a screenshot of EACH step of a multi-step form, not just one.
+   *
+   * Off by default, and deliberately not on for scheduled checks. A wizard with
+   * four steps means four times the images, four times the upload time, on a run
+   * that already takes 30-90 seconds — paid on every check, forever, for
+   * evidence nobody looks at until something breaks. A person investigating a
+   * form by hand is exactly who needs it, so the Form Tester turns it on and the
+   * schedulers leave it alone.
+   *
+   * A single-step form captures nothing extra whatever this says: there is no
+   * sequence to show.
+   */
+  captureStepShots: boolean;
   saveScreenshotOnFailure: boolean;
   saveHtmlSnapshotOnFailure: boolean;
   outputFile?: string;
@@ -208,6 +222,20 @@ export interface FormOutcome {
   filledCount?: number;
   /** A short, plain qualifier — e.g. "multi-step", "no fillable fields reached". */
   note?: string;
+  /**
+   * What the walk learned, when this form was a wizard.
+   *
+   * The inventory runs the SAME fill as the primary form, wizard loop included,
+   * so a lead form's steps really are walked. These used to be computed and
+   * thrown away, leaving every non-primary wizard reported as unwalked with its
+   * first step's field count — the walk happened and nothing could see it.
+   */
+  stepsWalked?: number;
+  reachedFinalStep?: boolean;
+  /** Distinct fields seen across every step, not just the one on screen. */
+  fieldsSeen?: number;
+  /** One `data:` screenshot per step, hosted later like every other shot. */
+  stepShots?: string[];
 }
 
 /** One form found anywhere on the SITE (across pages), for the site-level
@@ -225,6 +253,13 @@ export interface SiteForm {
    * the probe. A surface must render nothing rather than pick a default. FR-94.
    */
   isMultiStep?: boolean;
+  /** Steps this form's walk traversed, when it was walked. */
+  stepsWalked?: number;
+  /** Whether that walk reached the final step. */
+  reachedFinalStep?: boolean;
+  /** One screenshot per step, in order — `data:` from the engine, hosted before
+   *  it reaches a browser, exactly as `shot` is. */
+  stepShots?: string[];
   /** Provider when third-party (Typeform, HubSpot, …). */
   provider?: string;
   /**
@@ -358,6 +393,16 @@ isMultiStep?: boolean;
    * mode sees that a wizard exists without learning how many steps it has. FR-94.
    */
   stepsWalked?: number;
+  /**
+   * One screenshot per step of a multi-step walk, in order, each taken after
+   * that step was filled. Only produced by the Form Tester — see
+   * `AppConfig.captureStepShots` for why a scheduled check does not pay for
+   * them. Absent for single-step forms, which are not a sequence.
+   *
+   * Leaves the engine as `data:` URLs and is rewritten to hosted URLs before it
+   * reaches a browser, exactly as the single form shot is.
+   */
+  stepShots?: string[];
   /** Whether the walk reached the submit control, i.e. saw the last step. FR-94. */
   reachedFinalStep?: boolean;
   /** How sure we are this is really the contact form. `low` means we matched

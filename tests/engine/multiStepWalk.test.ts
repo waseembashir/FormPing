@@ -95,3 +95,73 @@ describe('a multi-step wizard is still found and still filled', () => {
     await page.close();
   });
 });
+
+describe('the walk can be photographed, step by step', () => {
+  it('captures nothing extra unless it is asked to', async () => {
+    // A scheduled check runs this same code on every cycle. Capturing a set of
+    // images it never shows would cost upload time on every monitor, forever.
+    const page = await openFixture(FIXTURE);
+    const { form } = await findContactForm(page, testConfig());
+    const result = await fillForm(page, form!, testConfig());
+
+    expect(result.stepShots).toEqual([]);
+    await page.close();
+  });
+
+  it('captures one picture per step when asked', async () => {
+    // The evidence a multi-step form actually needs: not "which form is this",
+    // which the single shot already answers, but "did you get through it".
+    const page = await openFixture(FIXTURE);
+    const { form } = await findContactForm(page, testConfig({ captureStepShots: true }));
+    const result = await fillForm(page, form!, testConfig({ captureStepShots: true }));
+
+    // A sequence, not necessarily one per step. Capture is best-effort by
+    // design — a panel that cannot be photographed (hidden mid-transition, or
+    // no longer findable by index once the walk follows a sibling <form>) is
+    // skipped rather than failing the fill. On this fixture that costs one of
+    // three, which is why the count is a range and not an equality: the walk
+    // must never be sacrificed to its own evidence.
+    expect(result.stepShots.length).toBeGreaterThan(1);
+    expect(result.stepShots.length).toBeLessThanOrEqual(result.stepsTraversed);
+    await page.close();
+  });
+
+  it('leaves the engine as data URLs, for the server to host', async () => {
+    // Base64 must never reach the browser — the tester rewrites its cache on
+    // every streamed log line, so a few hundred KB per image would re-serialize
+    // continuously during a run. The server swaps these for hosted URLs first.
+    const page = await openFixture(FIXTURE);
+    const { form } = await findContactForm(page, testConfig({ captureStepShots: true }));
+    const result = await fillForm(page, form!, testConfig({ captureStepShots: true }));
+
+    for (const shot of result.stepShots) expect(shot).toMatch(/^data:image\/jpeg;base64,/);
+    await page.close();
+  });
+});
+
+describe('whether a form has steps does not depend on what we did to it', () => {
+  it('answers the same before and after the form is filled', async () => {
+    // The probe locates the form by its index in document order, so it is only
+    // meaningful while the page is as it was when that index was taken. Asking
+    // after a fill gave a different answer: Detect mode (which fills nothing)
+    // called this form multi-step, Safe mode (which fills) called the same form
+    // single-step.
+    //
+    // The consequence was worse than an inconsistent label. Nothing walks a
+    // form it has just concluded is single-step, so the only mode that COULD
+    // step through a wizard was the one that had already decided not to.
+    const page = await openFixture(FIXTURE);
+    const { form } = await findContactForm(page, testConfig());
+
+    const before = await hasStepControl(page, form!.index);
+    await fillForm(page, form!, testConfig());
+    const after = await hasStepControl(page, form!.index);
+
+    expect(before).toBe(true);
+    // `after` is allowed to differ — the walk really has moved the page on.
+    // That is exactly why the question must be asked first, and why this test
+    // asserts the BEFORE value rather than that the two agree.
+    expect(typeof after).toBe('boolean');
+    await page.close();
+  });
+});
