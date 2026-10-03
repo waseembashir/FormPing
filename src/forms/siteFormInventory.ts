@@ -117,7 +117,20 @@ async function fillLeadForm(page: Page, f: FormInfo, kind: FormKind, config: App
     const fr = await fillForm(page, toCandidate(f, kind), fillConfig);
     if (fr.filledFields.length > 0) {
       const multi = fr.stepsTraversed > 1 || fr.wizardContainerUsed;
-      return { state: 'filled', filledCount: fr.filledFields.length, ...(multi ? { note: 'multi-step' } : {}) };
+      return {
+        state: 'filled',
+        filledCount: fr.filledFields.length,
+        ...(multi ? { note: 'multi-step' } : {}),
+        // Everything the walk learned, carried out instead of discarded. This
+        // fill runs the full wizard loop, so a lead form's steps really are
+        // walked -- but only the fill count used to survive, which left every
+        // non-primary wizard reported as unwalked, showing its first step's
+        // field count and no sequence. The walk happened; nothing could see it.
+        stepsWalked: fr.stepsTraversed,
+        reachedFinalStep: fr.reachedSubmit,
+        ...(fr.fieldsSeen > 0 ? { fieldsSeen: fr.fieldsSeen } : {}),
+        ...(fr.stepShots.length ? { stepShots: fr.stepShots } : {}),
+      };
     }
     return { state: 'skipped', note: 'no fillable fields reached' };
   } catch (err) {
@@ -139,6 +152,23 @@ const KIND_RANK: Record<string, number> = { contact: 0, other: 1, newsletter: 2,
  * FR-81.
  */
 const SHOT_CAP = 6;
+/**
+ * How many forms on one site may keep a per-step SEQUENCE.
+ *
+ * A wizard can contribute up to MAX_WIZARD_STEPS images on its own, and the
+ * number of lead forms a crawl walks is not otherwise bounded — so without this
+ * a form-heavy site could write hundreds of objects into one folder. That
+ * matters beyond disk: the sweep that clears a folder before a re-run, and the
+ * one that deletes a URL's evidence, both list a bounded page of objects.
+ * Anything past it would be swept by neither — images nothing points at, for a
+ * URL the user believes they deleted.
+ *
+ * Three sequences and eight steps each stays comfortably inside that bound,
+ * while covering every site anyone is likely to look at: the wizards worth
+ * seeing are the lead forms, and a site with more than three is not clarified
+ * by photographing all of them.
+ */
+const STEP_SEQUENCE_CAP = 3;
 
 interface NativeRec {
   type: 'native';
@@ -230,6 +260,7 @@ export async function inventorySiteForms(
   const embedRecords: EmbedRec[] = [];
   let filledCount = 0;
   let shots = 0;
+  let sequences = 0;
   /** Identities of forms already handled this run — a header/footer form is the
    *  same form on every page, and doing the work again teaches us nothing. FR-81. */
   const seenSignatures = new Set<string>();
@@ -331,6 +362,24 @@ export async function inventorySiteForms(
             if (shot) shots += 1;
           }
 
+          // Does this form have steps? Asked HERE, before anything touches it.
+          //
+          // It used to be asked after the fill below, which made the answer
+          // depend on what we had just done: in Detect mode nothing was filled,
+          // the probe found the "Continue" control and said multi-step; in Safe
+          // mode the same form was filled first, the DOM moved under the probe,
+          // and the same form came back single-step. One form, two verdicts,
+          // decided by the mode rather than by the form.
+          //
+          // That is also why a wizard was never walked on the runs that could
+          // have walked it: the only mode that fills is the one that had already
+          // concluded there was nothing to step through.
+          //
+          // The probe locates the form by its index in document order, so it is
+          // only meaningful while the page is as it was when that index was
+          // taken. Before the fill is the one moment that holds.
+          const isMultiStep = await hasStepControl(page, form.index);
+
           let outcome: FormOutcome = { state: 'detected' };
           if (lead && alreadySeen) {
             // Same form, another page. Already filled where we first met it; the
@@ -347,6 +396,14 @@ export async function inventorySiteForms(
                 filledCount += 1;
                 logger.info(`Site inventory: filled the ${kind} form (${outcome.filledCount} fields)`);
               }
+              // Keep the step sequence only while there is budget for one. The
+              // walk still happened and its step COUNT and field total are kept
+              // either way -- what is dropped is the pictures, which is the part
+              // that grows without bound. See STEP_SEQUENCE_CAP.
+              if (outcome.stepShots?.length) {
+                if (sequences < STEP_SEQUENCE_CAP) sequences += 1;
+                else delete outcome.stepShots;
+              }
             } else if (isPrimaryContact) {
               outcome = { state: 'detected', note: 'tested as the primary contact form' };
             }
@@ -355,7 +412,7 @@ export async function inventorySiteForms(
           records.push({
             type: 'native',
             url,
-            isMultiStep: await hasStepControl(page, form.index),
+            isMultiStep,
             captcha: form.captcha,
             pageProtection,
             about: aboutOf(form),
@@ -483,10 +540,21 @@ export async function inventorySiteForms(
       url: rec.url, kind: rec.kind, about: rec.about, formType: 'native', isMultiStep: rec.isMultiStep,
       // Count the form's own fields; a site-wide search input is listed but
       // never counted, so the number matches the form on screen. FR-73.
-      fieldCount: ownFields(rec.meaningful, rec.kind).length, fields: rec.meaningful,
+      //
+      // For a WALKED wizard the honest count is what the walk saw across every
+      // step, not the one step visible when we found it. "Multi-step - 2 fields"
+      // on a three-step form is a true number answering the wrong question: it
+      // describes the panel on screen while the label describes the whole form.
+      fieldCount: rec.outcome.fieldsSeen ?? ownFields(rec.meaningful, rec.kind).length,
+      fields: rec.meaningful,
       security: { captcha: rec.captcha, pageProtection: rec.pageProtection },
       tracking: rec.tracking, siteWide: false, seenOn: 1, outcome: rec.outcome,
       hiddenFields: rec.hiddenFields,
+      // What the walk did, so the UI can say how far it got for THIS form
+      // rather than only for the primary one.
+      ...(rec.outcome.stepsWalked ? { stepsWalked: rec.outcome.stepsWalked } : {}),
+      ...(rec.outcome.reachedFinalStep !== undefined ? { reachedFinalStep: rec.outcome.reachedFinalStep } : {}),
+      ...(rec.outcome.stepShots?.length ? { stepShots: rec.outcome.stepShots } : {}),
       ...(rec.anchorId ? { anchorId: rec.anchorId } : {}),
       ...(rec.shot ? { shot: rec.shot } : {}),
     });
