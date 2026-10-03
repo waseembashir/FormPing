@@ -24,7 +24,7 @@ export function Modal({
   subtitle?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }) {
   useEffect(() => {
     if (!open) return;
@@ -42,7 +42,12 @@ export function Modal({
 
   if (!open) return null;
 
-  const width = size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-2xl' : 'max-w-md';
+  // `xl` exists for a dialog whose content is a form with a working column —
+  // the project form gives most of its width to the URL list, and that list is
+  // the only part doing real work. A narrower dialog squeezes it to match three
+  // short text inputs beside it.
+  const width =
+    size === 'sm' ? 'max-w-sm' : size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-md';
 
   return (
     <div
