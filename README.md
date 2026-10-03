@@ -93,7 +93,15 @@ For each form it reports the source page, native vs third-party embed (and which
 
 **Multi-step wizards are walked**, step by step (fill → Next → fill) until the submit control is reached — whichever shape the wizard takes. The steps may sit inside one `<form>`, outside it in a surrounding container, or in a **separate `<form>` per panel**; the walk follows the panel that is actually on screen rather than assuming the one it started in. Every step's fields are filled, counted once across the whole form, and reported with the labels they carry on the page.
 
-The run reports how many steps it traversed and whether it reached the last one, so a card can say "3 steps" where the walk completed and "reached step 2" where it stopped — never a total it did not observe.
+The run reports what the walk DID, never what the form contains. Reaching a submit control is the end of the fillable sequence, not necessarily the end of the form: a wizard can reveal a further panel only once it has been sent, and a run that does not submit cannot count it. So a card reads "walked 3 steps", or "reached step 2" where the walk stopped early — a description of the run rather than a claim about the form.
+
+**Whether a form has steps is decided before anything touches it.** The probe locates a form by its position in document order, so its answer is only meaningful while the page is as it was when that position was taken — filling a wizard moves the page out from under it. Asking first is what keeps one form from having two verdicts depending on the mode that looked at it.
+
+**A lead form found during the site crawl is walked like any other**, and reports what the walk learned: the steps it traversed, the fields it saw across all of them, and a screenshot of each. A wizard's field count is what the whole walk saw, not the one panel visible when it was found — "2 fields" on a three-step form is a true number answering the wrong question.
+
+**Per-step screenshots are a Form Tester feature.** Each costs an image and a moment on a run that already takes 30–90 seconds, so a scheduled monitor keeps its single shot: paying for a set on every check, forever, buys evidence nobody opens until something breaks. A single-step form produces none — one step is not a sequence, and the form's own screenshot already shows it.
+
+What any of this can show depends on the mode. Detect fills nothing, so it sees the first step and no further: a wizard does not advance until its required fields are completed. Safe walks and photographs every step up to the send control. Live reaches whatever lies beyond it, being the only mode that submits.
 
 ### 3. Submitting — Live mode only
 
