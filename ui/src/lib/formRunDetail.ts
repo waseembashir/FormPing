@@ -49,6 +49,14 @@ export interface FormRunDetail {
   fieldCount?: number;
   fields?: { label: string; type: string }[];
   isMultiStep?: boolean;
+  /**
+   * One hosted screenshot per step of a multi-step walk, in order.
+   *
+   * Only the Form Tester produces these; a scheduled check keeps its single
+   * shot. Hosted URLs only, for the same reason every other shot is: base64 in
+   * a row would put a few hundred KB into every read of it.
+   */
+  stepShots?: string[];
   /** What the matched form is — contact / newsletter / search / login / other.
    *  Without it the dashboard could say "not a contact form" but never say what
    *  it WAS, which is the one thing the reader wants to know. FR-73. */
@@ -117,6 +125,15 @@ export function extractFormRunDetail(raw: unknown): FormRunDetail {
   }
 
   const ms = bool(r.isMultiStep); if (ms !== undefined) d.isMultiStep = ms;
+
+  // Hosted only, and capped. A wizard the engine walked to its limit could
+  // otherwise put a dozen URLs in a row that is read on every dashboard load.
+  if (Array.isArray(r.stepShots)) {
+    const steps = (r.stepShots as unknown[])
+      .filter((s): s is string => typeof s === 'string' && /^https?:\/\//.test(s))
+      .slice(0, 12);
+    if (steps.length) d.stepShots = steps;
+  }
   const kind = str(r.formKind); if (kind !== undefined) d.formKind = kind;
   if (typeof r.resolvedContactPage === 'string' || r.resolvedContactPage === null) d.resolvedPage = r.resolvedContactPage as string | null;
   const lp = bool(r.landingPageMode); if (lp !== undefined) d.landingPageMode = lp;

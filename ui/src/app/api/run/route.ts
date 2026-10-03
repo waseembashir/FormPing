@@ -72,6 +72,10 @@ export async function POST(request: NextRequest) {
 
       // Build CLI args
       const args: string[] = [cliPath, '--stream', '--mode', mode];
+      // Per-step screenshots are a Form Tester thing. A scheduled check would
+      // pay for them on every run, forever, for evidence nobody opens until
+      // something breaks — see AppConfig.captureStepShots.
+      args.push('--step-shots');
       if (timeout) args.push('--timeout', String(timeout));
       if (email) args.push('--email', email);
       if (headed) args.push('--headed');

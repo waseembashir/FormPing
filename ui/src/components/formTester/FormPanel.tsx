@@ -5,7 +5,7 @@ import { runVerdict } from '@/lib/formWatch/verdict';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { aboutIsTitle, displayName, DOT, KindIcon, type PreparedForm, type Tone } from './formMeta';
 import { stepSummary } from '@/lib/stepSummary';
-import { EmbedUnreadableNote, formHref, FormShot, LowConfidenceNote, PageProtectionNote } from './FormEvidence';
+import { EmbedUnreadableNote, formHref, FormShot, LowConfidenceNote, PageProtectionNote, StepShots } from './FormEvidence';
 
 /**
  * FR-75 — one form's detail block inside the multi-form results log: a category
@@ -76,7 +76,7 @@ export function FormPanel({
   /** Runs a real live submission for this form's URL; resolves the outcome. */
   onSubmitLiveTest?: (url: string) => Promise<SiteResult | null>;
 }) {
-  const { form, tested, status, rail, isMultiStep, stepsWalked, reachedFinalStep, detail, lowConfidence } = prepared;
+  const { form, tested, status, rail, isMultiStep, stepsWalked, stepShots, reachedFinalStep, detail, lowConfidence } = prepared;
   // One place decides what to say about steps, so the chip and the sentence
   // below it can never tell different stories. FR-94.
   const steps = stepSummary({ isMultiStep, stepsWalked, reachedFinalStep });
@@ -225,6 +225,11 @@ export function FormPanel({
         {/* Evidence (FR-73): a picture of this exact form, so "we found your
             form" is checkable rather than a claim you have to take on trust. */}
         <FormShot src={form.shot} alt={`Screenshot of the ${displayName(form)} on ${form.url}`} />
+
+        {/* And, for a wizard, the walk itself — one picture per step, in order.
+            The shot above says which form we matched; this says we got through
+            it, which is the question a multi-step form actually raises. */}
+        <StepShots shots={stepShots} formName={displayName(form)} />
 
         {/* Type · fields · structure · security chips */}
         <div className="flex flex-wrap items-center gap-2">

@@ -33,6 +33,9 @@ export interface PreparedForm {
   /** Known only for the tested form (the inventory doesn't walk each form's steps). */
   isMultiStep?: boolean;
   stepsWalked?: number;
+  /** One hosted screenshot per step, in order — only on the form that was
+   *  actually walked, and only from a Form Tester run. */
+  stepShots?: string[];
   reachedFinalStep?: boolean;
   /** The tested form's full verdict sentence (e.g. "Submitted — no confirmation seen"). */
   detail?: string;
@@ -186,6 +189,7 @@ export function singleFormPrepared(result: SiteResult): PreparedForm | null {
     rail: status.tone === 'ok' ? 'ok' : status.tone === 'info' ? 'info' : 'accent',
     isMultiStep: result.isMultiStep,
     stepsWalked: result.stepsWalked,
+    stepShots: result.stepShots,
     reachedFinalStep: result.reachedFinalStep,
     detail: runVerdict(result.reasonCode, result.formFound, result.finalStatus, result.formConfidenceLevel).label,
     ...(result.formConfidenceLevel === 'low' ? { lowConfidence: result.lowConfidenceReason ?? '' } : {}),

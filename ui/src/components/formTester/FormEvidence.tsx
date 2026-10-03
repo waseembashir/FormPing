@@ -76,6 +76,62 @@ export function FormShot({ src, alt }: { src?: string; alt: string }) {
  * to read costs more than the jump is worth. Callers show the clean URL, link to
  * this href, and name the anchor in the tooltip. FR-73.
  */
+/**
+ * The walk through a multi-step form, one picture per step.
+ *
+ * Shown as a numbered sequence rather than a gallery, because the order IS the
+ * evidence: a wizard that fails at step three is a different story from one that
+ * fails at step one, and a set of unlabelled images cannot tell them apart.
+ *
+ * Each shot was taken AFTER its step was filled, so what you are looking at is
+ * what we actually put in — the answer to "did it really get through", which is
+ * the question a multi-step form raises and a single screenshot cannot answer.
+ *
+ * Renders nothing when there is no sequence. A single-step form has none by
+ * design, and an absent set is not the same as an empty one.
+ */
+export function StepShots({ shots, formName }: { shots?: string[]; formName: string }) {
+  if (!shots?.length) return null;
+
+  return (
+    <figure className="flex flex-col gap-2">
+      <figcaption className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-faint">
+        <CameraIcon />
+        Each step, as we filled it
+      </figcaption>
+      <ol className="grid gap-3 sm:grid-cols-2">
+        {shots.map((src, i) => (
+          <li key={src} className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+              Step {i + 1}
+            </span>
+            <a
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              title={`Open step ${i + 1} at full size`}
+              className="group block overflow-hidden rounded-lg border border-line bg-ground/30 transition-colors hover:border-line-strong"
+            >
+              {/* Same rules as the single form shot: a plain <img> at an
+                  arbitrary Storage URL, lazily loaded so a closed tab costs
+                  nothing, and object-contain so a tall step is scaled rather
+                  than sliced. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={src}
+                alt={`Step ${i + 1} of the ${formName}, after we filled it`}
+                loading="lazy"
+                decoding="async"
+                className="mx-auto max-h-80 w-full object-contain"
+              />
+            </a>
+          </li>
+        ))}
+      </ol>
+    </figure>
+  );
+}
+
 export function formHref(url: string, anchorId?: string): string {
   return anchorId ? `${url.split('#')[0]}#${anchorId}` : url;
 }

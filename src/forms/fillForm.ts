@@ -1,6 +1,7 @@
 import type { Locator, Page } from 'playwright';
 import type { AppConfig, FormCandidate, FilledField } from '../types.js';
 import { logger } from '../utils/logger.js';
+import { captureFormShot } from './captureFormShot.js';
 
 type FieldRole =
   | 'fullName'
@@ -67,6 +68,19 @@ export interface FillResult {
    *  Accurate for multi-step forms whose earlier steps live outside the <form>,
    *  where form-scoped detection undercounts. FR-63. */
   fieldsSeen: number;
+  /**
+   * One screenshot per step of a multi-step walk, in the order they were
+   * reached, as `data:` URLs — empty unless `captureStepShots` is on.
+   *
+   * Each is taken AFTER that step was filled, because the question a wizard
+   * raises is not "which form is this" (the single form shot already answers
+   * that) but "did you actually get through it". A filled step is the evidence;
+   * an empty one only proves we were looking at it.
+   *
+   * Never captured for a single-step form: one step is not a sequence, and the
+   * form shot already shows it.
+   */
+  stepShots: string[];
 }
 
 /** Attribute-selector-safe quoting — handles field names like names[first_name] */
@@ -779,6 +793,7 @@ export async function fillForm(
   // each step in a different one. FR-94.
   let activeForm = form;
   const panelsFilled = new Set<number>([form.index]);
+  const stepShots: string[] = [];
 
   for (let step = 1; step <= MAX_WIZARD_STEPS; step++) {
     stepsTraversed = step;
@@ -793,6 +808,19 @@ export async function fillForm(
     }
     if (stepResult.honeypotReason && !honeypotReason) {
       honeypotReason = stepResult.honeypotReason;
+    }
+
+    // A picture of this step, as filled. Taken before the Next click, because
+    // once that lands this panel is gone. Best-effort throughout: evidence must
+    // never cost us the run it is evidence of, so a failed capture is simply a
+    // missing image.
+    if (config.captureStepShots) {
+      try {
+        const shot = await captureFormShot(page, activeForm.index);
+        if (shot) stepShots.push(shot);
+      } catch {
+        /* a screenshot is never worth failing a fill for */
+      }
     }
 
     // Look for a Next button — if none, we're on the final step (at submit).
@@ -842,6 +870,11 @@ export async function fillForm(
     logger.warn(`Hit MAX_WIZARD_STEPS (${MAX_WIZARD_STEPS}) — there may be more steps`);
   }
 
+  // One step is not a sequence. The loop runs once for an ordinary form and
+  // would leave a single step shot that says nothing the form shot did not
+  // already say — an extra upload, an extra image to render, for a duplicate.
+  if (stepsTraversed <= 1) stepShots.length = 0;
+
   // Done walking — remove the temporary container tag we added. FR-63.
   if (wizardContainerUsed) await untagWizardContainer(page);
 
@@ -889,6 +922,7 @@ export async function fillForm(
       reachedSubmit,
       wizardContainerUsed,
       fieldsSeen: fieldKeySeen.size,
+      stepShots,
     };
   }
 
@@ -905,5 +939,6 @@ export async function fillForm(
     reachedSubmit,
     wizardContainerUsed,
     fieldsSeen: fieldKeySeen.size,
+    stepShots,
   };
 }

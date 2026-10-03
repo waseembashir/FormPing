@@ -21,6 +21,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   aiProvider: 'off',
   residentialFallback: false,
   landingPage: false,
+  captureStepShots: false,
   saveScreenshotOnFailure: false,
   saveHtmlSnapshotOnFailure: false,
   prettyJson: false,
