@@ -67,14 +67,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const denied = await requireRole(request, 'member');
   if (denied) return denied;
 
-  let body: { name?: unknown; urls?: unknown; notes?: unknown; contact?: unknown };
+  let body: { name?: unknown; urls?: unknown; notes?: unknown };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const patch: { name?: string; urls?: string[]; notes?: string; contact?: string } = {};
+  const patch: { name?: string; urls?: string[]; notes?: string } = {};
 
   if (typeof body.name === 'string') {
     if (!body.name.trim()) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
@@ -112,7 +112,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     patch.urls = urls;
   }
   if (typeof body.notes === 'string') patch.notes = body.notes;
-  if (typeof body.contact === 'string') patch.contact = body.contact;
 
   // Current project — needed to spot removed URLs (revoke their share links,
   // FR-27) and to skip a no-op save (don't bump "updated" when nothing changed).
@@ -156,7 +155,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const changed =
     (patch.name !== undefined && norm(patch.name) !== norm(before.name)) ||
     (patch.notes !== undefined && norm(patch.notes) !== norm(before.notes)) ||
-    (patch.contact !== undefined && norm(patch.contact) !== norm(before.contact)) ||
     (patch.urls !== undefined &&
       (patch.urls.length !== before.urls.length || patch.urls.some((u, i) => u !== before.urls[i])));
   if (!changed) return NextResponse.json({ project: before });
@@ -173,9 +171,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
   if (patch.notes !== undefined && norm(patch.notes) !== norm(before.notes)) {
     await recordEvent(params.id, actor, 'notes_changed');
-  }
-  if (patch.contact !== undefined && norm(patch.contact) !== norm(before.contact)) {
-    await recordEvent(params.id, actor, 'contact_changed');
   }
   if (patch.urls !== undefined) {
     const beforeKeys = new Map(before.urls.map((u) => [matchKey(u), u]));

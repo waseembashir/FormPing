@@ -47,7 +47,6 @@ export function ProjectForm({
     return initial.length ? [...initial] : [''];
   });
   const [notes, setNotes] = useState(project?.notes ?? '');
-  const [contact, setContact] = useState(project?.contact ?? '');
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +80,6 @@ export function ProjectForm({
           name: name.trim(),
           urls: filledUrls,
           notes: notes.trim() || undefined,
-          contact: contact.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -97,7 +95,7 @@ export function ProjectForm({
       setSaving(false);
       setConfirmEdit(false);
     }
-  }, [editing, project, name, filledUrls, notes, contact, onSaved]);
+  }, [editing, project, name, filledUrls, notes, onSaved]);
 
   // Save, after any warnings are resolved. On edit, still confirm removed URLs (FR-17).
   const proceed = useCallback(() => {
@@ -186,17 +184,24 @@ export function ProjectForm({
   const label = 'block text-xs font-medium text-ink-faint uppercase tracking-wider mb-1.5';
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div>
+    <form onSubmit={handleSubmit} className="grid grid-cols-1 items-start gap-x-6 gap-y-4 md:grid-cols-5">
+      <div className="md:col-span-2">
         <label className={label}>Client / project name</label>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Inc." disabled={saving} className={input} autoFocus />
-        <label className={`${label} mt-3`}>Notes <span className="normal-case text-ink-faint">(optional)</span></label>
+        {/* The one thing about this field that is not obvious from it: the name
+            is the heading on any status page shared with this client, so it is
+            read by them and not only by us. Worth knowing BEFORE typing an
+            internal nickname, which is why it sits under the input rather than
+            being discovered later. */}
+        <p className="mt-1.5 text-xs text-ink-faint">Shown to the client on any status page you share.</p>
+        <label className={`${label} mt-4`}>Notes <span className="normal-case text-ink-faint">(optional)</span></label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth noting" disabled={saving} className={input} />
-        <label className={`${label} mt-3`}>Contact <span className="normal-case text-ink-faint">(optional — email / Slack / name)</span></label>
-        <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="who to notify — e.g. dev@client.com" disabled={saving} className={input} />
+        <p className="mt-1.5 text-xs text-ink-faint">For your team. Never shown to the client.</p>
       </div>
-      <div>
-        <label className={label}>URLs to track</label>
+      <div className="md:col-span-3">
+        <label className={label}>
+          URLs to track <span className="normal-case text-ink-faint">(this is what gets monitored)</span>
+        </label>
         <div className="space-y-2">
           {urls.map((u, i) => {
             const invalid = showErrors && u.trim().length > 0 && !isValidUrl(u);
@@ -266,11 +271,16 @@ export function ProjectForm({
         )}
       </div>
       {error && (
-        <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger sm:col-span-2">
+        <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger md:col-span-5">
           {error}
         </div>
       )}
-      <div className="flex items-center gap-2 sm:col-span-2">
+      {/* A footer, not a row that happens to be last. Spanning the grid with a
+          rule above it separates "what you are filling in" from "what you do
+          next", and stops the buttons floating under whichever column happens
+          to be taller — which, with one URL and three text fields, left them
+          stranded beside a large empty space. */}
+      <div className="flex items-center gap-2 border-t border-line pt-4 md:col-span-5">
         <button
           type="submit"
           disabled={saving || checking || name.trim().length === 0}

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
   const denied = await requireRole(request, 'member');
   if (denied) return denied;
 
-  let body: { name?: unknown; urls?: unknown; notes?: unknown; contact?: unknown };
+  let body: { name?: unknown; urls?: unknown; notes?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -110,9 +110,8 @@ export async function POST(request: NextRequest) {
   }
 
   const notes = typeof body.notes === 'string' ? body.notes : undefined;
-  const contact = typeof body.contact === 'string' ? body.contact : undefined;
   const createdBy = await actorName(request);
-  const project = await projectStore.create({ name, urls, notes, contact, createdBy });
+  const project = await projectStore.create({ name, urls, notes, createdBy });
   // Open the project's log with the action that started it. FR-66.
   await recordEvent(project.id, createdBy, 'created', project.name);
   for (const u of project.urls) await recordEvent(project.id, createdBy, 'url_added', u);
