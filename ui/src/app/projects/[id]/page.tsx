@@ -224,7 +224,7 @@ export default function ProjectDetailPage() {
             <h1 className="text-xl font-bold tracking-tight text-ink">{project.name}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
               <StatusPill level={level}>{label}</StatusPill>
-              <span className="text-xs text-ink-faint">{count} URL{count === 1 ? '' : 's'}{project.contact ? ` · ${project.contact}` : ''}</span>
+              <span className="text-xs text-ink-faint">{count} URL{count === 1 ? '' : 's'}</span>
             </div>
             {project.notes && <p className="mt-2 max-w-[60ch] text-xs italic text-ink-faint">{project.notes}</p>}
             <Attribution project={project} variant="chips" className="mt-3" />
@@ -319,7 +319,7 @@ export default function ProjectDetailPage() {
         <ShareStatusControl projectId={project.id} initialToken={project.shareToken} canManage={canEdit} />
       </section>
 
-      <Modal open={editing} onClose={() => setEditing(false)} title="Edit project" size="lg">
+      <Modal open={editing} onClose={() => setEditing(false)} title="Edit project" size="xl">
         <ProjectForm project={project} canRemoveUrls={canDelete} onSaved={(r) => { setEditing(false); if (r?.projectDeleted) router.push('/projects'); else void load(); }} onCancel={() => setEditing(false)} />
       </Modal>
 

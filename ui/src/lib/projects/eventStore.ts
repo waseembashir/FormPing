@@ -29,6 +29,9 @@ export type ProjectAction =
   | 'url_added'
   | 'url_removed'
   | 'notes_changed'
+  // No longer produced — the field it described was removed. Kept so the
+  // activity log can still render events recorded before that, which is history
+  // and should not become an "unknown action" after the fact.
   | 'contact_changed'
   | 'share_enabled'
   | 'share_disabled'

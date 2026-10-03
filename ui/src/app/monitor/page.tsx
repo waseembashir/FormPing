@@ -266,6 +266,7 @@ export default function MonitorPage() {
             running={running}
             watchActive={watchActive}
             mode={config.monitorMode}
+            url={url}
             onClear={handleClearView}
           />
         </div>

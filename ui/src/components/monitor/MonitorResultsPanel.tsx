@@ -3,6 +3,7 @@ import type { ChangeReport, SnapshotResult, MonitorMode } from '@/types';
 import { CompareReportCard } from './CompareReportCard';
 import { SnapshotResultCard } from './SnapshotResultCard';
 import { RunLoaderShell } from '@/components/ui/RunLoader';
+import { emptyStateSite } from '@/lib/emptyRunState';
 
 interface Props {
   reports: ChangeReport[];
@@ -12,6 +13,9 @@ interface Props {
   watchActive: boolean;
   /** Current mode — drives the loader copy. */
   mode: MonitorMode;
+  /** What is currently in the URL box, so an empty state can name the site
+   *  rather than asking for a URL that is already there. */
+  url?: string;
   /** Clear the on-screen view + URL input (not the server-stored reports). */
   onClear?: () => void;
 }
@@ -67,7 +71,7 @@ function ScanLoader({ mode, watchActive, logs }: { mode: MonitorMode; watchActiv
   );
 }
 
-export function MonitorResultsPanel({ reports, snapshot, logs, running, watchActive, mode, onClear }: Props) {
+export function MonitorResultsPanel({ reports, snapshot, logs, running, watchActive, mode, url, onClear }: Props) {
   // Raw crawler logs are still never SHOWN to users (FR-65) — they're only read
   // to derive how many pages have been scanned, for the loader's progress.
   const isEmpty = reports.length === 0 && !snapshot && !running;
@@ -142,7 +146,19 @@ export function MonitorResultsPanel({ reports, snapshot, logs, running, watchAct
           </div>
           <p className="text-[15px] font-semibold text-ink">No reports yet</p>
           <p className="mt-1.5 max-w-sm text-sm text-ink-muted">
-            Enter a URL above and hit <strong className="text-ink-secondary">Run</strong> to take a snapshot or compare against the last one.
+            {/* Asking for a URL that is already in the box reads as the app
+                having lost it. Name the site instead, and the sentence becomes
+                an invitation to press the button rather than a contradiction. */}
+            {emptyStateSite(url) ? (
+              <>
+                Nothing recorded for <strong className="text-ink-secondary">{emptyStateSite(url)}</strong> yet — hit{' '}
+                <strong className="text-ink-secondary">Run</strong> to take a snapshot or compare against the last one.
+              </>
+            ) : (
+              <>
+                Enter a URL above and hit <strong className="text-ink-secondary">Run</strong> to take a snapshot or compare against the last one.
+              </>
+            )}
           </p>
         </div>
       )}

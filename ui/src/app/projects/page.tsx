@@ -182,7 +182,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* Add project */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="New project" subtitle="Group a client’s URLs so you can monitor them together." size="lg">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="New project" subtitle="Group a client’s URLs so you can monitor them together." size="xl">
         <ProjectForm onSaved={() => { setShowAdd(false); void load(query); }} onCancel={() => setShowAdd(false)} />
       </Modal>
     </main>

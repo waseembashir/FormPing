@@ -1015,7 +1015,6 @@ export function StatusView({
           {internal && (
             <p className="mt-1.5 text-xs text-ink-faint">
               {monitors} monitored service{monitors === 1 ? '' : 's'}
-              {data.contact ? <> · notify <span className="text-ink-muted">{data.contact}</span></> : null}
             </p>
           )}
         </div>

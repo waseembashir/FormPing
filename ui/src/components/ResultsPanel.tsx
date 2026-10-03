@@ -5,6 +5,7 @@ import { ResultCard } from './ResultCard';
 import { FormTesterReport } from './formTester/FormTesterReport';
 import { RunLoaderShell } from './ui/RunLoader';
 import { runVerdict } from '@/lib/formWatch/verdict';
+import { emptyStateSite } from '@/lib/emptyRunState';
 
 // Plain, on-brand facts shown while a test runs — makes the wait feel purposeful
 // and teaches what the tool is doing. Rotated in the loader. FR-63.
@@ -27,6 +28,9 @@ interface Props {
   landingPage?: boolean;
   /** Mode for the in-flight run — drives the loader copy. */
   mode?: SubmitMode;
+  /** What is currently in the URL box, so an empty state can name the site
+   *  rather than asking for a URL that is already there. */
+  url?: string;
   /** Clear the on-screen view + URL input (not the server-stored result). */
   onClear?: () => void;
   /** Runs a real live submission for one detected form (per-form "Submit a live test"). */
@@ -251,7 +255,7 @@ function RunningLoader({
   );
 }
 
-export function ResultsPanel({ results, progress, logs, running, landingPage, mode, onClear, onSubmitLiveTest }: Props) {
+export function ResultsPanel({ results, progress, logs, running, landingPage, mode, url, onClear, onSubmitLiveTest }: Props) {
   // Tally by mode-aware verdict (not raw status), so a healthy safe/detect run
   // counts as OK — never a misleading "WARN". Matches the per-result badge. FR-63.
   const levels = results.map((r) => runVerdict(r.reasonCode, r.formFound, r.finalStatus, r.formConfidenceLevel).level);
@@ -385,7 +389,18 @@ export function ResultsPanel({ results, progress, logs, running, landingPage, mo
           </div>
           <p className="text-[15px] font-semibold text-ink">Ready to test a contact form</p>
           <p className="mt-1.5 max-w-sm text-sm text-ink-muted">
-            Enter a URL in the bar above and hit <strong className="text-ink-secondary">Run test</strong> — the health report shows up right here.
+            {/* See emptyRunState: asking for a URL already in the box reads as
+                the app having lost it. */}
+            {emptyStateSite(url) ? (
+              <>
+                Hit <strong className="text-ink-secondary">Run test</strong> to check{' '}
+                <strong className="text-ink-secondary">{emptyStateSite(url)}</strong> — the health report shows up right here.
+              </>
+            ) : (
+              <>
+                Enter a URL in the bar above and hit <strong className="text-ink-secondary">Run test</strong> — the health report shows up right here.
+              </>
+            )}
           </p>
         </div>
       )}
