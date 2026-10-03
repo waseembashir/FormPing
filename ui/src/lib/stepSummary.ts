@@ -45,16 +45,26 @@ export function stepSummary(facts: StepFacts): StepSummary {
   if (typeof isMultiStep !== 'boolean') return { chip: null, note: null };
   if (!isMultiStep) return { chip: 'Single-step', note: null };
 
-  // A wizard, but nothing walked it: the count on screen is step one's.
+  // A wizard, but nothing walked it: the count on screen is step one's, and
+  // there is no sequence of pictures either. Saying so matters because the
+  // absence is otherwise unexplained — a reader who knows this form has four
+  // steps sees one screenshot and reasonably assumes something failed, when in
+  // fact nothing was attempted. Naming the mode that WOULD walk it turns a
+  // dead end into an instruction.
   if (!stepsWalked || stepsWalked <= 1) {
     return {
       chip: 'Multi-step',
-      note: 'Its steps were not walked on this run, so the fields listed are the first step’s only.',
+      note:
+        'Its steps were not walked on this run, so the fields listed are the first step’s only ' +
+        'and there are no per-step screenshots. Run it in Safe mode to step through the form.',
     };
   }
 
   if (reachedFinalStep) {
-    return { chip: `Multi-step · ${stepsWalked} steps`, note: null };
+    // "walked N steps", never "N steps": the first describes our run, the
+    // second claims a property of the form that we cannot know without
+    // submitting it.
+    return { chip: `Multi-step · walked ${stepsWalked} steps`, note: null };
   }
 
   return {
