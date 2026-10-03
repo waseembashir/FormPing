@@ -68,11 +68,20 @@ function prepare(forms: SiteForm[], result: SiteResult): PreparedForm[] {
     return { form, tested, status, rail, group, // Every form reports its own step state now, not just the tested one: the
     // inventory probes each form it finds, so a wizard on another page is no
     // longer silent about being a wizard. FR-94.
-    isMultiStep: tested ? (result.isMultiStep ?? form.isMultiStep) : form.isMultiStep,
+    // The form's own answer first. A wizard the inventory walked knows it is
+    // one; borrowing the tested form's verdict is how a three-step form came to
+    // be labelled single-step because a different form on another page was.
+    isMultiStep: form.isMultiStep ?? (tested ? result.isMultiStep : undefined),
     // Only the tested form was walked, so only it can report how far. Another
     // form on another page is known to BE a wizard, nothing more. FR-94.
-    stepsWalked: tested ? result.stepsWalked : undefined,
-    reachedFinalStep: tested ? result.reachedFinalStep : undefined, detail, lowConfidence };
+    // Each form's OWN walk. The inventory walks lead forms too, so a wizard
+    // that is not the primary contact form still has a real step count, a real
+    // field total and a real sequence — it just used to arrive with none of
+    // them, and the panel then borrowed the tested form's answer or showed
+    // nothing at all.
+    stepsWalked: form.stepsWalked ?? (tested ? result.stepsWalked : undefined),
+    stepShots: form.stepShots ?? (tested ? result.stepShots : undefined),
+    reachedFinalStep: form.reachedFinalStep ?? (tested ? result.reachedFinalStep : undefined), detail, lowConfidence };
   });
   entries.sort((a, b) => a.group - b.group);
   return entries.map(({ group, ...rest }, i) => ({ ...rest, n: i + 1 }));

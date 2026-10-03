@@ -69,6 +69,12 @@ export interface FormOutcome {
 
 /** One form found anywhere on the site (site-level crawl). FR-68. */
 export interface SiteForm {
+  /** Steps this form's own walk traversed, when it was walked. */
+  stepsWalked?: number;
+  /** Whether that walk reached the final step. */
+  reachedFinalStep?: boolean;
+  /** One hosted screenshot per step of THIS form's walk, in order. */
+  stepShots?: string[];
   url: string;
   kind: FormKind | 'third-party';
   about: string;
@@ -166,6 +172,13 @@ export interface SiteResult {
 isMultiStep?: boolean;
   /** Steps the walk traversed; absent when nothing was filled. FR-94. */
   stepsWalked?: number;
+  /**
+   * One hosted screenshot per step of a multi-step walk, in order, each taken
+   * after that step was filled. Produced by the Form Tester only — a scheduled
+   * check keeps its single shot rather than paying for a set on every run.
+   * Absent for single-step forms, which are not a sequence.
+   */
+  stepShots?: string[];
   /** Whether the walk reached the final step. FR-94. */
   reachedFinalStep?: boolean;
   landingPageMode?: boolean;
