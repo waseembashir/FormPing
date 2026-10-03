@@ -278,7 +278,8 @@ export default function DocsContent() {
                 <UL>
                   <LI>Any URL you’ve tested or monitored but not yet grouped shows up in an <strong className="text-ink">Unassigned</strong> bucket, with <strong>Assign to project</strong> and <strong>Dismiss</strong> actions — so nothing is a dead end.</LI>
                   <LI><strong className="text-ink">Remove</strong> a URL from a project → if it has test/monitor activity it drops to <strong>Unassigned</strong> keeping its data and monitors; if it has none yet, it simply drops off (nothing to keep). <strong>Delete</strong> a URL (or a whole project) is a complete, confirmed, irreversible removal of its monitors and results. Removing and deleting are limited to <strong className="text-ink">Admins &amp; Owners</strong> — Members can add URLs but not take them out.</LI>
-                  <LI>Each project can hold a <strong>contact</strong> — who to notify for that client.</LI>
+                  <LI>Each project can hold <strong>notes</strong> — anything your team should know about that client. They stay internal and are never shown on a status page.</LI>
+                  <LI>The <strong className="text-ink">project name is shown to the client</strong> on any status page you share, as its heading — so it is worth naming a project the way the client would expect to see it, rather than with an internal shorthand.</LI>
                   <LI>Each project shows <strong>who added it and who last edited it</strong> (with the time), so accountability is clear at a glance.</LI>
                 </UL>
               </Section>

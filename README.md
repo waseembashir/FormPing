@@ -210,6 +210,8 @@ One presentation powers both a public and an internal view, curated so nothing t
 - **Public status page** — client-safe only: the page URL, overall status, uptime %, uptime history, SSL validity, and whether the contact form is working. No response times, reason codes, or content-change detail.
 - **Internal dashboard** — the full picture for the team: response-time and uptime charts, HTTP status, check frequency, domain expiry, and the content-change timeline (each run expands to show what changed).
 
+The split is enforced by what the builder puts in each shape, not by hiding fields in the view, so a value that never reaches the public payload cannot leak through a component that forgets to check. **The project's name is the one thing a client reads that the team types**: it is the heading on the page they are sent, which is why the project form says so beneath the field rather than leaving it to be discovered. A project's notes are internal and never enter the client-facing shape at all.
+
 Content diffs are internal-only by design — "84 changes detected" would alarm a client about what is often their own team's intentional edits. Both views carry a **Today / 7 days / 30 days / All-time** filter.
 
 ---
