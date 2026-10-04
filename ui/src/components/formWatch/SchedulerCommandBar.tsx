@@ -75,10 +75,14 @@ export function SchedulerCommandBar({ url, onUrl, days, onDays, mode, onMode, la
             className="w-full bg-transparent font-mono text-[15px] text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
           />
         </div>
+        {/* Says a monitor covers ONE form on ONE page. Nothing said so before,
+            which is why people reasonably expected a monitor to watch every form
+            on a site — and why "each check searches the whole site" read as a
+            feature rather than as the repeated crawl it was. FR-79. */}
         <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
           {landingPage
-            ? 'Landing page is on — each check tests only the exact page you enter, not the rest of the site.'
-            : 'Each check searches the whole site to find the contact form. Monitoring one specific page? Turn on Landing page to check just the URL you enter.'}
+            ? 'Landing page is on — a monitor watches one form, and every check tests only the exact page you enter, not the rest of the site.'
+            : 'A monitor watches one form on one page: the first check searches the site for your contact form, then every check after it goes straight to the page it found. Monitoring one specific page? Turn on Landing page to check just the URL you enter.'}
         </p>
       </div>
 

@@ -43,6 +43,19 @@ export const SAFE_MONITOR = schedule({
   mode: 'safe',
 });
 
+/**
+ * A monitor that has resolved the page it watches, so the card can say which
+ * page and offer to re-resolve it. Its pin is older than its last run, which is
+ * the normal case: the page was found once and the checks went to it. FR-79.
+ */
+export const PINNED_MONITOR = schedule({
+  id: 'sched-pinned',
+  url: 'https://pinned.example.com',
+  mode: 'safe',
+  pinnedPage: 'https://pinned.example.com/contact-us',
+  pinnedAt: new Date(Date.now() - 48 * HOUR).toISOString(),
+});
+
 /** Only confirms a form exists. Also one click. */
 export const DETECT_MONITOR = schedule({
   id: 'sched-detect',
