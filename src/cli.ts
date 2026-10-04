@@ -51,6 +51,22 @@ program
   .option('--ai-provider <id>', 'AI provider: off | auto | anthropic | gemini | groq | ollama', parseAiProvider)
   .option('--residential-fallback', 'Retry BLOCKED_BY_HOST sites once via Browserbase residential IP (requires BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID env vars; per-session billing)', false)
   .option('--landing-page', 'Landing-page mode: test the form on the exact URL given, skipping contact-page discovery (no crawling)', false)
+  .option(
+    '--target-page <url>',
+    'Test the form on this exact page, resolved by an earlier run. Skips contact-page discovery and the site crawl, but keeps strict form selection (unlike --landing-page, which also relaxes it)',
+    (v: string) => {
+      let parsed: URL;
+      try {
+        parsed = new URL(v);
+      } catch {
+        throw new InvalidArgumentError('--target-page must be an absolute http(s) URL');
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new InvalidArgumentError('--target-page must be an absolute http(s) URL');
+      }
+      return parsed.toString();
+    },
+  )
   .option('--step-shots', 'Capture a screenshot of each step of a multi-step form, not just one. Costs an image and a moment per step, so it is off unless asked for', false)
   .option('--email <email>', 'Test email address to use in forms')
   // ─── Monitor mode options ────────────────────────────────────────────────
@@ -81,6 +97,7 @@ program
     aiProvider?: AiProviderSelection;
     residentialFallback: boolean;
     landingPage: boolean;
+    targetPage?: string;
     stepShots: boolean;
     email?: string;
     monitor?: string;
@@ -111,6 +128,7 @@ program
       aiProvider,
       residentialFallback: opts.residentialFallback,
       landingPage: opts.landingPage,
+      ...(opts.targetPage ? { targetPage: opts.targetPage } : {}),
       captureStepShots: opts.stepShots,
       prettyJson: opts.jsonPretty,
       outputFile: opts.output,

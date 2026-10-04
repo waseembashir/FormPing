@@ -86,6 +86,22 @@ export interface AppConfig {
    * /contact page. Defaults to false — normal discovery behaviour. */
   landingPage: boolean;
   /**
+   * Test the form on THIS page, because a previous run resolved it.
+   *
+   * Deliberately not the same thing as `landingPage`, which also skips
+   * discovery. Landing-page mode exists because the USER asserted the form is
+   * on the URL they gave, and it spends that assertion: it accepts the
+   * best-scoring form on the page even below the contact-form threshold, and it
+   * reports a contact page found with full confidence. Neither is true of a
+   * page we resolved ourselves, and borrowing that mode for a pinned monitor
+   * would let one start watching a newsletter box.
+   *
+   * So this skips discovery and the site crawl and changes nothing else: form
+   * selection stays strict, and the run makes no claim about a confidence it
+   * did not measure. Absent = normal discovery. FR-79.
+   */
+  targetPage?: string;
+  /**
    * Capture a screenshot of EACH step of a multi-step form, not just one.
    *
    * Off by default, and deliberately not on for scheduled checks. A wizard with
@@ -444,4 +460,9 @@ isMultiStep?: boolean;
   /** True when the run skipped discovery and tested the given URL directly
    *  (Landing-page mode) — the card must not show a "contact page" confidence. */
   landingPageMode?: boolean;
+  /** True when the run tested a page pinned by an earlier run rather than
+   *  discovering one. Like `landingPageMode`, nothing may render a contact-page
+   *  confidence for it: no discovery ran, so there is no confidence to show —
+   *  the one that chose this page belongs to the run that pinned it. FR-79. */
+  pinnedPageMode?: boolean;
 }
