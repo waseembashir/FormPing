@@ -11,7 +11,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:coverage": "vitest run --coverage.enabled --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=text-summary"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.6.1",
     "tsx": "^4.11.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
