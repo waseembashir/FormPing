@@ -16,7 +16,18 @@ const ADDRESS_PATTERNS = [/\d+\s+\w+\s+(st|ave|rd|blvd|dr|lane|way|street|avenue
 const PHONE_PATTERNS = [/(\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/];
 
 /** Score a page's HTML content as a contact page (0–1) */
-function scorePageContent(html: string, url: string): { score: number; signals: string[] } {
+/**
+ * How much a page looks like a contact page, from its markup alone.
+ *
+ * Exported for tests. This decides WHICH PAGE the whole run then tests, so a
+ * change here redirects everything downstream — and it is pure: HTML and a URL
+ * in, a score and its reasons out, no browser and no network.
+ *
+ * `signals` is not decoration. A score with no account of itself cannot be
+ * argued with, and this one is routinely surprising: a page can lose to another
+ * that merely has the word "contact" in its title.
+ */
+export function scorePageContent(html: string, url: string): { score: number; signals: string[] } {
   const $ = loadHtml(html);
   const signals: string[] = [];
   let raw = 0;
@@ -75,6 +86,26 @@ function scorePageContent(html: string, url: string): { score: number; signals: 
   return { score, signals };
 }
 
+/**
+ * Combine how a page was LINKED TO with what the page itself contains.
+ *
+ * Exported and separated from the browser work because this is the sentence
+ * that picks one page over another, and until now it could only be exercised by
+ * loading two real sites and seeing which won.
+ *
+ * The page itself outweighs the link that led to it (0.6 against 0.4), which is
+ * the right way round: a link saying "contact" is a claim, and the markup is the
+ * evidence. But the link still counts, because a page with a form on it is not
+ * automatically the page a visitor would use to get in touch.
+ *
+ * The raw link score tops out around 5 (path +3, text +2), so it is normalised
+ * before weighting — otherwise a strong link would swamp any page it pointed at.
+ */
+export function rankCandidate(linkScore: number, pageScore: number): number {
+  const normalisedLink = Math.min(Math.max(linkScore / 5, 0), 1);
+  return normalisedLink * 0.4 + pageScore * 0.6;
+}
+
 /** Verify top candidates using Playwright, return the best one */
 async function verifyWithPlaywright(
   candidates: ContactCandidate[],
@@ -100,13 +131,11 @@ async function verifyWithPlaywright(
       const html = await page.content();
       const { score, signals } = scorePageContent(html, candidate.url);
 
-      // Normalize link score: max raw link score is ~5 (path +3, text +2)
-      const normalizedLinkScore = Math.min(Math.max(candidate.score / 5, 0), 1);
       results.push({
         ...candidate,
         pageScore: score,
         pageSignals: signals,
-        totalScore: normalizedLinkScore * 0.4 + score * 0.6,
+        totalScore: rankCandidate(candidate.score, score),
       });
 
       logger.debug(`  Verified ${candidate.url}: linkScore=${candidate.score} pageScore=${score.toFixed(2)}`);
