@@ -59,6 +59,19 @@ const CONTRACTS: TableContract[] = [
     table: 'site_watch_daily',
     columns: 'url_key, day, checks, up, down, blocked, resp_sum, resp_n, ssl_min, owner',
   },
+  /**
+   * The one contract here that is not about losing a result. `next_run_at` lives
+   * on this table, so a refused upsert leaves a monitor permanently due and the
+   * ticker re-runs it on every pass — a missing column becomes a loop that
+   * hammers somebody's site. The store falls back to writing the row without
+   * the FR-79 pin columns rather than letting that happen, which keeps the
+   * cadence but means pins silently never save. This is what makes that
+   * visible instead of merely survivable.
+   */
+  {
+    table: 'form_watch_schedules',
+    columns: 'id, url, site, interval_ms, mode, next_run_at, owner, pinned_page, pinned_at',
+  },
 ];
 
 /** What the last check found. `null` until the guard has run. */
