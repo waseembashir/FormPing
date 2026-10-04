@@ -21,6 +21,7 @@ import { recordResult } from './resultStore';
 import { hostFormShots } from '@/lib/formShots';
 import { runFormTest, type RawSiteResult } from './runner';
 import { onRunComplete } from './notify';
+import { planCheck, pinFor } from './pinnedPage';
 import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
 import { inheritedOwner } from '@/lib/ownership';
 
@@ -109,6 +110,7 @@ function toRecord(schedule: FormSchedule, raw: RawSiteResult, ranAt: string, tri
       fields: Array.isArray(raw.fields) ? raw.fields : undefined,
       isMultiStep: Boolean(raw.isMultiStep),
       landingPageMode: Boolean(raw.landingPageMode),
+      pinnedPageMode: Boolean(raw.pinnedPageMode),
       formsOnPage: raw.formsOnPage && typeof raw.formsOnPage === 'object' ? raw.formsOnPage : undefined,
       tracking: raw.tracking && typeof raw.tracking === 'object' ? raw.tracking : undefined,
       // FR-73 — the same engine ran this, so it carries the same doubts. Without
@@ -187,8 +189,17 @@ async function runScheduleOnce(
   // only its storage was thinner. FR-67.
   let raw: RawSiteResult | null = null;
 
+  // Which page this check loads, and whether it searches for one at all. An
+  // unpinned monitor discovers exactly as it always has; a pinned one loads one
+  // page. FR-79.
+  const plan = planCheck(schedule);
+
   try {
-    raw = await runFormTest(schedule.url, schedule.mode, schedule.landingPage ?? false);
+    raw = await runFormTest(
+      plan.url,
+      schedule.mode,
+      plan.kind === 'landing' ? { landingPage: true } : plan.kind === 'pinned' ? { targetPage: plan.url } : {},
+    );
     if (raw) {
       // Screenshots arrive as inline `data:` URLs. Host them before anything is
       // stored, exactly as /api/run does — base64 in a database row would bloat
@@ -234,6 +245,28 @@ async function runScheduleOnce(
   // is what made this failure invisible in the first place. FR-87.
   const savedResult = savedRun.ok ? await recordResult(record, raw) : savedRun;
 
+  /**
+   * The page this monitor should watch from now on, if this check just earned
+   * it one. FR-79.
+   *
+   * Written from a check that ACTUALLY RAN, which is the property that makes
+   * "why is this monitor watching that form?" answerable: the run that chose
+   * the page is in `form_watch_runs` with its confidence. A monitor only ever
+   * pins once (see `pinFor`), so the page cannot drift from one check to the
+   * next, and a check that found no form pins nothing — narrowing what a
+   * monitor can see at the exact moment it is already failing is how one
+   * monitor's bad day would become permanent.
+   *
+   * Note this sits on the SUCCESS path only. `keepCadenceOnly` below takes just
+   * `nextRunAt` from this object, so a run whose own history row could not be
+   * stored leaves the pin unwritten — a pin that pointed at a run nobody can
+   * look up would be exactly the untraceable answer this avoids.
+   */
+  const pin = pinFor(schedule, {
+    resolvedPage: record.fingerprint.contactPage,
+    formFound: record.fingerprint.formFound,
+  });
+
   // Reschedule from now so intervals don't drift if a run was slow.
   const now = Date.now();
   const advanced: FormSchedule = {
@@ -243,6 +276,7 @@ async function runScheduleOnce(
     lastStatus: record.status,
     lastReasonCode: record.reasonCode,
     lastFormFound: record.fingerprint.formFound,
+    ...(pin ? { pinnedPage: pin, pinnedAt: ranAt } : {}),
   };
 
   if (savedRun.ok && savedResult.ok) {

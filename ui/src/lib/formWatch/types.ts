@@ -90,6 +90,10 @@ export interface FormFingerprint {
   fields?: { label: string; type: string }[];
   isMultiStep?: boolean;
   landingPageMode?: boolean;
+  /** True when this check loaded the page the monitor is pinned to instead of
+   *  searching the site for it. Carried so nothing downstream claims a
+   *  whole-site search that did not happen. FR-79. */
+  pinnedPageMode?: boolean;
   /** "N forms on this page" summary (2+ forms only) — same data the Tester card
    *  shows, so a scheduled run reads identically. FR-68. */
   formsOnPage?: FormsOnPage;

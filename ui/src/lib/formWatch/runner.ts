@@ -30,6 +30,8 @@ export interface RawSiteResult {
   fields?: { label: string; type: string }[];
   isMultiStep?: boolean;
   landingPageMode?: boolean;
+  /** FR-79 — the run tested a pinned page instead of discovering one. */
+  pinnedPageMode?: boolean;
   formsOnPage?: FormsOnPage; // FR-68 — "N forms on this page" (2+ forms only)
   tracking?: TrackingParams; // FR-68 — hidden UTM/tracking params captured
   // FR-73 — how sure the engine was, and whether protection was on the page
@@ -45,11 +47,26 @@ export interface RawSiteResult {
 /** Hard cap on a single run so a hung browser can't wedge the scheduler. */
 const RUN_TIMEOUT_MS = 4 * 60 * 1000;
 
+/**
+ * How this run should find its form. Mirrors the engine's own distinction:
+ * `landingPage` spends the user's assertion that the form is on this exact URL
+ * (and relaxes form selection accordingly), while `targetPage` loads a page an
+ * earlier run resolved and changes nothing else. Passing both would be a
+ * contradiction, so the engine is given at most one — landing page wins,
+ * because it is the mode the user chose. FR-79.
+ */
+export interface RunPlan {
+  landingPage?: boolean;
+  targetPage?: string;
+}
+
 export function runFormTest(
   url: string,
   mode: string,
-  landingPage = false,
+  plan: RunPlan | boolean = false,
 ): Promise<RawSiteResult | null> {
+  const { landingPage = false, targetPage } =
+    typeof plan === 'boolean' ? { landingPage: plan, targetPage: undefined } : plan;
   return new Promise((resolve) => {
     const uiRoot = process.cwd();
     const formpingRoot = path.join(uiRoot, '..');
@@ -63,6 +80,7 @@ export function runFormTest(
 
     const args = [tsxCli, cliPath, '--stream', '--mode', mode, '--url', url];
     if (landingPage) args.push('--landing-page');
+    else if (targetPage) args.push('--target-page', targetPage);
     const child = spawn(process.execPath, args, {
       cwd: formpingRoot,
       env: { ...process.env, DEBUG: '0' },

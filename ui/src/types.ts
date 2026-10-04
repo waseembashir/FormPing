@@ -182,6 +182,9 @@ isMultiStep?: boolean;
   /** Whether the walk reached the final step. FR-94. */
   reachedFinalStep?: boolean;
   landingPageMode?: boolean;
+  /** True when the run tested a page pinned by an earlier run rather than
+   *  discovering one — no contact-page confidence to show. FR-79. */
+  pinnedPageMode?: boolean;
   /** How sure we are this is really the contact form — `low` when we matched
    *  something weak, so the card asks instead of claiming. FR-73. */
   formConfidenceLevel?: 'high' | 'low';
