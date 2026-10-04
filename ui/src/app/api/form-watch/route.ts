@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listSchedules, upsertSchedule, findScheduleByUrl } from '@/lib/formWatch/scheduleStore';
 import { kickFormWatchTicker } from '@/lib/formWatch/ticker';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
+import { getRun } from '@/lib/onDemandRunStore';
+import { pinFor } from '@/lib/formWatch/pinnedPage';
 import { requireRole, currentUser } from '@/lib/auth/authorize';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 import { saveFailuresForClient } from '@/lib/persistence';
@@ -148,6 +150,27 @@ export async function POST(request: NextRequest) {
     // Run an immediate baseline check on the next tick, then every interval.
     nextRunAt: new Date(now).toISOString(),
   };
+
+  /**
+   * If this URL has already been through the Form Tester, that test resolved
+   * the contact page and we can start from its answer — so the monitor's very
+   * first check loads one page instead of crawling the client's site to work
+   * out something we are already holding. FR-79.
+   *
+   * `pinFor` applies the same rules it applies to a scheduled run, which is the
+   * point of reusing it: a test that found no form pins nothing, and a
+   * landing-page monitor pins nothing. Discovery is skipped only where there is
+   * a real resolved page behind it; otherwise the baseline check discovers as
+   * it always has and pins itself from its own result.
+   */
+  const priorTest = await getRun(url);
+  const pin = priorTest
+    ? pinFor(schedule, { resolvedPage: priorTest.detail?.resolvedPage, formFound: priorTest.formFound })
+    : null;
+  if (pin) {
+    schedule.pinnedPage = pin;
+    schedule.pinnedAt = priorTest?.ranAt ?? new Date(now).toISOString();
+  }
 
   await upsertSchedule(schedule);
   // Setting up a monitor means you care about this URL again — so un-dismiss it
