@@ -73,7 +73,7 @@ Point the engine at a URL and it does what a careful person would: find the form
 
 ### 1. Finding the forms
 
-By default a run covers the **whole site**. It discovers the contact page using deterministic heuristics (path matching + anchor-text scoring), and when a site doesn't use a conventional contact slug, a **content-driven fallback** scans the homepage, navigation and sitemap — rendering pages in a real browser when the site is JavaScript-heavy or blocks lightweight fetches — and picks the page that actually holds a contact form, **including one hidden inside a multi-step widget**. The form is found regardless of the page's URL or how it's built.
+By default a run covers the **whole site** — that is the Form Tester's job, and a scheduled monitor is the deliberate exception, resolving its page once and checking that page from then on (see *A scheduled check* below). It discovers the contact page using deterministic heuristics (path matching + anchor-text scoring), and when a site doesn't use a conventional contact slug, a **content-driven fallback** scans the homepage, navigation and sitemap — rendering pages in a real browser when the site is JavaScript-heavy or blocks lightweight fetches — and picks the page that actually holds a contact form, **including one hidden inside a multi-step widget**. The form is found regardless of the page's URL or how it's built.
 
 Alongside that, the engine **inventories every other reachable page** and records **every** form it finds, each with its own live source URL. Only forms a visitor can actually see are reported — a hidden modal copy of a form is not listed as a second form — and a third-party form counts only when its embed is really on the page: a provider's tracking script on its own is evidence the site uses that vendor, not that a form is embedded. Each is classified — **contact, newsletter, search, login, or another lead form** such as a rental or demo request — so the report can say what a form is *for*, not just that one exists. A form that repeats across the site (a header search, a footer newsletter) is recognised as the same form, shown once, and marked **global**.
 
@@ -133,6 +133,8 @@ The **app** defaults to `detect-only` in both the Form Tester and the Form Sched
 
 **Landing-page mode** skips discovery and the site crawl, testing the form on the exact URL given — for standalone landing pages with an inline form and no separate `/contact` page. Detection is also more lenient there: since you've asserted the form is on this page, the best-scoring form is accepted even if it wouldn't clear the usual contact-form threshold (a quiz, assessment or booking form is still a real form) — and the result says plainly that it's a low-confidence match.
 
+**A pinned page** (`--target-page`) also skips discovery and the crawl, and is otherwise nothing like landing-page mode. It exists for the Form Scheduler, where a monitor watches one form on one page: the page is resolved once and then loaded directly on every later check. Because the page was resolved rather than asserted, detection stays **strict** — borrowing landing-page leniency would let a monitor settle on a newsletter box — and the run reports no contact-page confidence, since no discovery ran; the confidence that chose the page belongs to the run that resolved it.
+
 Leniency lowers the *threshold*, not the standard. A form a visitor can see always beats one they cannot, so a hidden form is accepted only when it is the page's **only** candidate — the hidden multi-step wizard that leniency exists for.
 
 ### When a form isn't submitted, the result says *why*
@@ -145,7 +147,7 @@ Leniency lowers the *threshold*, not the standard. A form a visitor can see alwa
 - **`MULTI_STEP_FORM_DETECTED`** — a multi-step ("Next"-style wizard) contact form was found but couldn't be filled this run (its steps/fields weren't reachable). Detected, not broken. When the wizard *can* be walked, the run reports `SAFE_MODE_NO_SUBMIT` (safe) or a submit outcome (live) instead.
 - **`SUBMIT_HELD_INCOMPLETE`** — a multi-step form was filled through its steps, but the Live submission was deliberately held because the run didn't cleanly reach the final step or fill an email.
 
-The same facts, in the same words, appear on the Form Tester result card, each Form Scheduler run, and the per-URL dashboard — one engine, one story. A scheduled check stores exactly what a manual test stores, so watching a URL makes its dashboard richer, never thinner; when a URL has both, the page shows the more recent one and says which it was.
+The same facts, in the same words, appear on the Form Tester result card, each Form Scheduler run, and the per-URL dashboard — one engine, one story. A scheduled check records the same detail about the form it tested as a manual test does, so watching a URL makes its dashboard richer; when a URL has both, the page shows the more recent one and says which it was. The one thing only a manual test carries is the **whole-site inventory**, because searching the site is what the Tester does and a monitor watches a single page.
 
 ### Notifications carry what the run found, and link to where the rest is
 
@@ -308,6 +310,10 @@ The ticker runs on its own timer with nobody signed in, so it reads every schedu
 
 Two rows are written per run and they answer different questions: the history row is what happened on this check, the durable per-URL result is the latest state of that URL. The second survives the monitor being stopped, which is why Projects still shows a result for a URL nobody is watching any more.
 
+A form monitor watches **one form on one page**, and resolves that page once. Its first check discovers the contact page as a manual test would — or starts from a stored Form Tester run for the same URL, which already knows it — and the page is then written onto the schedule. Every later check loads it directly, so a monitor no longer re-crawls a client's site on a timer to report on a single form. A monitor with no page recorded yet simply discovers again, which is how the ones created before this behave until their next check pins them; they cannot change which form they watch as a result of it.
+
+The page moves only when somebody presses **Find the form again**, which clears it and lets the next check resolve it afresh. When a pinned check stops finding its form, and only on that transition, one detect-only discovery pass runs to report where the form appears to have moved — the monitor says so rather than re-pointing itself, since a monitor that silently redefines what it watches is the problem this avoids.
+
 An alert is sent when the run carries news — a first check, a changed verdict, a change in the form itself, or a spaced reminder that a problem persists.
 
 </details>
@@ -410,6 +416,7 @@ npm run start -- --file sites.txt --output results.json --json-pretty
 --file <path>        .txt or .csv with one URL per line
 --mode <mode>        live | safe | detect-only   (default: safe)
 --landing-page       Detect the form on the given URL (skip contact-page discovery)
+--target-page <url>  Test the form on this exact page (skip discovery and the site crawl)
 --headed             Show the browser window
 --output <path>      Write results to a JSON file
 --json-pretty        Pretty-print JSON
