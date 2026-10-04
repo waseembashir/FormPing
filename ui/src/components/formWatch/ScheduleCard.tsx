@@ -33,6 +33,46 @@ const FIRST_RUN_POLL_MS = 3000;
 const FIRST_RUN_MAX_WAIT_MS = 5 * 60 * 1000;
 
 
+/**
+ * A map-pin, for the one page this monitor watches. A pin is the right figure
+ * precisely because the page was CHOSEN once and then stayed put — which is the
+ * whole claim the line makes. FR-79.
+ */
+function PinnedPageIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5 shrink-0 text-ink-faint"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 14.25s4.75-4.1 4.75-7.5a4.75 4.75 0 0 0-9.5 0c0 3.4 4.75 7.5 4.75 7.5Z" />
+      <circle cx="8" cy="6.5" r="1.75" />
+    </svg>
+  );
+}
+
+/**
+ * The watched page as a reader can take it in at a glance: the path, or the
+ * host when the form is on the site's root. The full URL is the link's title
+ * and its href — a card line is not the place for 80 characters of query
+ * string, and the thing a person is checking is which PAGE of their site this
+ * monitor is on. FR-79.
+ */
+function pageLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/\/+$/, '');
+    return path || parsed.host.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
   const diff = new Date(iso).getTime() - Date.now();
@@ -53,6 +93,7 @@ export function ScheduleCard({
   schedule,
   onStop,
   onTogglePause,
+  onFindForm,
   awaitFirstRun,
   onFirstRunSeen,
   onDone,
@@ -73,6 +114,9 @@ export function ScheduleCard({
    *  user sees the answer instead of an empty panel. Once only. FR-83. */
   awaitFirstRun?: boolean;
   onFirstRunSeen?: () => void;
+  /** Re-resolve which page this monitor watches, for when a site moves its
+   *  contact form. FR-79. */
+  onFindForm: (id: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [runs, setRuns] = useState<FormRunRecord[] | null>(null);
@@ -84,6 +128,8 @@ export function ScheduleCard({
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
   const [confirmRerun, setConfirmRerun] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const [findError, setFindError] = useState<string | null>(null);
   const rerunPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const firstPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -276,6 +322,18 @@ export function ScheduleCard({
     }, RERUN_POLL_MS);
   }
 
+  async function handleFindForm() {
+    setFinding(true);
+    setFindError(null);
+    try {
+      await onFindForm(schedule.id);
+    } catch (err) {
+      setFindError(err instanceof Error ? err.message : 'Could not re-check which page this monitor watches.');
+    } finally {
+      setFinding(false);
+    }
+  }
+
   async function handlePause() {
     setPausing(true);
     try {
@@ -310,7 +368,8 @@ export function ScheduleCard({
               {verdict && <span className="text-[11px] text-ink-muted">· {verdict.label}</span>}
               {level === 'pending' && (
                 <span className="text-[11px] text-ink-muted">
-                  · running the first check {schedule.landingPage ? 'on this page' : 'across your site'}…
+                  · running the first check{' '}
+                  {schedule.landingPage || schedule.pinnedPage ? 'on this page' : 'across your site'}…
                 </span>
               )}
               {schedule.paused && (
@@ -335,6 +394,45 @@ export function ScheduleCard({
                 </span>
               )}
             </div>
+
+            {/* What this monitor actually watches. Nothing said so before, which
+                is why "why is it testing that form?" kept coming up: a monitor
+                covers ONE form on ONE page, and until it was pinned, which page
+                that was could change between checks. Its own line rather than
+                another chip in the row above — it is a different kind of fact
+                (what is watched, not how often) and the row above is already
+                full. FR-79. */}
+            {schedule.pinnedPage && !schedule.landingPage && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                <span className="inline-flex min-w-0 items-center gap-1.5 text-ink-faint">
+                  <PinnedPageIcon />
+                  <span className="shrink-0">Watches one form on</span>
+                  <a
+                    href={schedule.pinnedPage}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={schedule.pinnedPage}
+                    className="truncate font-mono text-ink-secondary transition-colors hover:text-accent-soft"
+                  >
+                    {pageLabel(schedule.pinnedPage)}
+                  </a>
+                </span>
+                {schedule.pinnedAt && (
+                  <span className="text-ink-faint" title={new Date(schedule.pinnedAt).toLocaleString()}>
+                    · found {relativeTime(schedule.pinnedAt)}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleFindForm}
+                  disabled={finding}
+                  title="Search the site for the contact form again and watch whatever it finds. Use this if the site has moved its contact page — it runs a check now, which restarts the interval."
+                  className="font-medium text-ink-muted underline decoration-dotted underline-offset-2 transition-colors hover:text-ink disabled:opacity-40"
+                >
+                  {finding ? 'Looking…' : 'Find the form again'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -389,6 +487,10 @@ export function ScheduleCard({
 
         {rerunError && (
           <p className="mt-3 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-accent-soft">{rerunError}</p>
+        )}
+
+        {findError && (
+          <p className="mt-3 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-accent-soft">{findError}</p>
         )}
 
         <button type="button" onClick={toggleExpand} className="mt-3 text-xs font-medium text-ink-muted transition-colors hover:text-ink">

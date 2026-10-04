@@ -121,6 +121,29 @@ export async function runSingleSite(
       baseResult.notes.push(
         'Landing-page mode: tested the form on the given URL directly (contact-page discovery skipped)',
       );
+    } else if (config.targetPage) {
+      // A pinned page (FR-79): an earlier run already resolved this site's
+      // contact page, so there is nothing to discover. A scheduled monitor
+      // watches ONE form on ONE page — its verdict, fingerprint, diff and
+      // alerts are all built around a single form — so re-crawling up to a
+      // dozen pages of somebody's site on every check, and filling every lead
+      // form found on them, produced an inventory nothing downstream could read.
+      //
+      // Unlike landing-page mode this makes no claim it cannot support. It does
+      // NOT relax form selection (that leniency is the user's assertion being
+      // spent, and a pinned monitor has not asserted anything), and it does NOT
+      // report a contact-page confidence: no discovery ran here, and the
+      // confidence that chose this page belongs to the run that pinned it and
+      // is recorded there. `contactPageConfidence` therefore stays 0 and
+      // `pinnedPageMode` tells the UI to render the page rather than a bar.
+      logger.info(`Pinned page: testing the form on ${config.targetPage} (contact-page discovery skipped)`);
+      targetUrl = config.targetPage;
+      baseResult.resolvedContactPage = config.targetPage;
+      baseResult.contactPageFound = true;
+      baseResult.pinnedPageMode = true;
+      baseResult.notes.push(
+        `Pinned page: tested the form on ${config.targetPage} directly (resolved by an earlier run; site crawl skipped)`,
+      );
     } else {
     // Discover the contact page FIRST, so the inventory below can skip re-filling
     // the contact form the main flow is about to test (no double-fill). FR-76.
@@ -411,6 +434,9 @@ export async function runSingleSite(
             ...(config.landingPage
               ? ['Landing-page mode tested this exact URL — if the form lives on a different page, turn Landing-page mode off to let FormPing discover the contact page.']
               : []),
+            ...(config.targetPage
+              ? ['This monitor watches this exact page, resolved when it was set up. If the site has moved its contact form, use "Find the form again" to re-resolve it.']
+              : []),
           ],
           durationMs: Date.now() - start,
         };
@@ -473,6 +499,9 @@ export async function runSingleSite(
             `The only form on this page is ${what} — not a contact form, so nothing was filled.`,
             ...(config.landingPage
               ? ['Landing-page mode tested this exact URL. If the contact form is on another page, turn Landing-page mode off to let FormPing find it.']
+              : []),
+            ...(config.targetPage
+              ? ['This monitor watches this exact page, resolved when it was set up. If the contact form has moved, use "Find the form again" to re-resolve it.']
               : []),
           ],
           durationMs: Date.now() - start,

@@ -130,6 +130,27 @@ export default function FormWatchPage() {
     });
   }, []);
 
+  /**
+   * "Find the form again" — re-resolve which page this monitor watches. The
+   * route clears the pin and brings the next check forward, so reloading here
+   * shows the monitor searching rather than still naming the old page. FR-79.
+   */
+  const handleFindForm = useCallback(
+    async (id: string) => {
+      const res = await fetch('/api/form-watch/find-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? 'Could not re-check which page this monitor watches.');
+      }
+      await load();
+    },
+    [load],
+  );
+
   const handleTogglePause = useCallback(
     async (id: string, paused: boolean) => {
       await fetch('/api/form-watch/pause', {
@@ -232,6 +253,7 @@ export default function FormWatchPage() {
                   saveFailure={saveFailures[s.id]}
                   onStop={handleStop}
                   onTogglePause={handleTogglePause}
+                  onFindForm={handleFindForm}
                   onDone={load}
                   onHold={holdPoll}
                   awaitFirstRun={s.id === firstRunId}

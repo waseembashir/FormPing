@@ -1,0 +1,40 @@
+-- FR-79 — the page a form monitor watches, resolved once instead of on every check.
+--
+-- A Form Scheduler monitor can only ever watch ONE form: its verdict, its
+-- fingerprint, its before/after diff and its alerts are all built around a
+-- single form on a single page. Every check nevertheless re-ran contact-page
+-- discovery and crawled up to twelve pages of the client's site, typing test
+-- data into every lead form it met, to report on one of them and discard the
+-- rest. The crawl was not so much wasted effort as effort nothing could read —
+-- and it meant touching somebody else's website on a timer, indefinitely, to
+-- monitor one form.
+--
+-- `pinned_page` is where the answer is kept once. It is written from a check
+-- that ACTUALLY RAN -- never from an assertion -- which is what makes "why is
+-- this monitor watching that form?" a question with an answer: the run that
+-- chose the page, with its confidence, is sitting in form_watch_runs.
+--
+-- NULL means "not pinned yet", and that is the whole migration story for the
+-- monitors that already exist. A NULL pin falls back to discovery, which is
+-- exactly today's behaviour, so applying this changes no monitor's behaviour at
+-- all. Each one pins itself from its own next check, and none of them can
+-- change which form it watches on the strength of this column appearing.
+--
+-- Always NULL for landing-page monitors: there the URL IS the page, and that
+-- mode carries a deliberate leniency in form selection that only the user's
+-- own assertion justifies.
+--
+-- `pinned_at` is shown beside the page so a person can judge how old the
+-- answer is before trusting it, and is the timestamp "Find the form again"
+-- resets. Clearing the pin (rather than guessing a new one) is how re-resolving
+-- works, so that action and the first resolve are the same code path.
+--
+-- Additive and idempotent: two nullable columns with no defaults do not rewrite
+-- the table and do not touch a single existing row, so there is nothing to
+-- undo.
+--
+-- Run once per schema: `public` first, then `dev` -- see the README in this
+-- folder for why that order, and verify both afterwards.
+
+alter table form_watch_schedules add column if not exists pinned_page text;
+alter table form_watch_schedules add column if not exists pinned_at timestamptz;

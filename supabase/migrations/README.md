@@ -97,3 +97,5 @@ select table_schema, count(*)
 | `0014_fr66_project_activity_log.sql`| project_events — who did what to a project, and when        |
 | `0015_fr82_manual_rerun.sql`     | form/site watch runs: trigger_source (scheduled vs re-run)     |
 | `0016_fr74_owner.sql`            | owner on the ten tool-tab tables, + an index on each schedule table |
+| `0017_fr55_slack_user_id.sql`     | app_users: slack_user_id — the cached id an alert @mentions           |
+| `0018_fr79_pinned_page.sql`      | form_watch_schedules: pinned_page, pinned_at — the page a monitor watches |

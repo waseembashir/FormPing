@@ -13,6 +13,8 @@ import type { FormSchedule } from '@/lib/formWatch/types';
 export interface RunNowSpy {
   /** Schedule ids the page asked to run, in order. */
   readonly calls: string[];
+  /** Schedule ids the page asked to re-resolve, in order. FR-79. */
+  readonly findFormCalls: string[];
 }
 
 /**
@@ -34,6 +36,7 @@ export async function mockFormWatch(
   saveFailures: Record<string, { at: string }> = {},
 ): Promise<RunNowSpy> {
   const calls: string[] = [];
+  const findFormCalls: string[] = [];
 
   // The list the page renders.
   await page.route('**/api/form-watch', (route) =>
@@ -71,5 +74,24 @@ export async function mockFormWatch(
     });
   });
 
-  return { calls };
+  // "Find the form again" — recorded, never actually performed. Answered with
+  // the monitor minus its pin, which is what the route really returns. FR-79.
+  await page.route('**/api/form-watch/find-form', async (route) => {
+    let id = '';
+    try {
+      id = (route.request().postDataJSON() as { id?: string })?.id ?? '';
+    } catch {
+      /* a malformed body is itself worth failing on in the assertion */
+    }
+    findFormCalls.push(id);
+    const found = schedules.find((s) => s.id === id);
+    const cleared = found ? { ...found, pinnedPage: undefined, pinnedAt: undefined } : null;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ schedule: cleared }),
+    });
+  });
+
+  return { calls, findFormCalls };
 }

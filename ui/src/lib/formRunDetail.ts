@@ -64,6 +64,8 @@ export interface FormRunDetail {
   /** The page the form was actually found on (may differ from the entered URL). */
   resolvedPage?: string | null;
   landingPageMode?: boolean;
+  /** FR-79 — the run loaded a pinned page instead of searching the site. */
+  pinnedPageMode?: boolean;
   submissionAttempted?: boolean;
   submissionResult?: string;
   thankYouDetected?: boolean;
@@ -137,6 +139,7 @@ export function extractFormRunDetail(raw: unknown): FormRunDetail {
   const kind = str(r.formKind); if (kind !== undefined) d.formKind = kind;
   if (typeof r.resolvedContactPage === 'string' || r.resolvedContactPage === null) d.resolvedPage = r.resolvedContactPage as string | null;
   const lp = bool(r.landingPageMode); if (lp !== undefined) d.landingPageMode = lp;
+  const pin = bool(r.pinnedPageMode); if (pin !== undefined) d.pinnedPageMode = pin;
   const sa = bool(r.submissionAttempted); if (sa !== undefined) d.submissionAttempted = sa;
   const sr = str(r.submissionResult); if (sr !== undefined) d.submissionResult = sr;
   const ty = bool(r.thankYouDetected); if (ty !== undefined) d.thankYouDetected = ty;

@@ -36,6 +36,23 @@ export interface FormSchedule {
    *  discovery (no crawling). For standalone landing pages with an inline form.
    *  Defaults to false / undefined = normal discovery. */
   landingPage?: boolean;
+  /**
+   * The page this monitor watches, resolved once and then kept.
+   *
+   * A monitor watches one form on one page, so re-running discovery and
+   * crawling the client's site on every check bought nothing and touched
+   * somebody else's website on a timer. This is written from a check that
+   * actually ran — never asserted — and it only moves when a person asks.
+   *
+   * Absent means "not pinned yet": the next check discovers as it always has
+   * and pins itself from its own result, which is how monitors created before
+   * this existed carry on watching the same form they watch today. Always
+   * absent in landing-page mode, where the URL IS the page. FR-79.
+   */
+  pinnedPage?: string;
+  /** When the pin was written — shown so a person can judge how old the answer
+   *  is before trusting it. FR-79. */
+  pinnedAt?: string;
   /** ISO timestamp when the schedule was created. */
   createdAt: string;
   /** ISO timestamp of the last completed run, or null if never run. */
@@ -73,6 +90,10 @@ export interface FormFingerprint {
   fields?: { label: string; type: string }[];
   isMultiStep?: boolean;
   landingPageMode?: boolean;
+  /** True when this check loaded the page the monitor is pinned to instead of
+   *  searching the site for it. Carried so nothing downstream claims a
+   *  whole-site search that did not happen. FR-79. */
+  pinnedPageMode?: boolean;
   /** "N forms on this page" summary (2+ forms only) — same data the Tester card
    *  shows, so a scheduled run reads identically. FR-68. */
   formsOnPage?: FormsOnPage;

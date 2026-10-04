@@ -41,9 +41,19 @@ interface FormScheduleRow {
   last_status: string | null;
   last_reason_code: string | null;
   last_form_found: boolean | null;
+  /** FR-79 — the page this monitor watches. Absent until migration 0018. */
+  pinned_page?: string | null;
+  pinned_at?: string | null;
 }
-const FS_COLS =
+/**
+ * The columns every deployed database is known to have, and the ones FR-79
+ * added on top. Reads try the full set and fall back to the base set, so a
+ * build that arrives before migration 0018 keeps listing monitors — they simply
+ * read as unpinned, which is the behaviour they had before the column existed.
+ */
+const FS_BASE_COLS =
   'id, url, site, interval_ms, mode, landing_page, created_at, last_run_at, next_run_at, paused, last_status, last_reason_code, last_form_found, owner';
+const FS_COLS = `${FS_BASE_COLS}, pinned_page, pinned_at`;
 
 function toSchedule(r: FormScheduleRow): FormSchedule {
   return {
@@ -61,9 +71,19 @@ function toSchedule(r: FormScheduleRow): FormSchedule {
     lastReasonCode: r.last_reason_code ?? undefined,
     lastFormFound: r.last_form_found ?? undefined,
     ...(r.owner ? { owner: r.owner } : {}),
+    ...(r.pinned_page ? { pinnedPage: r.pinned_page } : {}),
+    ...(r.pinned_at ? { pinnedAt: r.pinned_at } : {}),
   };
 }
 function toRow(s: FormSchedule): FormScheduleRow {
+  return {
+    ...baseRow(s),
+    pinned_page: s.pinnedPage ?? null,
+    pinned_at: s.pinnedAt ?? null,
+  };
+}
+
+function baseRow(s: FormSchedule): FormScheduleRow {
   return {
     id: s.id,
     owner: s.owner ?? null,
@@ -93,18 +113,31 @@ function toRow(s: FormSchedule): FormScheduleRow {
  * So the filter is something a caller opts into, and only a request does.
  */
 export async function listSchedules(scope?: string): Promise<FormSchedule[]> {
-  let query = supabaseAdmin().from('form_watch_schedules').select(FS_COLS);
+  // Returns the built query rather than its result, so the fallback below can
+  // run the identical read against a narrower column list.
+  const select = (columns: string) => {
+    let query = supabaseAdmin().from('form_watch_schedules').select(columns);
+    const filter = ownerFilterExpression(scope);
+    if (filter) query = query.or(filter);
+    return query;
+  };
 
-  const filter = ownerFilterExpression(scope);
-  if (filter) query = query.or(filter);
-
-  const { data, error } = await query;
+  let { data, error } = await select(FS_COLS);
   if (error) {
-    console.warn(`[formWatch/scheduleStore] list: ${error.message}`);
-    return [];
+    // `pinned_page` is missing until migration 0018 is applied. Falling back
+    // keeps every monitor listed and running — they read as unpinned, which is
+    // how they behaved before the column existed. Returning [] here would
+    // instead empty the Scheduler tab and, far worse, hand the ticker no
+    // schedules to run: monitoring would stop on a database that is merely a
+    // migration behind.
+    ({ data, error } = await select(FS_BASE_COLS));
+    if (error) {
+      console.warn(`[formWatch/scheduleStore] list: ${error.message}`);
+      return [];
+    }
   }
 
-  const rows = (data as FormScheduleRow[]).map(toSchedule);
+  const rows = (data as unknown as FormScheduleRow[]).map(toSchedule);
   // Belt and braces, and the only correct path if the address was one the
   // expression builder refused to put in a query. Re-checking rows the
   // database already narrowed costs nothing and cannot be wrong.
@@ -112,29 +145,53 @@ export async function listSchedules(scope?: string): Promise<FormSchedule[]> {
 }
 
 export async function getSchedule(id: string): Promise<FormSchedule | undefined> {
-  const { data, error } = await supabaseAdmin().from('form_watch_schedules').select(FS_COLS).eq('id', id).maybeSingle();
+  const get = (columns: string) =>
+    supabaseAdmin().from('form_watch_schedules').select(columns).eq('id', id).maybeSingle();
+
+  let { data, error } = await get(FS_COLS);
   if (error) {
-    console.warn(`[formWatch/scheduleStore] get: ${error.message}`);
-    return undefined;
+    ({ data, error } = await get(FS_BASE_COLS)); // pre-0018 database — see listSchedules
+    if (error) {
+      console.warn(`[formWatch/scheduleStore] get: ${error.message}`);
+      return undefined;
+    }
   }
-  return data ? toSchedule(data as FormScheduleRow) : undefined;
+  return data ? toSchedule(data as unknown as FormScheduleRow) : undefined;
 }
 
 export async function findScheduleByUrl(url: string): Promise<FormSchedule | undefined> {
   const norm = normKey(url);
   // Match case-insensitively on the normalized URL (rows are stored as entered).
-  const { data, error } = await supabaseAdmin().from('form_watch_schedules').select(FS_COLS);
+  let { data, error } = await supabaseAdmin().from('form_watch_schedules').select(FS_COLS);
   if (error) {
-    console.warn(`[formWatch/scheduleStore] findByUrl: ${error.message}`);
-    return undefined;
+    // pre-0018 database — see listSchedules. This one guards a duplicate check,
+    // so failing open would let a second monitor be created for a URL that
+    // already has one.
+    ({ data, error } = await supabaseAdmin().from('form_watch_schedules').select(FS_BASE_COLS));
+    if (error) {
+      console.warn(`[formWatch/scheduleStore] findByUrl: ${error.message}`);
+      return undefined;
+    }
   }
-  const row = (data as FormScheduleRow[]).find((r) => normKey(r.url) === norm);
+  const row = (data as unknown as FormScheduleRow[]).find((r) => normKey(r.url) === norm);
   return row ? toSchedule(row) : undefined;
 }
 
 export async function upsertSchedule(entry: FormSchedule): Promise<void> {
   const { error } = await supabaseAdmin().from('form_watch_schedules').upsert(toRow(entry), { onConflict: 'id' });
-  if (error) console.warn(`[formWatch/scheduleStore] upsert: ${error.message}`);
+  if (!error) return;
+
+  // Retry without the FR-79 pin columns. This is the write that advances
+  // `nextRunAt`, so letting a column added by a migration that has not been
+  // applied yet refuse it would leave every monitor permanently due — the
+  // ticker would re-run each one on every pass, turning a missing column into
+  // a loop that hammers the client's site. The pin is the one thing worth
+  // losing here; the cadence is not.
+  const { error: retry } = await supabaseAdmin()
+    .from('form_watch_schedules')
+    .upsert(baseRow(entry), { onConflict: 'id' });
+  if (retry) console.warn(`[formWatch/scheduleStore] upsert: ${retry.message}`);
+  else console.warn(`[formWatch/scheduleStore] upsert: saved without pinned page (${error.message})`);
 }
 
 export async function removeSchedule(id: string): Promise<boolean> {

@@ -148,6 +148,34 @@ export async function removeRun(url: string): Promise<void> {
   await removeShots(url);
 }
 
+/**
+ * The recorded Form Tester run for one URL, or undefined if there is none.
+ *
+ * Exists so setting up a monitor can reuse what a manual test already worked
+ * out — chiefly `detail.resolvedPage`, the contact page that test resolved. A
+ * monitor pinned from it never runs discovery at all: its very first check
+ * loads one page instead of crawling the client's site. FR-79.
+ *
+ * A keyed select rather than `loadRuns()`, which fetches every row in the table
+ * to answer a question about one URL.
+ */
+export async function getRun(url: string): Promise<OnDemandRun | undefined> {
+  const key = runKey(url);
+  const get = (columns: string) =>
+    supabaseAdmin().from('form_tester_runs').select(columns).eq('url_key', key).maybeSingle();
+
+  let { data, error } = await get(RUN_COLS);
+  if (error) {
+    // `detail` is missing until migration 0012 is applied — see loadRuns.
+    ({ data, error } = await get(BASE_COLS));
+    if (error) {
+      console.warn(`[onDemandRunStore] getRun: ${error.message}`);
+      return undefined;
+    }
+  }
+  return data ? rowToRun(data as unknown as OnDemandRunRow) : undefined;
+}
+
 /** Load all recorded runs as a Map keyed by normalized+lowercased URL. */
 export async function loadRuns(): Promise<Map<string, OnDemandRun>> {
   const { data, error } = await supabaseAdmin().from('form_tester_runs').select(RUN_COLS);

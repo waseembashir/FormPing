@@ -294,9 +294,19 @@ export function formRunScope(record: FormRunRecord): string {
           : 'Safe mode — the form could not be filled; nothing was submitted'
         : 'Detect mode — we only confirmed a form exists; nothing was filled or submitted';
 
+  /**
+   * A monitor watches ONE form on ONE page, and this says which of the three
+   * ways it got there — because the claim "searched the whole site" is the kind
+   * a reader acts on. A pinned monitor loads a single page it resolved once, so
+   * leaving it in the whole-site wording would have every scheduled alert
+   * describe a crawl that did not run and imply a survey of forms nobody
+   * looked for. FR-79.
+   */
   const where = f?.landingPageMode
     ? 'only the form on this exact URL was checked'
-    : 'searched the whole site, and this is the form we judged to be the main contact form — other forms may exist';
+    : f?.pinnedPageMode
+      ? 'this monitor watches one form on the page it resolved when it was set up — other forms on the site are not checked'
+      : 'searched the whole site, and this is the form we judged to be the main contact form — other forms may exist';
 
   return `${mode} · ${where}.`;
 }

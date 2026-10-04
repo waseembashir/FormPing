@@ -545,6 +545,7 @@ function FormRunDetails({ form }: { form: NonNullable<NonNullable<StatusSite['te
 
           <div className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
             {d.landingPageMode && <Detail k="Scope" v="Landing page only" />}
+            {d.pinnedPageMode && !d.landingPageMode && <Detail k="Scope" v="One form on the page this monitor watches" />}
             {d.submissionAttempted && <Detail k="Submission" v={d.submissionResult || '—'} />}
           </div>
         </>
