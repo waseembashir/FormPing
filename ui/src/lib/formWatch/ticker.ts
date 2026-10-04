@@ -21,7 +21,7 @@ import { recordResult } from './resultStore';
 import { hostFormShots } from '@/lib/formShots';
 import { runFormTest, type RawSiteResult } from './runner';
 import { onRunComplete } from './notify';
-import { planCheck, pinFor } from './pinnedPage';
+import { planCheck, pinFor, shouldLookForMovedForm, movedFormNote } from './pinnedPage';
 import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
 import { inheritedOwner } from '@/lib/ownership';
 
@@ -217,6 +217,42 @@ async function runScheduleOnce(
       : errorRecord(schedule, ranAt, 'Form test produced no result (timeout or spawn failure)', trigger);
   } catch (err) {
     record = errorRecord(schedule, ranAt, `Run threw: ${String(err)}`, trigger);
+  }
+
+  /**
+   * A pinned monitor that has just lost its form has two possible stories, and
+   * they call for opposite responses: the form is broken or gone, or the site
+   * moved its contact page and the form is alive somewhere else. The check
+   * cannot tell them apart, because it only looked at one page.
+   *
+   * So on the transition — and only the transition, see
+   * `shouldLookForMovedForm` — one discovery pass runs to say where a form can
+   * be found now. Three deliberate limits:
+   *
+   *   • it runs in **detect-only** mode, whatever the monitor's own mode is.
+   *     This is a diagnosis, not a check: it must not fill or submit anything
+   *     on a client's site to answer a question about where a page went
+   *   • it does **not** re-point the monitor. A monitor that silently redefines
+   *     what it watches is the failure this whole feature exists to prevent, so
+   *     it reports and a person moves the pin
+   *   • it never changes the verdict. The run failed on the page this monitor
+   *     watches, which is true however many forms exist elsewhere
+   */
+  if (!manual && shouldLookForMovedForm(schedule, { formFound: record.fingerprint.formFound })) {
+    try {
+      const search = await runFormTest(schedule.url, 'detect-only', {});
+      const note = search
+        ? movedFormNote(plan.url, {
+            resolvedPage: search.resolvedContactPage,
+            formFound: Boolean(search.formFound),
+          })
+        : null;
+      if (note) record = { ...record, notes: [...record.notes, note] };
+    } catch (err) {
+      // A diagnosis is a courtesy. Failing to produce one must not touch the
+      // verdict of the check that prompted it.
+      console.warn(`[formWatch/ticker] moved-form search failed for ${schedule.url}: ${err}`);
+    }
   }
 
   // Notification + before/after diff happen here (layered in by notify.ts),
