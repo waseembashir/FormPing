@@ -40,7 +40,20 @@ const IGNORED_HOST_PATTERNS = [
 ];
 
 /** Common JSON shapes returned by form plugins; parse to a normalized verdict. */
-function parseJsonOutcome(body: string): 'success' | 'failure' | 'unknown' {
+/**
+ * What a form plugin's JSON response says about the submission.
+ *
+ * Exported for tests. This is the highest-stakes judgement in the engine: it
+ * decides whether we tell somebody a real message reached their inbox. A wrong
+ * `success` is worse than no answer at all — it retires an alarm that should
+ * have rung.
+ *
+ * Three-valued on purpose. `unknown` is a real answer and the default: these
+ * shapes are each one plugin's convention, and a response matching none of them
+ * tells us nothing. Guessing from a 200 would make every unrecognised plugin
+ * look like a working form.
+ */
+export function parseJsonOutcome(body: string): 'success' | 'failure' | 'unknown' {
   let json: unknown;
   try {
     json = JSON.parse(body);
