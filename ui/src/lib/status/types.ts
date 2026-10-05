@@ -63,6 +63,10 @@ export interface SiteTech {
     level: string | null;
     label: string | null;
     lastRunAt: string | null;
+    /** How often the form monitor runs, in ms. Null when there is no live
+     *  monitor — a stopped one leaves its last result but no cadence to state.
+     *  Internal, like the uptime `intervalMs` beside it (FR-20). */
+    intervalMs?: number | null;
     /** FR-67 — the last manual Form Tester run's reason code + rich facts, so the
      *  per-URL dashboard can explain WHAT was found and WHY it failed. Internal
      *  only (it lives in `tech`, which never reaches the public status page). */
@@ -111,6 +115,11 @@ export interface StatusSite {
    * INTERNAL ONLY. Both are omitted from the public client status page, which
    * is shared with people outside the team and has no business naming staff.
    * Absent on monitors created before per-user isolation. FR-74.
+   *
+   * The builder stamps the creator's EMAIL. The internal route resolves it to a
+   * display name before the UI sees it, falling back to the address when no
+   * name is recorded — so treat this as a label to print, not as an identifier
+   * to match on.
    */
   formOwner?: string;
   siteOwner?: string;

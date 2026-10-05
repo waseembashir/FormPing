@@ -7,6 +7,7 @@ import { PageChangeCard } from '@/components/monitor/PageChangeCard';
 import { getReasonMessage } from '@/lib/reasonMessages';
 import type { FormRunFormSummary } from '@/lib/formRunDetail';
 import { describeFailure, type CheckFailure, type CheckSubject } from '@/lib/siteWatch/failures';
+import { watchedBy, watchedByNeedsContext } from '@/lib/monitorWatchers';
 
 type StatusData = ClientStatus & { contact?: string | null; changes?: ChangePoint[] };
 
@@ -592,8 +593,31 @@ function SiteCard({
   internal?: boolean;
 }) {
   const uptimeMonitored = s.state !== 'unknown';
+
   const hasUptimeData = s.dailyUptime.some((d) => d.pct != null);
   const tech = s.tech; // present only on the internal view
+
+  /**
+   * Who to talk to about this URL. The owner of each monitor has been recorded
+   * since per-user isolation and displayed nowhere, which is what made a
+   * colleague's monitor a dead end: the app allows one monitor per URL and
+   * named its owner on no screen, so the only way to find out was to try to
+   * create your own and be refused. Projects is the shared record, so this is
+   * where the answer belongs.
+   *
+   * A live form monitor is the one with a cadence — a stopped one keeps its
+   * last result, and nobody is watching it.
+   */
+  const watchLine = internal
+    ? watchedBy(
+        { monitored: tech?.form?.intervalMs != null, owner: s.formOwner ?? null },
+        { monitored: uptimeMonitored, owner: s.siteOwner ?? null },
+      )
+    : null;
+  const watchNeedsContext = internal && watchedByNeedsContext(
+    { monitored: tech?.form?.intervalMs != null, owner: s.formOwner ?? null },
+    { monitored: uptimeMonitored, owner: s.siteOwner ?? null },
+  );
   const ssl = s.ssl;
   // Full page URL (scheme stripped) so multiple URLs on one host are distinct.
   const displayUrl = s.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -615,9 +639,23 @@ function SiteCard({
   return (
     <div className="rounded-2xl bg-panel/60 p-5 ring-1 ring-line">
       <div className="mb-4 flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${s.state === 'up' ? 'bg-ok' : s.state === 'down' ? 'bg-danger' : 'bg-idle'}`} />
-          <span className="truncate font-semibold text-ink" title={s.url}>{displayUrl}</span>
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className={`mt-[7px] h-2.5 w-2.5 shrink-0 rounded-full ${s.state === 'up' ? 'bg-ok' : s.state === 'down' ? 'bg-danger' : 'bg-idle'}`} />
+          <div className="min-w-0">
+            <span className="block truncate font-semibold text-ink" title={s.url}>{displayUrl}</span>
+            {/* Under the URL rather than in the technical panel: who is
+                responsible for a page is not a technical fact, and an answer
+                somebody has to open a panel to find is one they will not look
+                for. */}
+            {watchLine && (
+              <p
+                className="mt-0.5 truncate text-[11px] text-ink-faint"
+                title={watchNeedsContext ? 'A URL can carry two monitors — one on its contact form, one on its uptime — and they can belong to different people.' : undefined}
+              >
+                Watched by <span className="text-ink-secondary">{watchLine}</span>
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {s.stale && (
@@ -722,7 +760,20 @@ function SiteCard({
               <Detail k="Last response" v={tech.lastResponseMs != null ? `${tech.lastResponseMs}ms` : '—'} />
               <Detail k="Last checked" v={rel(tech.lastCheckedAt)} />
               <Detail k="Checked every" v={cadence(tech.intervalMs) ?? '—'} />
-              {tech.form && <Detail k="Form test" v={`${modeLabel(tech.form.mode)}${tech.form.label ? ` · ${tech.form.label}` : ''}`} />}
+              {tech.form && (
+                <Detail
+                  k="Form test"
+                  v={[
+                    modeLabel(tech.form.mode),
+                    tech.form.label,
+                    // Only a live monitor has one. Stating a stopped monitor's
+                    // old cadence would read as a schedule still running.
+                    tech.form.intervalMs != null ? `every ${cadence(tech.form.intervalMs)}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                />
+              )}
             </div>
             {/* Why a failing check failed. The reason was measured and thrown
                 away, leaving a red status with no explanation. FR-67. */}
