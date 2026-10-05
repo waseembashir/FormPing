@@ -231,6 +231,20 @@ Signing in is limited to approved domains; on top of that, each person has a rol
 
 Enforcement is **server-side on every write** — the interface hides what a role can't do, but the server is the real gate. Roles are read fresh on each request, so a change takes effect immediately. There is always exactly one owner, and ownership is transferred (never left empty), so the app can't be locked out.
 
+### Your own workspace, one shared record
+
+A role says what you may do. Separately, the app splits into two planes that decide what you **see**.
+
+The four tool tabs — Form Tester, Form Scheduler, Uptime & SSL, Content Changes — are **yours**. Your runs, your monitors, their logs and their in-flight state are stamped with your address when you create them, and nobody else's work appears on your screen. Ten people can use the app at once without wading through each other's output.
+
+**Projects is the shared record.** Every project, every URL and every result is visible to the whole team whoever produced it — that is the point of it. A project names who created it and who last edited it, and a URL names **who watches it**, because a page is monitored by one person and knowing who is how you find the right person to speak to.
+
+Those two rules meet at a URL: **one page, one monitor, one owner.** The duplicate check is deliberately global rather than per-user, so a second monitor can never be created for a page somebody already watches — two monitors on one form would mean two real submissions landing in the client's inbox every cycle, each invisible to the other. When that refusal happens it names the owner, since an obstacle you cannot see and nobody is named for is a dead end.
+
+Alerts follow the same column: a failing check mentions whoever set the monitor up, so the person responsible hears about it rather than everybody hearing about everything.
+
+Isolation is behind a flag, read per request, and defaults to off — with it off the app behaves exactly as it did before, which is also what keeps a local checkout with no sign-in working.
+
 ---
 
 ## Tech stack
