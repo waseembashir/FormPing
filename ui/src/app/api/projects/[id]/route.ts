@@ -6,7 +6,8 @@ import { removeUrlShareByKey } from '@/lib/projects/urlShareStore';
 import { requireRole, currentUser } from '@/lib/auth/authorize';
 import { recordEvent } from '@/lib/projects/eventStore';
 import { atLeast } from '@/lib/auth/roles';
-import { getUserName } from '@/lib/auth/userStore';
+import { getUserName, listUsers } from '@/lib/auth/userStore';
+import { ownerLabel } from '@/lib/monitorCollision';
 import { urlHealthFor } from '@/lib/projects/health';
 import {
   findScheduleByUrl as findFormByUrl,
@@ -58,7 +59,28 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   // reading a project must never fail because its log could not be written. FR-66.
   void recordEvent(params.id, await actorName(request), 'viewed');
   const health = await urlHealthFor(project.urls);
-  return NextResponse.json({ project: { ...project, health } });
+
+  /**
+   * Name whoever runs each monitor, rather than shipping their email.
+   *
+   * "URLs & monitors" is where a person scans to see what is watched for a
+   * client, so it is where "and by whom" belongs — the per-URL dashboard says
+   * it too, but a fact nobody finds until they click through is a fact the app
+   * is keeping to itself.
+   *
+   * One directory read for the whole project rather than a lookup per URL. An
+   * address with no `app_users` row keeps the email, which is reachable and
+   * already on the Team page.
+   */
+  const names = new Map((await listUsers()).map((u) => [u.email, u.name] as const));
+  const label = (email?: string) => (email ? ownerLabel(names.get(email) ?? null, email) ?? undefined : undefined);
+  const named = health.map((h) => ({
+    ...h,
+    form: { ...h.form, ...(h.form.owner ? { owner: label(h.form.owner) } : {}) },
+    site: { ...h.site, ...(h.site.owner ? { owner: label(h.site.owner) } : {}) },
+  }));
+
+  return NextResponse.json({ project: { ...project, health: named } });
 }
 
 /** PATCH /api/projects/[id] — update name / urls / notes. */

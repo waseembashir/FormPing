@@ -17,6 +17,8 @@ import type {
   UrlHealth,
 } from '@/lib/projects/types';
 import { runVerdict } from '@/lib/formWatch/verdict';
+import { watchPlacement } from '@/lib/monitorWatchers';
+import { cx } from '@/components/ui';
 
 export type Tone = 'emerald' | 'amber' | 'red' | 'slate' | 'sky';
 
@@ -225,7 +227,19 @@ function SourceTag({ label, dim = false }: { label: string; dim?: boolean }) {
  * when. Extracted from `UrlHealthDetail` so ONE implementation is shared by the
  * project detail page AND the internal status dashboards (FR-49 follow-up).
  */
-export function UrlTestRows({ h }: { h: UrlHealth }) {
+export function UrlTestRows({
+  h,
+  nameEachMonitor = false,
+}: {
+  h: UrlHealth;
+  /**
+   * Put each monitor's owner on its own row. Set only when they disagree — one
+   * name at the top is the right answer when there is one, and repeating it on
+   * three rows would make the reader compare them to notice they match. See
+   * `watchPlacement`.
+   */
+  nameEachMonitor?: boolean;
+}) {
   const formTone = h.form.level ? FORM_TONE[h.form.level] : 'slate';
   const upTone = h.site.upState ? UP_TONE[h.site.upState] : 'slate';
   const ssl = sslText(h.site.sslDaysRemaining);
@@ -261,6 +275,7 @@ export function UrlTestRows({ h }: { h: UrlHealth }) {
               <span className="font-medium text-ink-secondary">Scheduled form test · {modeLabel(h.form.mode)}</span>
               <span className={TONE_TEXT[formTone]}>— {h.form.label}</span>
               <span className="text-ink-faint">· {formatInterval(h.form.intervalMs)} · {rel(h.form.lastRunAt)}</span>
+              {nameEachMonitor && h.form.owner && <WatchedBy name={h.form.owner} compact />}
             </>
           ) : h.form.stopped ? (
             <>
@@ -292,6 +307,7 @@ export function UrlTestRows({ h }: { h: UrlHealth }) {
               <span className="text-ink-faint">
                 · {h.site.monitored ? `${formatInterval(h.site.intervalMs)} · ${rel(h.site.lastCheckedAt)}` : `monitor stopped · ${rel(h.site.lastCheckedAt)}`}
               </span>
+              {nameEachMonitor && h.site.monitored && h.site.owner && <WatchedBy name={h.site.owner} compact />}
             </>
           ) : (
             <span className="text-ink-faint">Uptime &amp; SSL · not set up</span>
@@ -313,6 +329,7 @@ export function UrlTestRows({ h }: { h: UrlHealth }) {
               <span className="font-medium text-ink-secondary">Baseline captured</span>
               <span className="text-ink-faint">— awaiting first compare</span>
               <span className="text-ink-faint">· site-wide · {rel(h.change.lastCheckedAt)}</span>
+              {nameEachMonitor && h.change.owner && <WatchedBy name={h.change.owner} compact />}
             </>
           ) : (
             <>
@@ -327,6 +344,7 @@ export function UrlTestRows({ h }: { h: UrlHealth }) {
               <span className="text-ink-faint">
                 · site-wide{h.change.mode === 'watch' ? ' · watching' : ''} · {rel(h.change.lastCheckedAt)}
               </span>
+              {nameEachMonitor && h.change.owner && <WatchedBy name={h.change.owner} compact />}
             </>
           )}
         </div>
@@ -356,6 +374,31 @@ export function UrlTestRows({ h }: { h: UrlHealth }) {
  * Unchanged behaviour from the old ProjectRow.UrlDetailRow; relocated here so the
  * detail page and the Unassigned bucket share ONE implementation.
  */
+/**
+ * "Watched by X" — the one styling, used at both placements, so the heading and
+ * the per-row version cannot drift apart into looking like different facts.
+ *
+ * The dot pulses because that is what it says: somebody is watching this right
+ * now. It is only ever rendered for a monitor that is actually running, so it
+ * cannot imply activity that stopped. Stilled under reduced motion, like every
+ * other pulse in the app.
+ */
+function WatchedBy({ name, compact = false }: { name: string; compact?: boolean }) {
+  return (
+    <span
+      className={cx(
+        'inline-flex min-w-0 items-center gap-1.5 rounded-full bg-ok/10 ring-1 ring-ok/25 text-[11px]',
+        compact ? 'px-2 py-0.5' : 'px-2.5 py-1',
+      )}
+      title={`Watched by ${name}`}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ok animate-pulse motion-reduce:animate-none" />
+      <span className="shrink-0 text-ink-faint">Watched by</span>
+      <span className="truncate font-medium text-ink-secondary">{name}</span>
+    </span>
+  );
+}
+
 export function UrlHealthDetail({
   h,
   dashboardHref,
@@ -369,6 +412,19 @@ export function UrlHealthDetail({
   /** When provided (admins), a DESTRUCTIVE "delete this URL + all its data" button. */
   onDelete?: () => void;
 }) {
+  /**
+   * Who watches this URL. A page carries one form monitor and one uptime
+   * monitor, and the app refuses a second of either — so "who is responsible"
+   * has to be answerable here, on the list of what is watched, rather than only
+   * on the dashboard a click further in. A fact nobody finds until they go
+   * looking is a fact the app is keeping to itself. FR-116.
+   */
+  const placement = watchPlacement([
+    { monitored: h.form.monitored, owner: h.form.owner ?? null },
+    { monitored: h.site.monitored, owner: h.site.owner ?? null },
+    { monitored: h.change?.tracked === true, owner: h.change?.owner ?? null },
+  ]);
+
   return (
     <div className="rounded-xl border border-line bg-panel/50 p-4">
       {/* Header — URL + actions on one aligned row. */}
@@ -382,7 +438,13 @@ export function UrlHealthDetail({
         >
           {h.url}
         </a>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
+          {/* A live dot, because that is exactly what this says: somebody is
+              watching this page right now. `watchedBy` only returns a name when
+              at least one monitor is actually running, so the pulse can never
+              claim activity that stopped. Stilled for reduced-motion, like
+              every other pulse in the app. */}
+          {placement.at === 'header' && <WatchedBy name={placement.label} />}
           {dashboardHref && (
             <Link
               href={dashboardHref}
@@ -417,7 +479,7 @@ export function UrlHealthDetail({
         </div>
       </div>
 
-      <UrlTestRows h={h} />
+      <UrlTestRows h={h} nameEachMonitor={placement.at === 'rows'} />
     </div>
   );
 }
