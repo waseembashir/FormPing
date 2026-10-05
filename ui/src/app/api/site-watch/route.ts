@@ -7,6 +7,8 @@ import { requireRole, currentUser } from '@/lib/auth/authorize';
 import type { SiteSchedule } from '@/lib/siteWatch/types';
 import { saveFailuresForClient } from '@/lib/persistence';
 import { ownerScope } from '@/lib/ownerScope';
+import { collisionMessage, ownerLabel } from '@/lib/monitorCollision';
+import { getUserName } from '@/lib/auth/userStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,10 +64,21 @@ export async function POST(request: NextRequest) {
   if (!Number.isFinite(intervalMs) || intervalMs < MIN_INTERVAL_MS) intervalMs = MIN_INTERVAL_MS;
   intervalMs = Math.round(intervalMs);
 
+  // Resolved before the duplicate check below, which needs it to tell a
+  // colleague's monitor from the caller's own. FR-74 stamps it on the row.
+  const creatorEmail = (await currentUser(request))?.email;
+
+  // One URL, one monitor, one person responsible — see the form-watch route for
+  // why this read stays unscoped and why the answer now names the owner instead
+  // of returning their monitor.
   const existing = await findScheduleByUrl(url);
   if (existing) {
+    const mine = Boolean(creatorEmail && existing.owner === creatorEmail);
+    const label = existing.owner
+      ? ownerLabel(await getUserName(existing.owner), existing.owner)
+      : null;
     return NextResponse.json(
-      { error: 'A monitor already exists for this URL', schedule: existing },
+      { error: collisionMessage('uptime', { ownerLabel: label, mine }) },
       { status: 409 },
     );
   }
@@ -101,11 +114,11 @@ export async function POST(request: NextRequest) {
   // Whose monitor this is. Taken at creation, from the session that asked for
   // it — the only moment the answer is known for certain. A ticker running this
   // schedule later has no request and no user to ask. FR-74.
-  const creator = (await currentUser(request))?.email;
+
   const now = Date.now();
   const schedule: SiteSchedule = {
     id: crypto.randomUUID(),
-    ...(creator ? { owner: creator } : {}),
+    ...(creatorEmail ? { owner: creatorEmail } : {}),
     url,
     host: hostnameOf(url),
     intervalMs,

@@ -8,6 +8,8 @@ import { requireRole, currentUser } from '@/lib/auth/authorize';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 import { saveFailuresForClient } from '@/lib/persistence';
 import { ownerScope } from '@/lib/ownerScope';
+import { collisionMessage, ownerLabel } from '@/lib/monitorCollision';
+import { getUserName } from '@/lib/auth/userStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -118,10 +120,35 @@ export async function POST(request: NextRequest) {
 
   const landingPage = body.landingPage === true;
 
+  // Whose monitor this is. Taken from the session that asked for it — the only
+  // moment the answer is known for certain, since a ticker running this schedule
+  // later has no request and no user to ask. FR-74. Resolved before the
+  // duplicate check below, which needs it to tell "yours" from "a colleague's".
+  const creatorEmail = (await currentUser(request))?.email;
+
+  /**
+   * One URL, one monitor, one person responsible for it — a rule that predates
+   * per-user isolation and still holds: two monitors on one form would send two
+   * sets of real submissions into a client's inbox every cycle, each invisible
+   * to the other. So this read is deliberately NOT owner-scoped.
+   *
+   * What changed is the answer. The monitor in the way usually belongs to a
+   * colleague and is invisible to the caller by design, so "a schedule already
+   * exists" left them with nowhere to go. It now names the owner, which under a
+   * responsibility model is the one fact they need.
+   *
+   * The monitor itself does not travel. This used to return `existing` whole —
+   * cadence, mode, last verdict, schedule id — to somebody who cannot see that
+   * monitor, while the message told them nothing useful. Exactly backwards.
+   */
   const existing = await findScheduleByUrl(url);
   if (existing) {
+    const mine = Boolean(creatorEmail && existing.owner === creatorEmail);
+    const label = existing.owner
+      ? ownerLabel(await getUserName(existing.owner), existing.owner)
+      : null;
     return NextResponse.json(
-      { error: 'A schedule already exists for this URL', schedule: existing },
+      { error: collisionMessage('form', { ownerLabel: label, mine }) },
       { status: 409 },
     );
   }
@@ -132,14 +159,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: check.error }, { status: 422 });
   }
 
-  // Whose monitor this is. Taken at creation, from the session that asked for
-  // it — the only moment the answer is known for certain. A ticker running this
-  // schedule later has no request and no user to ask. FR-74.
-  const creator = (await currentUser(request))?.email;
   const now = Date.now();
   const schedule: FormSchedule = {
     id: crypto.randomUUID(),
-    ...(creator ? { owner: creator } : {}),
+    ...(creatorEmail ? { owner: creatorEmail } : {}),
     url,
     site: hostnameOf(url),
     intervalMs,
