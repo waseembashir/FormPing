@@ -39,6 +39,9 @@ export default defineConfig({
     // this, a logged-out visit to `/` redirects to /welcome and the test never
     // sees the app. Keeps the smoke test deterministic and login-free.
     env: {
+      // Build into `.next-e2e` instead of `.next`, so the suite does not race a
+      // dev server you left running over the same output. See next.config.mjs.
+      NEXT_TEST_BUILD: '1',
       // Auth OFF → open gate (no login), so `/` renders the app not /welcome.
       GOOGLE_CLIENT_ID: '',
       GOOGLE_CLIENT_SECRET: '',

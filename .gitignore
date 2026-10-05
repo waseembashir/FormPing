@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 .next/
+# The e2e suite's own build dir — kept separate so running the suite and a dev
+# server at the same time cannot race over one .next (see ui/next.config.mjs).
+.next-e2e/
 out/
 build/
 *.tsbuildinfo
