@@ -11,6 +11,8 @@ import { requireRole, currentUser } from '@/lib/auth/authorize';
 import { getUserName } from '@/lib/auth/userStore';
 import { findScheduleByUrl as findFormByUrl, removeSchedule as removeFormSchedule } from '@/lib/formWatch/scheduleStore';
 import { findScheduleByUrl as findSiteByUrl, removeSchedule as removeSiteSchedule } from '@/lib/siteWatch/scheduleStore';
+import { listUsers } from '@/lib/auth/userStore';
+import { ownerLabel } from '@/lib/monitorCollision';
 import { removeRun } from '@/lib/onDemandRunStore';
 import { removeResult as removeFormResult } from '@/lib/formWatch/resultStore';
 import { removeResult as removeSiteResult } from '@/lib/siteWatch/resultStore';
@@ -64,9 +66,30 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }))
     .sort((a, b) => (a.checkedAt < b.checkedAt ? 1 : -1));
 
+  /**
+   * Turn the owner EMAILS the builder stamps on each site into something worth
+   * reading. `formOwner` / `siteOwner` have carried the creator's address since
+   * per-user isolation and have never been displayed; Projects is where they
+   * belong, because "who do I talk to about this URL" is exactly what a shared
+   * record is for.
+   *
+   * One directory read for the whole payload rather than a lookup per site. An
+   * address with no `app_users` row — or a person with no Google display name —
+   * keeps the email, which is reachable and already on the Team page; a blank
+   * where a name should be would be worse than the address itself.
+   */
+  const names = new Map((await listUsers()).map((u) => [u.email, u.name] as const));
+  const label = (email?: string) => (email ? ownerLabel(names.get(email) ?? null, email) ?? undefined : undefined);
+  const sites = base.sites.map((site) => ({
+    ...site,
+    ...(site.formOwner ? { formOwner: label(site.formOwner) } : {}),
+    ...(site.siteOwner ? { siteOwner: label(site.siteOwner) } : {}),
+  }));
+
   const shareToken = await getUrlShareToken(project.id, url);
   const data: InternalStatus & { sharedUrl: string; shareToken: string | null } = {
     ...base,
+    sites,
     contact: project.contact ?? null,
     changes,
     sharedUrl: url,

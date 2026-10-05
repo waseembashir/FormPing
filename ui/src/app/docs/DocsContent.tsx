@@ -283,6 +283,7 @@ export default function DocsContent() {
                   <LI>Each project can hold <strong>notes</strong> — anything your team should know about that client. They stay internal and are never shown on a status page.</LI>
                   <LI>The <strong className="text-ink">project name is shown to the client</strong> on any status page you share, as its heading — so it is worth naming a project the way the client would expect to see it, rather than with an internal shorthand.</LI>
                   <LI>Each project shows <strong>who added it and who last edited it</strong> (with the time), so accountability is clear at a glance.</LI>
+                  <LI>Every URL says <strong>who watches it</strong>, right on the project — no need to open anything. A page is watched by one person, so this is how you know who to speak to about it. Where one person runs all of a page’s checks their name sits once beside the page; where different people run different checks, each name sits against the check it belongs to.</LI>
                 </UL>
               </Section>
 

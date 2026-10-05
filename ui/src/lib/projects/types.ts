@@ -100,6 +100,12 @@ export interface UrlHealth {
    */
   change?: {
     tracked: boolean;
+    /**
+     * Whose tracking this is. Per-SIGNAL like `form.owner` and `site.owner`:
+     * three monitors on one URL can belong to three people. Absent on work
+     * that predates per-user isolation. FR-74 / FR-116.
+     */
+    owner?: string;
     /** How the most recent run was performed. */
     mode?: 'snapshot' | 'compare' | 'watch';
     lastCheckedAt?: string | null;

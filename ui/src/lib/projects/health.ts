@@ -40,6 +40,7 @@ type FormResultMap = Map<string, FormWatchResult>;
 type SiteResultMap = Map<string, SiteWatchResult>;
 
 interface ChangeSummary {
+  owner?: string;
   mode?: 'snapshot' | 'compare' | 'watch';
   lastCheckedAt: string | null;
   changesFound: number;
@@ -151,6 +152,7 @@ function buildHealth(
     const change: UrlHealth['change'] = cs
       ? {
           tracked: true,
+          ...(cs.owner ? { owner: cs.owner } : {}),
           mode: cs.mode,
           lastCheckedAt: cs.lastCheckedAt,
           changesFound: cs.changesFound,
@@ -204,6 +206,7 @@ async function loadChanges(urls: string[]): Promise<ChangeMap> {
   const events = await latestEventsForSites(hosts);
   for (const [host, ev] of events) {
     map.set(host, {
+      ...(ev.owner ? { owner: ev.owner } : {}),
       mode: ev.mode,
       lastCheckedAt: ev.checkedAt,
       changesFound: ev.changesFound,

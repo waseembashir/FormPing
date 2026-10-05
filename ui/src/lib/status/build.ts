@@ -195,6 +195,10 @@ function formTech(h: UrlHealth): Pick<NonNullable<StatusSite['tech']>, 'form'> |
         level: h.form.level ?? null,
         label: h.form.label ?? null,
         lastRunAt: h.form.lastRunAt ?? null,
+        // Only a LIVE monitor has a cadence. A stopped one keeps its last
+        // result, and stating how often it used to run would read as a
+        // schedule that is still going.
+        ...(h.form.monitored ? { intervalMs: h.form.intervalMs ?? null } : {}),
         ...detailPart,
       },
     };
