@@ -40,6 +40,9 @@ export interface ChangeEvent {
   changesFound: number;
   severity: ChangeSeverity | null;
   summary: string | null;
+  /** Whose tracking this is — the row already stores it; this surfaces it so
+   *  Projects can say who watches a URL's content. FR-74 / FR-116. */
+  owner?: string;
 }
 
 interface ChangeEventRow {
@@ -70,6 +73,7 @@ function toEvent(r: ChangeEventRow): ChangeEvent {
     changesFound: r.changes_found ?? 0,
     severity: (r.severity as ChangeSeverity) ?? null,
     summary: r.summary,
+    ...(r.owner ? { owner: r.owner } : {}),
   };
 }
 
