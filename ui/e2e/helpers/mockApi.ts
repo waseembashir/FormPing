@@ -34,18 +34,32 @@ export async function mockFormWatch(
    * real. FR-87.
    */
   saveFailures: Record<string, { at: string }> = {},
+  /**
+   * How the server should answer an attempt to ADD a monitor. Lets a spec
+   * reproduce the duplicate-URL refusal, which otherwise needs a second signed
+   * in user holding a monitor on the same URL — something the hermetic
+   * environment has no way to arrange. FR-116.
+   */
+  addResponse?: { status: number; body: unknown },
 ): Promise<RunNowSpy> {
   const calls: string[] = [];
   const findFormCalls: string[] = [];
 
-  // The list the page renders.
-  await page.route('**/api/form-watch', (route) =>
-    route.fulfill({
+  // The list the page renders — and, on POST, the answer to adding one.
+  await page.route('**/api/form-watch', (route) => {
+    if (route.request().method() === 'POST' && addResponse) {
+      return route.fulfill({
+        status: addResponse.status,
+        contentType: 'application/json',
+        body: JSON.stringify(addResponse.body),
+      });
+    }
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ schedules, saveFailures }),
-    }),
-  );
+    });
+  });
 
   // Each card's history. Empty: these specs are about the controls, not results.
   await page.route('**/api/form-watch/results**', (route) => {
