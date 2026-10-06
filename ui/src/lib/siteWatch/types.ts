@@ -72,6 +72,13 @@ export interface SiteSchedule {
    * and stay visible to everyone until re-run or claimed. FR-74.
    */
   owner?: string;
+  /**
+   * When this monitor was last handed to somebody else, and by whom. Records
+   * the EVENT, not the ownership — `owner` already holds that, and alerts
+   * follow it. These exist so the new owner is told. FR-116.
+   */
+  assignedAt?: string;
+  assignedBy?: string;
 
   url: string;
   host: string;

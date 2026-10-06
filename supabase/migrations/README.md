@@ -99,3 +99,4 @@ select table_schema, count(*)
 | `0016_fr74_owner.sql`            | owner on the ten tool-tab tables, + an index on each schedule table |
 | `0017_fr55_slack_user_id.sql`     | app_users: slack_user_id — the cached id an alert @mentions           |
 | `0018_fr79_pinned_page.sql`      | form_watch_schedules: pinned_page, pinned_at — the page a monitor watches |
+| `0019_fr116_monitor_handover.sql`| form/site watch schedules: assigned_at, assigned_by — who handed a monitor over, and when |
