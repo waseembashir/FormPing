@@ -35,6 +35,10 @@ export type ProjectAction =
   | 'contact_changed'
   | 'share_enabled'
   | 'share_disabled'
+  // A monitor on one of this project's URLs was handed to somebody else. A
+  // change of who is responsible is exactly what this log is for, and the
+  // actor is stored as text so it survives that person leaving the team. FR-116.
+  | 'monitor_assigned'
   | 'viewed';
 
 export interface ProjectEvent {

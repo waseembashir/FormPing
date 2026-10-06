@@ -55,6 +55,11 @@ const VERB: Record<
     dot: 'bg-info', ring: 'ring-info/30', text2: 'text-info',
     icon: <path strokeLinecap="round" strokeLinejoin="round" d="M8.5 11.5a2.5 2.5 0 003.5 0l2-2a2.5 2.5 0 00-3.5-3.5l-.5.5M11.5 8.5a2.5 2.5 0 00-3.5 0l-2 2a2.5 2.5 0 003.5 3.5l.5-.5" />,
   },
+  monitor_assigned: {
+    text: 'handed a monitor over —', showTarget: true,
+    dot: 'bg-info', ring: 'ring-info/30', text2: 'text-info',
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 10h9m0 0l-3-3m3 3l-3 3" />,
+  },
   renamed: {
     text: 'renamed it to', showTarget: true,
     dot: 'bg-accent', ring: 'ring-accent/30', text2: 'text-accent-soft',
