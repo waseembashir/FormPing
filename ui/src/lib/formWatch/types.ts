@@ -53,6 +53,16 @@ export interface FormSchedule {
   /** When the pin was written — shown so a person can judge how old the answer
    *  is before trusting it. FR-79. */
   pinnedAt?: string;
+  /**
+   * When this monitor was last handed to somebody else, and by whom.
+   *
+   * Records the EVENT, not the ownership — `owner` already holds that, and
+   * alert routing follows it. These exist so the new owner is told: a monitor
+   * appearing quietly among a dozen others is not the same as knowing it is
+   * now yours. Absent on every monitor that has never been handed over. FR-116.
+   */
+  assignedAt?: string;
+  assignedBy?: string;
   /** ISO timestamp when the schedule was created. */
   createdAt: string;
   /** ISO timestamp of the last completed run, or null if never run. */

@@ -19,6 +19,7 @@ import type {
 import { runVerdict } from '@/lib/formWatch/verdict';
 import { watchPlacement } from '@/lib/monitorWatchers';
 import { cx } from '@/components/ui';
+import { HandoverMenu, type Handover } from './HandoverMenu';
 
 export type Tone = 'emerald' | 'amber' | 'red' | 'slate' | 'sky';
 
@@ -230,6 +231,8 @@ function SourceTag({ label, dim = false }: { label: string; dim?: boolean }) {
 export function UrlTestRows({
   h,
   nameEachMonitor = false,
+  assignHref,
+  onAssigned,
 }: {
   h: UrlHealth;
   /**
@@ -239,6 +242,9 @@ export function UrlTestRows({
    * `watchPlacement`.
    */
   nameEachMonitor?: boolean;
+  /** Where to POST a handover; absent where there is no project to act within. */
+  assignHref?: string;
+  onAssigned?: () => void;
 }) {
   const formTone = h.form.level ? FORM_TONE[h.form.level] : 'slate';
   const upTone = h.site.upState ? UP_TONE[h.site.upState] : 'slate';
@@ -275,7 +281,15 @@ export function UrlTestRows({
               <span className="font-medium text-ink-secondary">Scheduled form test · {modeLabel(h.form.mode)}</span>
               <span className={TONE_TEXT[formTone]}>— {h.form.label}</span>
               <span className="text-ink-faint">· {formatInterval(h.form.intervalMs)} · {rel(h.form.lastRunAt)}</span>
-              {nameEachMonitor && h.form.owner && <WatchedBy name={h.form.owner} compact />}
+              {nameEachMonitor && h.form.owner && (
+                <WatchedBy
+                  name={h.form.owner}
+                  compact
+                  {...(assignHref && onAssigned
+                    ? { handover: { kinds: ['form'], endpoint: assignHref } satisfies Handover, onHandover: onAssigned }
+                    : {})}
+                />
+              )}
             </>
           ) : h.form.stopped ? (
             <>
@@ -307,7 +321,15 @@ export function UrlTestRows({
               <span className="text-ink-faint">
                 · {h.site.monitored ? `${formatInterval(h.site.intervalMs)} · ${rel(h.site.lastCheckedAt)}` : `monitor stopped · ${rel(h.site.lastCheckedAt)}`}
               </span>
-              {nameEachMonitor && h.site.monitored && h.site.owner && <WatchedBy name={h.site.owner} compact />}
+              {nameEachMonitor && h.site.monitored && h.site.owner && (
+                <WatchedBy
+                  name={h.site.owner}
+                  compact
+                  {...(assignHref && onAssigned
+                    ? { handover: { kinds: ['uptime'], endpoint: assignHref } satisfies Handover, onHandover: onAssigned }
+                    : {})}
+                />
+              )}
             </>
           ) : (
             <span className="text-ink-faint">Uptime &amp; SSL · not set up</span>
@@ -383,7 +405,21 @@ export function UrlTestRows({
  * cannot imply activity that stopped. Stilled under reduced motion, like every
  * other pulse in the app.
  */
-function WatchedBy({ name, compact = false }: { name: string; compact?: boolean }) {
+function WatchedBy({
+  name,
+  compact = false,
+  handover,
+  onHandover,
+}: {
+  name: string;
+  compact?: boolean;
+  /** When given, the badge becomes the control that hands these monitors on. */
+  handover?: Handover;
+  onHandover?: () => void;
+}) {
+  if (handover && onHandover) {
+    return <HandoverMenu label={name} handover={handover} onDone={onHandover} compact={compact} />;
+  }
   return (
     <span
       className={cx(
@@ -402,11 +438,21 @@ function WatchedBy({ name, compact = false }: { name: string; compact?: boolean 
 export function UrlHealthDetail({
   h,
   dashboardHref,
+  assignHref,
+  onAssigned,
   onRemove,
   onDelete,
 }: {
   h: UrlHealth;
   dashboardHref?: string;
+  /**
+   * Where to POST a handover for this URL. Absent on surfaces with no project
+   * to act within — the Unassigned bucket shares this component, and a URL in
+   * no project has no activity log to record the change against. FR-116.
+   */
+  assignHref?: string;
+  /** Reload once a monitor has actually moved. */
+  onAssigned?: () => void;
   /** When provided (Member+), a NON-destructive "remove from project" (→ Unassigned, keeps data). */
   onRemove?: () => void;
   /** When provided (admins), a DESTRUCTIVE "delete this URL + all its data" button. */
@@ -438,13 +484,37 @@ export function UrlHealthDetail({
         >
           {h.url}
         </a>
-        <div className="flex min-w-0 shrink-0 items-center gap-2">
+        {/* Wraps rather than holding its width: the badge made this group too
+            wide for a phone, and `shrink-0` turned that into horizontal scroll
+            on the whole page. Allowed to wrap and shrink, the name drops onto
+            its own line under the buttons instead. */}
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {/* A live dot, because that is exactly what this says: somebody is
               watching this page right now. `watchedBy` only returns a name when
               at least one monitor is actually running, so the pulse can never
               claim activity that stopped. Stilled for reduced-motion, like
               every other pulse in the app. */}
-          {placement.at === 'header' && <WatchedBy name={placement.label} />}
+          {placement.at === 'header' && (
+            <WatchedBy
+              name={placement.label}
+              {...(assignHref && onAssigned
+                ? {
+                    // One person owns everything here, so handing over means
+                    // handing over all of it — which is what somebody asking
+                    // "give this URL to Priya" means. Only the monitors that
+                    // actually exist are moved.
+                    handover: {
+                      kinds: [
+                        ...(h.form.monitored ? (['form'] as const) : []),
+                        ...(h.site.monitored ? (['uptime'] as const) : []),
+                      ],
+                      endpoint: assignHref,
+                    } satisfies Handover,
+                    onHandover: onAssigned,
+                  }
+                : {})}
+            />
+          )}
           {dashboardHref && (
             <Link
               href={dashboardHref}
@@ -479,7 +549,11 @@ export function UrlHealthDetail({
         </div>
       </div>
 
-      <UrlTestRows h={h} nameEachMonitor={placement.at === 'rows'} />
+      <UrlTestRows
+        h={h}
+        nameEachMonitor={placement.at === 'rows'}
+        {...(assignHref && onAssigned ? { assignHref, onAssigned } : {})}
+      />
     </div>
   );
 }

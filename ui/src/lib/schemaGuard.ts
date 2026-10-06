@@ -70,7 +70,18 @@ const CONTRACTS: TableContract[] = [
    */
   {
     table: 'form_watch_schedules',
-    columns: 'id, url, site, interval_ms, mode, next_run_at, owner, pinned_page, pinned_at',
+    columns: 'id, url, site, interval_ms, mode, next_run_at, owner, pinned_page, pinned_at, assigned_at, assigned_by',
+  },
+  /**
+   * Here for the same reason as the form schedules beside it: `next_check_at`
+   * lives on this table, so a refused upsert leaves every monitor permanently
+   * due and the ticker re-runs it on every pass. The store falls back to
+   * writing without the FR-116 handover columns rather than let that happen,
+   * which keeps the cadence but means handovers silently never record.
+   */
+  {
+    table: 'site_watch_schedules',
+    columns: 'id, url, host, interval_ms, next_check_at, owner, assigned_at, assigned_by',
   },
 ];
 
