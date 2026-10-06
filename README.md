@@ -53,17 +53,17 @@ Everything the app shows is built on top of the engine, so a result means the sa
 
 The app is organized around **Projects** (a client and their URLs), with two tool areas — **Contact Forms** and **Site Health** — plus Team and Docs.
 
-| Area | What it does |
-|------|--------------|
-| **Projects** | Group a client's URLs into a project and see their form, uptime and SSL health at a glance. URLs you've tested or monitored but not grouped yet surface in an **Unassigned** bucket to assign or dismiss, so nothing is ever invisible. |
-| **Contact Forms** | **Form Tester** — run an on-demand test against a URL. On a whole-site run it finds *every* form across the site and reports them form-by-form (summary + a tab per form), each with a screenshot of the form it matched; results and the mode they were run in persist across refreshes. **Form Scheduler** — recurring form tests (daily by default) with alerts when a form changes or breaks. |
-| **Site Health** | **Uptime & SSL** — availability plus certificate and domain expiry monitoring. **Content Changes** — track content, SEO, form and script changes over time, with an optional AI summary of each diff. |
-| **Status pages** | A live, client-safe health page per client (and per single URL), shareable with no login. An internal, richer version is available to the team. |
-| **Team** | Manage who can do what (roles), and triage bug reports submitted from within the app. Every project keeps an **activity log** — who opened it, who added or removed a URL, who shared it, and when — readable by owners and admins. |
+| Area | What it is |
+|------|------------|
+| **Projects** | A client and their URLs. The shared record: every project, URL and result is visible to the whole team. A URL tested or monitored but not yet grouped lands in an **Unassigned** bucket rather than nowhere. |
+| **Contact Forms** | Two surfaces over one engine. The **Form Tester** runs it on demand and reports every form on the site; the **Form Scheduler** runs it on a cadence and reports one form on one page. Same engine, different scope and different storage. |
+| **Site Health** | **Uptime & SSL** — availability, certificate and domain expiry, on its own ticker. **Content Changes** — page snapshots diffed over time, host-level rather than per URL, with an optional AI summary of each diff. |
+| **Status pages** | A token-addressed, client-safe projection of a project's health, served without auth. The internal view is the same builder with `internal: true`, which is the only thing that populates the technical detail. |
+| **Team** | Roles, bug-report triage, and the per-project activity log. |
 
-Both schedulers carry a **Re-run** button: it checks that URL immediately in the monitor's own mode and adds one tagged row to its history, while leaving the schedule untouched — no reschedule, no alert, no change to the stored result or the uptime figure a monitor reports.
+Two rules shape almost everything above. **A URL has one monitor of each kind, and one person responsible for it** — enforced across the whole team, not per user. And **an on-demand run and a scheduled run are different resources**: one is ephemeral and personal, the other is a persistent owned thing with its own history.
 
-Every action that changes or removes data is confirmed first, and the copy always makes clear what will happen — especially whether a form test will actually **submit**.
+Every action that changes or removes data is confirmed before it happens, and the copy states the consequence — a convention worth keeping when adding one, particularly where a form test would actually **submit**.
 
 ---
 
@@ -109,11 +109,11 @@ In Live mode the primary contact form is submitted and the engine watches for a 
 
 Two deliberate brakes: a multi-step form is submitted **only if the run cleanly reached the final step and filled an email**, so a partial walk never drops a junk entry into someone's inbox — and CAPTCHA or anti-bot protection is **never bypassed**. If one is hit, the run stops and says so.
 
-### 4. Showing you what it matched
+### 4. Evidence for what it matched
 
 Every matched form is **photographed** — the form *and the heading above it*, since "Request a demo" is what identifies a form and a picture of bare input boxes doesn't. Cookie banners, chat bubbles and sticky headers are hidden for the shot, so the evidence is the form rather than whatever was floating over it. The form's address carries its anchor where the page provides one, so the link opens scrolled to the form.
 
-The images are stored server-side and loaded only when you open a form's tab, so they never slow a run down or bloat what the browser keeps. Each one is captured **before** anything is filled in, so a screenshot never contains test data, and its URL carries a random component so it can't be guessed from a site's address. Re-testing a URL replaces its screenshots rather than adding to them, and deleting the URL or its project deletes them too.
+The images are stored server-side and fetched lazily, per form, so they never slow a run down or inflate what the browser holds. Each one is captured **before** anything is filled in, so a screenshot never contains test data, and its URL carries a random component so it can't be guessed from a site's address. Re-testing a URL replaces its screenshots rather than adding to them, and deleting the URL or its project deletes them too.
 
 ### 5. Saying when it isn't sure
 
@@ -327,6 +327,8 @@ flowchart LR
 The ticker runs on its own timer with nobody signed in, so it reads every schedule regardless of who created it. A run inherits its owner from the schedule that triggered it, which is how a scheduled failure reaches the person who asked for the check.
 
 Two rows are written per run and they answer different questions: the history row is what happened on this check, the durable per-URL result is the latest state of that URL. The second survives the monitor being stopped, which is why Projects still shows a result for a URL nobody is watching any more.
+
+**A run started by a person takes the identical engine path and writes only the history row.** That identity is the point — a check somebody triggers must never be able to drift from what the monitor actually does — but it reschedules nothing, fires no alert, updates no durable result and uses its own screenshot folder, so asking a question about a URL cannot cost the schedule that answers it. `trigger_source` is what distinguishes the two, and those rows are swept after a day: a one-off answer is not part of the record a schedule is building.
 
 A form monitor watches **one form on one page**, and resolves that page once. Its first check discovers the contact page as a manual test would — or starts from a stored Form Tester run for the same URL, which already knows it — and the page is then written onto the schedule. Every later check loads it directly, so a monitor no longer re-crawls a client's site on a timer to report on a single form. A monitor with no page recorded yet simply discovers again, which is how the ones created before this behave until their next check pins them; they cannot change which form they watch as a result of it.
 
