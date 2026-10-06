@@ -438,7 +438,11 @@ export function UrlHealthDetail({
         >
           {h.url}
         </a>
-        <div className="flex min-w-0 shrink-0 items-center gap-2">
+        {/* Wraps rather than holding its width: the badge made this group too
+            wide for a phone, and `shrink-0` turned that into horizontal scroll
+            on the whole page. Allowed to wrap and shrink, the name drops onto
+            its own line under the buttons instead. */}
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {/* A live dot, because that is exactly what this says: somebody is
               watching this page right now. `watchedBy` only returns a name when
               at least one monitor is actually running, so the pulse can never
