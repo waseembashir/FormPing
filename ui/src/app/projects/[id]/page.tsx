@@ -303,6 +303,8 @@ export default function ProjectDetailPage() {
                     key={h.url}
                     h={h}
                     dashboardHref={`/projects/${project.id}/url/${encodeUrlKey(matchKey(h.url))}`}
+                    assignHref={`/api/projects/${project.id}/url/${encodeUrlKey(matchKey(h.url))}/assign`}
+                    onAssigned={() => void load()}
                     onRemove={canDelete ? () => { setRemoveUrlError(null); setRemoveUrl(h.url); } : undefined}
                     onDelete={canDelete ? () => { setDeleteUrlError(null); setDeleteUrl(h.url); } : undefined}
                   />
