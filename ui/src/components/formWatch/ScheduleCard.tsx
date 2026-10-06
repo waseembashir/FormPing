@@ -9,6 +9,8 @@ import { cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
 import { friendlyNotes } from '@/lib/friendlyNotes';
 import { FormSummary, FormsOnPageLine, TrackingParamsLine } from '@/components/FormFactChips';
 import { UnsavedResultNotice } from '@/components/UnsavedResultNotice';
+import { showsAssignedNotice } from '@/lib/monitorAssignment';
+import { useMe } from '@/lib/auth/useMe';
 
 const LEVEL_STYLE: Record<VerdictLevel | 'pending', { dot: string; text: string; label: string }> = {
   healthy: { dot: 'bg-ok', text: 'text-ok', label: 'Healthy' },
@@ -129,6 +131,15 @@ export function ScheduleCard({
   const [rerunError, setRerunError] = useState<string | null>(null);
   const [confirmRerun, setConfirmRerun] = useState(false);
   const [finding, setFinding] = useState(false);
+
+  /**
+   * A monitor handed to you appears in your tab among however many others you
+   * already have, which is not the same as knowing it is now yours. This says
+   * so, for a week, and then stops — by then it is simply one of your monitors.
+   * Only ever to the person who received it. FR-116.
+   */
+  const me = useMe();
+  const justAssigned = showsAssignedNotice(schedule, me.email ?? undefined);
   const [findError, setFindError] = useState<string | null>(null);
   const rerunPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   const firstPoll = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -456,6 +467,14 @@ export function ScheduleCard({
             </button>
           </div>
         </div>
+
+        {justAssigned && (
+          <p className="mt-2.5 rounded-md border border-info/25 bg-info/10 px-3 py-2 text-[11px] text-info">
+            <strong className="font-semibold">This monitor is now yours.</strong>{' '}
+            {schedule.assignedBy ? `${schedule.assignedBy} handed it over` : 'It was handed over'} — its alerts come to
+            you from now on. Its earlier checks stay recorded against whoever ran them.
+          </p>
+        )}
 
         {schedule.paused && (
           <p className="mt-2.5 rounded-md border border-line bg-panel-raised px-3 py-2 text-[11px] text-ink-muted">

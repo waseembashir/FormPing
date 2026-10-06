@@ -8,6 +8,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge, StatusPill, StatusText, cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
 import { UnsavedResultNotice } from '@/components/UnsavedResultNotice';
 import { describeFailure } from '@/lib/siteWatch/failures';
+import { showsAssignedNotice } from '@/lib/monitorAssignment';
+import { useMe } from '@/lib/auth/useMe';
 
 // Canonical status vocabulary (FR-35/FR-65) — one language across every surface.
 const UPTIME: Record<UptimeClass | 'pending', { level: StatusLevel; label: string }> = {
@@ -88,6 +90,14 @@ export function SiteCard({
   const [loading, setLoading] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [pausing, setPausing] = useState(false);
+
+  /**
+   * A monitor handed to you appears in your tab among however many others you
+   * already have, which is not the same as knowing it is now yours. This says
+   * so for a week, then stops. Only ever to the person who received it. FR-116.
+   */
+  const me = useMe();
+  const justAssigned = showsAssignedNotice(schedule, me.email ?? undefined);
   const [confirmStop, setConfirmStop] = useState(false);
   const [justStopped, setJustStopped] = useState(false);
   const [rerunning, setRerunning] = useState(false);
@@ -266,6 +276,14 @@ export function SiteCard({
             </button>
           </div>
         </div>
+
+        {justAssigned && (
+          <p className="mt-2.5 rounded-md border border-info/25 bg-info/10 px-3 py-2 text-[11px] text-info">
+            <strong className="font-semibold">This monitor is now yours.</strong>{' '}
+            {schedule.assignedBy ? `${schedule.assignedBy} handed it over` : 'It was handed over'} — its alerts come to
+            you from now on. Its earlier checks stay recorded against whoever ran them.
+          </p>
+        )}
 
         {schedule.paused && (
           <p className="mt-2.5 rounded-md border border-line bg-panel-raised px-3 py-2 text-[11px] text-ink-muted">
