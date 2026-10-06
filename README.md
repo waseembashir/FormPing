@@ -243,6 +243,10 @@ Those two rules meet at a URL: **one page, one monitor, one owner.** The duplica
 
 Alerts follow the same column: a failing check mentions whoever set the monitor up, so the person responsible hears about it rather than everybody hearing about everything.
 
+**A monitor can be handed on.** Somebody goes on leave and a client's form is suddenly watched by a person nobody can reach — nobody else can pause it, re-point it or stop it, and its alerts land in an inbox nobody is reading. So a monitor can be reassigned from Projects: an admin may move anyone's, and you may always hand on your own. The alternative, letting admins read everybody's tool tabs, was rejected — it makes isolation conditional for everyone, permanently, to solve something that happens occasionally.
+
+The handover is a single write. `owner` moves, and alert routing follows it without being told. **No run or result is touched**: a stored check records who was responsible when it happened, and rewriting that would make the log claim somebody performed work they never did. The new owner still sees the whole history, because access to a monitor's runs follows the schedule rather than the rows. Content-change tracking is the exception — it has no schedule, so its ownership is a property of each run and there is nothing to hand over.
+
 Isolation is behind a flag, read per request, and defaults to off — with it off the app behaves exactly as it did before, which is also what keeps a local checkout with no sign-in working.
 
 ---
