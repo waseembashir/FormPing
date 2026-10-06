@@ -45,6 +45,70 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.2.0',
+    name: 'Working as a team',
+    date: 'October 2026',
+    major: true,
+    summary:
+      'FormPing is now built for more than one person: your own tests stay yours, every URL says who looks after it, and a page can be handed on when somebody is away.',
+    changes: [
+      {
+        type: 'feature',
+        title: 'Your own workspace',
+        detail:
+          'The four working tabs — Form Tester, Form Scheduler, Uptime & SSL and Content Changes — now show you your own work and nobody else\u2019s. Your tests, your monitors, your logs, your results. Before this, everyone shared one screen: hand the app to four people and each of them waded through the other three\u2019s runs to find their own. Projects is deliberately the other way round — every project, every URL and every result stays visible to the whole team, whoever produced it, because that is the part everyone needs.',
+      },
+      {
+        type: 'feature',
+        title: 'Every URL says who looks after it',
+        detail:
+          'Open a project and each page carries the name of the person watching it. A page is monitored by one person, and until now the app never said who — so if you tried to monitor a URL a colleague already had, you were simply refused, with no way of finding out by whom. Now the refusal names them, and the project names them before you ever reach it. Where one person runs all of a page\u2019s checks their name sits once beside the page; where different people run different checks, each name sits against the check it belongs to.',
+      },
+      {
+        type: 'feature',
+        title: 'Hand a page over when somebody is away',
+        detail:
+          'Press the name beside a URL to pass its checks to somebody else. Useful when a person is on leave or has moved on, and their monitors would otherwise carry on alerting an inbox nobody is reading. The checks continue exactly as before and the alerts go to whoever you chose from then on \u2014 while past checks stay recorded against whoever actually ran them, so the history keeps telling the truth. You can hand on your own at any time; an admin can hand on anybody\u2019s.',
+      },
+      {
+        type: 'feature',
+        title: 'Alerts reach the person responsible',
+        detail:
+          'A failing check now mentions whoever set that monitor up, by name, in Slack. With one person using the app a shared channel was fine; with a team it meant everybody receiving everybody else\u2019s failures and nobody sure which were theirs to act on. A new teammate is mentioned correctly on their very first alert, with nothing to configure. Monitors set up before this still alert as they always did, simply without a name attached.',
+      },
+      {
+        type: 'enhancement',
+        title: 'Monitors stop re-reading your client\u2019s whole site',
+        detail:
+          'A form monitor watches one form on one page. It used to search the entire site for that form on every single check — loading a dozen pages and typing test data into every form it met, over and over, for a year. Now it finds the page once, says which page it settled on, and goes straight there from then on. Faster checks, and far less traffic aimed at a client\u2019s site. If they ever move their contact page, the run tells you where the form seems to have gone and a button re-points the monitor at it.',
+      },
+      {
+        type: 'enhancement',
+        title: 'Multi-step forms, step by step',
+        detail:
+          'A form that asks its questions across several “Next” screens is now walked all the way through, with a picture of each step rather than only the first. The field count is what the whole walk saw — “2 fields” on a three-step form was a true number answering the wrong question. Each result says how many steps it got through, so a form that could not be completed says so plainly instead of looking like a failure.',
+      },
+      {
+        type: 'feature',
+        title: 'Check a monitored URL right now',
+        detail:
+          'Every monitor has a Re-run button: it checks that URL immediately, in the monitor\u2019s own mode, and leaves the schedule completely alone — the interval does not restart, the next check stays where it was, and the health figure does not move. The result is added to the history, clearly marked as a re-run, and clears itself after a day. Checking something should never cost you the schedule you set up for it.',
+      },
+      {
+        type: 'enhancement',
+        title: 'Results that only claim what happened',
+        detail:
+          'A check that could not be completed now says so, rather than reporting a verdict it had no evidence for. A CAPTCHA, a firewall, a page we could not read — each is described in its own words and read as “not tested” rather than “needs attention”, which is reserved for a form that may genuinely be broken. Alerts link straight to the detail, say what they could not do and why, and a result we failed to save is reported instead of quietly presented as current.',
+      },
+      {
+        type: 'feature',
+        title: 'Every project keeps a log',
+        detail:
+          'Who opened a project, who added or removed a URL, who shared it, who handed a monitor on — and when. Readable by owners and admins, so a client\u2019s setup is never a mystery about how it came to be that way.',
+      },
+    ],
+  },
+  {
     version: '2.1.0',
     name: 'Engine rebuild',
     date: 'September 2026',

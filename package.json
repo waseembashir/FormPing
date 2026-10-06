@@ -1,6 +1,6 @@
 {
   "name": "formping",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "QA automation tool for verifying contact form submissions on authorized websites",
   "type": "module",
   "bin": {
