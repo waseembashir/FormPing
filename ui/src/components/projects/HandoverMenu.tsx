@@ -21,6 +21,17 @@ export interface Handover {
   kinds: ('form' | 'uptime')[];
   /** Where to send them. */
   endpoint: string;
+  /**
+   * Addresses already holding these monitors, left out of the list.
+   *
+   * The server refuses a handover to whoever already has it — "that person
+   * already watches this URL" — so offering them was presenting a choice that
+   * could only fail. Worse than useless: seeing your own name under "hand this
+   * monitor to" reads as though the app has not noticed the monitor is already
+   * yours, and invites the reasonable question of whether you are meant to
+   * assign your own work to yourself.
+   */
+  exclude?: string[];
 }
 
 interface Person {
@@ -78,6 +89,10 @@ export function HandoverMenu({
     };
   }, [open]);
 
+  // Whoever already holds these monitors is not a candidate to receive them.
+  const held = new Set((handover.exclude ?? []).map((e) => e.toLowerCase()));
+  const candidates = people?.filter((p) => !held.has(p.email.toLowerCase())) ?? null;
+
   async function assign(to: string) {
     setBusy(true);
     setError(null);
@@ -133,11 +148,11 @@ export function HandoverMenu({
 
           {people === null && <p className="px-2 py-1.5 text-[11px] text-ink-faint">Loading the team…</p>}
 
-          {people?.length === 0 && (
+          {candidates?.length === 0 && (
             <p className="px-2 py-1.5 text-[11px] text-ink-faint">Nobody else can take this on yet.</p>
           )}
 
-          {people?.map((p) => (
+          {candidates?.map((p) => (
             <button
               key={p.email}
               type="button"

@@ -391,7 +391,7 @@ export async function findContactPage(
 
     // ── Tier 2: Playwright escalation (FR-62) ──────────────────────────────
     // The cheap fetch found no form — either this site BLOCKS our lightweight
-    // fetcher (waseembashir did), or the form is JS-rendered / hidden in a
+    // fetcher (a real browser did), or the form is JS-rendered / hidden in a
     // multi-step widget. Render the top candidates in a real browser and score
     // the RENDERED html: Cheerio over page.content() sees JS-injected AND
     // display:none multi-step forms. Bounded, and only runs when the cheap pass

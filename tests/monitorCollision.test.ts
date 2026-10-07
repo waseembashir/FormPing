@@ -18,12 +18,12 @@ import { describe, it, expect } from 'vitest';
 import { collisionMessage, ownerLabel } from '@/lib/monitorCollision';
 
 describe('when the monitor in the way is a colleague’s', () => {
-  const theirs = { ownerLabel: 'Priya Sharma', mine: false };
+  const theirs = { ownerLabel: 'Jordan Blake', mine: false };
 
   it('names them, because they are who you have to speak to', () => {
     // Without the name there is nowhere to go: the monitor is invisible to the
     // reader by design, so no amount of looking will find it.
-    expect(collisionMessage('form', theirs)).toContain('Priya Sharma');
+    expect(collisionMessage('form', theirs)).toContain('Jordan Blake');
   });
 
   it('states the rule, not just the obstacle', () => {
@@ -40,12 +40,12 @@ describe('when the monitor in the way is a colleague’s', () => {
 });
 
 describe('when it is your own monitor', () => {
-  const mine = { ownerLabel: 'Priya Sharma', mine: true };
+  const mine = { ownerLabel: 'Jordan Blake', mine: true };
 
   it('does not name the reader back to themselves', () => {
-    // Being told "Priya Sharma already monitors this" while signed in as Priya
+    // Being told "Jordan Blake already monitors this" while signed in as Priya
     // reads like a system that has not noticed who is using it.
-    expect(collisionMessage('form', mine)).not.toContain('Priya Sharma');
+    expect(collisionMessage('form', mine)).not.toContain('Jordan Blake');
     expect(collisionMessage('form', mine)).toMatch(/^You already/);
   });
 
@@ -73,15 +73,15 @@ describe('when the monitor predates ownership', () => {
 
 describe('how an owner is referred to', () => {
   it('prefers the name we have', () => {
-    expect(ownerLabel('Priya Sharma', 'priya@example.com')).toBe('Priya Sharma');
+    expect(ownerLabel('Jordan Blake', 'jordan@example.com')).toBe('Jordan Blake');
   });
 
   it('falls back to the email, which is on the Team page anyway', () => {
     // Deliberate, not a leak. The point of naming an owner is that a colleague
     // can reach them, and an unnamed obstacle helps nobody. What must never
     // travel is the monitor itself — its interval, mode, verdict and id.
-    expect(ownerLabel(null, 'priya@example.com')).toBe('priya@example.com');
-    expect(ownerLabel('   ', 'priya@example.com')).toBe('priya@example.com');
+    expect(ownerLabel(null, 'jordan@example.com')).toBe('jordan@example.com');
+    expect(ownerLabel('   ', 'jordan@example.com')).toBe('jordan@example.com');
   });
 
   it('has nothing to say when the row has no owner at all', () => {

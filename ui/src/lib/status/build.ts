@@ -301,6 +301,7 @@ export async function buildClientStatus(
         // second monitor for it. The name is public even when the detail is not.
         ...(internal && h.form.owner ? { formOwner: h.form.owner } : {}),
         ...(internal && h.site.owner ? { siteOwner: h.site.owner } : {}),
+        ...(internal && h.change?.owner ? { changeOwner: h.change.owner } : {}),
         ...(hasPrev ? { uptimePrevPct: uptimePct(prev!), incidentsPrev: incidentDays(prev!) } : {}),
         ...(showUptime ? { lastCheckedAt: h.site.lastCheckedAt ?? null } : {}),
         ...(internal && h.change?.tracked === true ? { changeTracked: true } : {}),

@@ -286,7 +286,14 @@ export function UrlTestRows({
                   name={h.form.owner}
                   compact
                   {...(assignHref && onAssigned
-                    ? { handover: { kinds: ['form'], endpoint: assignHref } satisfies Handover, onHandover: onAssigned }
+                    ? {
+                        handover: {
+                          kinds: ['form'],
+                          endpoint: assignHref,
+                          exclude: h.form.ownerEmail ? [h.form.ownerEmail] : [],
+                        } satisfies Handover,
+                        onHandover: onAssigned,
+                      }
                     : {})}
                 />
               )}
@@ -326,7 +333,14 @@ export function UrlTestRows({
                   name={h.site.owner}
                   compact
                   {...(assignHref && onAssigned
-                    ? { handover: { kinds: ['uptime'], endpoint: assignHref } satisfies Handover, onHandover: onAssigned }
+                    ? {
+                        handover: {
+                          kinds: ['uptime'],
+                          endpoint: assignHref,
+                          exclude: h.site.ownerEmail ? [h.site.ownerEmail] : [],
+                        } satisfies Handover,
+                        onHandover: onAssigned,
+                      }
                     : {})}
                 />
               )}
@@ -466,9 +480,9 @@ export function UrlHealthDetail({
    * looking is a fact the app is keeping to itself. FR-116.
    */
   const placement = watchPlacement([
-    { monitored: h.form.monitored, owner: h.form.owner ?? null },
-    { monitored: h.site.monitored, owner: h.site.owner ?? null },
-    { monitored: h.change?.tracked === true, owner: h.change?.owner ?? null },
+    { monitored: h.form.monitored, owner: h.form.owner ?? null, id: h.form.ownerEmail ?? null },
+    { monitored: h.site.monitored, owner: h.site.owner ?? null, id: h.site.ownerEmail ?? null },
+    { monitored: h.change?.tracked === true, owner: h.change?.owner ?? null, id: h.change?.ownerEmail ?? null },
   ]);
 
   return (
@@ -509,6 +523,7 @@ export function UrlHealthDetail({
                         ...(h.site.monitored ? (['uptime'] as const) : []),
                       ],
                       endpoint: assignHref,
+                      exclude: [h.form.ownerEmail, h.site.ownerEmail].filter((e): e is string => !!e),
                     } satisfies Handover,
                     onHandover: onAssigned,
                   }

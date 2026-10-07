@@ -123,6 +123,14 @@ export interface StatusSite {
    */
   formOwner?: string;
   siteOwner?: string;
+  /**
+   * Who tracks this site's content. Third of three, and added later than the
+   * two above — which is how the project page came to name all three watchers
+   * while this one, a click away, left content tracking anonymous. Two screens
+   * disagreeing about how much is known about the same URL makes people
+   * distrust both. FR-118.
+   */
+  changeOwner?: string;
   /** SSL certificate summary, or null when SSL isn't monitored. */
   ssl: { valid: boolean; daysRemaining: number | null } | null;
   /** Contact-form health: true = working, false = attention, null = not monitored. */

@@ -21,18 +21,22 @@ function payload(over: { formOwner?: string; siteOwner?: string; siteMonitored?:
   return {
     project: {
       id: 'p1', name: 'Apexure', urls: ['https://www.apexure.com'],
-      createdAt: AT, updatedAt: AT, createdBy: 'Tajamul Wani', updatedBy: 'Tajamul Wani',
+      createdAt: AT, updatedAt: AT, createdBy: 'Avery Stone', updatedBy: 'Avery Stone',
       shareToken: null,
       health: [{
         url: 'https://www.apexure.com',
         form: {
-          monitored: true, owner: over.formOwner ?? 'Tajamul Wani', level: 'healthy',
+          monitored: true, owner: over.formOwner ?? 'Avery Stone',
+          ownerEmail: over.formOwner === 'Jordan Blake' ? 'jordan@example.com' : 'avery@example.com',
+          level: 'healthy',
           label: 'Form detected', mode: 'detect-only', intervalMs: 86_400_000, lastRunAt: AT,
         },
         site: over.siteMonitored === false
           ? { monitored: false }
           : {
-              monitored: true, owner: over.siteOwner ?? 'Tajamul Wani', upState: 'up',
+              monitored: true, owner: over.siteOwner ?? 'Avery Stone',
+              ownerEmail: over.siteOwner === 'Jordan Blake' ? 'jordan@example.com' : 'avery@example.com',
+              upState: 'up',
               statusCode: 200, intervalMs: 300_000, lastCheckedAt: AT,
               ssl: { valid: true, daysRemaining: 60 },
             },
@@ -53,8 +57,12 @@ async function mockProject(page: import('@playwright/test').Page, body: unknown)
     r.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ users: [
-        { email: 'priya@apexure.com', name: 'Priya Sharma' },
-        { email: 'noname@apexure.com', name: null },
+        // The current owner is deliberately present: the picker has to leave
+        // them out itself, and a list that never contained them would prove
+        // nothing.
+        { email: 'avery@example.com', name: 'Avery Stone' },
+        { email: 'jordan@example.com', name: 'Jordan Blake' },
+        { email: 'noname@example.com', name: null },
       ] }),
     }));
 
@@ -71,20 +79,20 @@ test('the badge is the control that hands a URL on', async ({ page }) => {
   const sent = await mockProject(page, payload());
 
   await page.getByRole('button', { name: /Watched by/ }).click();
-  await expect(page.getByText('Priya Sharma')).toBeVisible();
+  await expect(page.getByText('Jordan Blake')).toBeVisible();
 
   // Says plainly what changes, because handing over moves where alerts go.
   await expect(page.getByText(/alerts go to them/i)).toBeVisible();
   // …and what does not. Past checks keep naming whoever ran them.
   await expect(page.getByText(/stay recorded against whoever ran them/i)).toBeVisible();
 
-  await page.getByRole('menuitem', { name: 'Priya Sharma' }).click();
+  await page.getByRole('menuitem', { name: 'Jordan Blake' }).click();
 
   // One person owned both monitors, so both move — "give this URL to Priya"
   // means the URL, not one of its checks.
   await expect.poll(() => sent).toEqual([
-    { kind: 'form', to: 'priya@apexure.com' },
-    { kind: 'uptime', to: 'priya@apexure.com' },
+    { kind: 'form', to: 'jordan@example.com' },
+    { kind: 'uptime', to: 'jordan@example.com' },
   ]);
 });
 
@@ -92,19 +100,27 @@ test('moves only the monitors that exist', async ({ page }) => {
   const sent = await mockProject(page, payload({ siteMonitored: false }));
 
   await page.getByRole('button', { name: /Watched by/ }).click();
-  await page.getByRole('menuitem', { name: 'Priya Sharma' }).click();
+  await page.getByRole('menuitem', { name: 'Jordan Blake' }).click();
 
-  await expect.poll(() => sent).toEqual([{ kind: 'form', to: 'priya@apexure.com' }]);
+  await expect.poll(() => sent).toEqual([{ kind: 'form', to: 'jordan@example.com' }]);
 });
 
 test('hands over one monitor at a time when owners differ', async ({ page }) => {
   // Two owners put a badge on each row, and each speaks only for its own.
-  const sent = await mockProject(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Tajamul Wani' }));
+  const sent = await mockProject(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Avery Stone' }));
 
-  await page.getByRole('button', { name: 'Watched by Priya Sharma' }).click();
-  await page.getByRole('menuitem', { name: 'Priya Sharma' }).click();
+  await page.getByRole('button', { name: 'Watched by Jordan Blake' }).click();
 
-  await expect.poll(() => sent).toEqual([{ kind: 'form', to: 'priya@apexure.com' }]);
+  // Priya is not offered here — she already holds this one. Before the picker
+  // learned that, this test picked her, and "passed" by asserting a request
+  // the server would have refused.
+  await expect(page.getByRole('menuitem', { name: 'Jordan Blake' })).toHaveCount(0);
+
+  await page.getByRole('menuitem', { name: 'Avery Stone' }).click();
+
+  // Only the form monitor moves. The uptime monitor is somebody else's and has
+  // its own badge.
+  await expect.poll(() => sent).toEqual([{ kind: 'form', to: 'avery@example.com' }]);
 });
 
 test('falls back to the address for somebody with no name recorded', async ({ page }) => {
@@ -113,7 +129,7 @@ test('falls back to the address for somebody with no name recorded', async ({ pa
 
   // Better than a blank row: the address is reachable, and a picker entry you
   // cannot identify is one nobody dares press.
-  await expect(page.getByRole('menuitem', { name: 'noname@apexure.com' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'noname@example.com' })).toBeVisible();
 });
 
 /*
@@ -128,10 +144,31 @@ test('the menu opens without pushing the page sideways on a phone', async ({ pag
   await mockProject(page, payload());
 
   await page.getByRole('button', { name: /Watched by/ }).click();
-  await expect(page.getByRole('menuitem', { name: 'Priya Sharma' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Jordan Blake' })).toBeVisible();
 
   const overflows = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(overflows).toBe(false);
+});
+
+test('never offers the monitor to whoever already has it', async ({ page }) => {
+  /**
+   * The server refuses this — "that person already watches this URL" — so
+   * offering it was presenting a choice that could only fail. Worse than
+   * useless: seeing your own name under "hand this monitor to" reads as though
+   * the app has not noticed the monitor is already yours, and invites the
+   * reasonable question of whether you are supposed to assign your own work to
+   * yourself.
+   *
+   * The rule was written down when this menu was built — a viewer is left out
+   * because the server would refuse them — and simply never applied to the
+   * owner.
+   */
+  await mockProject(page, payload());
+
+  await page.getByRole('button', { name: /Watched by/ }).click();
+
+  await expect(page.getByRole('menuitem', { name: 'Jordan Blake' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Avery Stone' })).toHaveCount(0);
 });

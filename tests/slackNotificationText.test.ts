@@ -53,7 +53,7 @@ describe('a monitor alert can be read from the notification alone', () => {
 
 describe('a bug report can be read from the notification alone', () => {
   const report = {
-    name: 'Tajamul',
+    name: 'Avery Stone',
     email: 'reporter@example.com',
     message: 'The uptime chart shows yesterday twice',
     page: '/projects',
@@ -70,7 +70,7 @@ describe('a bug report can be read from the notification alone', () => {
   it('names who reported it and what they said', () => {
     // Enough to judge from a phone whether it needs looking at now.
     const payload = buildBugReportPayload(report);
-    expect(payload.text).toContain('Tajamul');
+    expect(payload.text).toContain('Avery Stone');
     expect(payload.text).toContain('uptime chart');
   });
 

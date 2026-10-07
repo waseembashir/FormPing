@@ -25,7 +25,7 @@ test('a URL a colleague monitors is refused by name, not by a dead end', async (
     status: 409,
     body: {
       error:
-        'Priya Sharma already has a form monitor on this URL. Each URL is watched by one person, so speak to them if it should be yours.',
+        'Jordan Blake already has a form monitor on this URL. Each URL is watched by one person, so speak to them if it should be yours.',
     },
   });
   await page.goto('/form-watch');
@@ -35,7 +35,7 @@ test('a URL a colleague monitors is refused by name, not by a dead end', async (
 
   // The name is the point: it is who you have to speak to, and without it the
   // message sends the reader looking for a monitor they cannot see.
-  await expect(page.getByText(/Priya Sharma/)).toBeVisible();
+  await expect(page.getByText(/Jordan Blake/)).toBeVisible();
   // And the RULE, not just the obstacle — "already exists" reads like a
   // duplicate to dodge and sends people hunting for a way to add a second.
   await expect(page.getByText(/one person/i)).toBeVisible();

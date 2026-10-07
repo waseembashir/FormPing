@@ -19,8 +19,8 @@ import type { Role } from '@/lib/auth/roles';
 const req = (over: Partial<Parameters<typeof canAssign>[0]> = {}) => ({
   actorRole: 'admin' as Role,
   actorEmail: 'admin@example.com',
-  currentOwner: 'priya@example.com',
-  targetEmail: 'tajamul@example.com',
+  currentOwner: 'jordan@example.com',
+  targetEmail: 'avery@example.com',
   targetRole: 'member' as Role,
   ...over,
 });
@@ -39,7 +39,7 @@ describe('who may hand a monitor over', () => {
   it('lets a member hand over their own', () => {
     // The orderly version: handing work on before going away, rather than an
     // admin cleaning up after.
-    const verdict = canAssign(req({ actorRole: 'member', actorEmail: 'priya@example.com' }));
+    const verdict = canAssign(req({ actorRole: 'member', actorEmail: 'jordan@example.com' }));
     expect(verdict).toEqual({ ok: true });
   });
 
@@ -85,7 +85,7 @@ describe('who may receive one', () => {
   it('refuses the person who already has it', () => {
     // A no-op would still write a handover event and announce a change that
     // did not happen.
-    const verdict = canAssign(req({ targetEmail: 'priya@example.com' }));
+    const verdict = canAssign(req({ targetEmail: 'jordan@example.com' }));
     expect(verdict.ok).toBe(false);
     expect(verdict).toHaveProperty('reason', expect.stringMatching(/already watches/i));
   });
@@ -94,42 +94,42 @@ describe('who may receive one', () => {
 describe('telling the new owner it is theirs', () => {
   const NOW = new Date('2026-10-06T12:00:00.000Z');
   const ago = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
-  const mine = { owner: 'priya@example.com', assignedAt: ago(1) };
+  const mine = { owner: 'jordan@example.com', assignedAt: ago(1) };
 
   it('shows the notice to the person who received it', () => {
     // A monitor appearing quietly among a dozen others is not the same as
     // knowing it is now yours.
-    expect(showsAssignedNotice(mine, 'priya@example.com', NOW)).toBe(true);
+    expect(showsAssignedNotice(mine, 'jordan@example.com', NOW)).toBe(true);
   });
 
   it('shows it to nobody else', () => {
     // Somebody else's handover is not this reader's business.
-    expect(showsAssignedNotice(mine, 'tajamul@example.com', NOW)).toBe(false);
+    expect(showsAssignedNotice(mine, 'avery@example.com', NOW)).toBe(false);
     expect(showsAssignedNotice(mine, undefined, NOW)).toBe(false);
   });
 
   it('retires on its own, so a settled monitor stops looking new', () => {
-    const old = { owner: 'priya@example.com', assignedAt: ago(ASSIGNED_NOTICE_DAYS + 1) };
-    expect(showsAssignedNotice(old, 'priya@example.com', NOW)).toBe(false);
+    const old = { owner: 'jordan@example.com', assignedAt: ago(ASSIGNED_NOTICE_DAYS + 1) };
+    expect(showsAssignedNotice(old, 'jordan@example.com', NOW)).toBe(false);
   });
 
   it('still shows on the last day of the window', () => {
-    const edge = { owner: 'priya@example.com', assignedAt: ago(ASSIGNED_NOTICE_DAYS) };
-    expect(showsAssignedNotice(edge, 'priya@example.com', NOW)).toBe(true);
+    const edge = { owner: 'jordan@example.com', assignedAt: ago(ASSIGNED_NOTICE_DAYS) };
+    expect(showsAssignedNotice(edge, 'jordan@example.com', NOW)).toBe(true);
   });
 
   it('says nothing about a monitor that was never handed over', () => {
-    expect(showsAssignedNotice({ owner: 'priya@example.com' }, 'priya@example.com', NOW)).toBe(false);
+    expect(showsAssignedNotice({ owner: 'jordan@example.com' }, 'jordan@example.com', NOW)).toBe(false);
   });
 
   it('ignores a timestamp from the future', () => {
     // A clock problem, not a fresh handover — treating it as one would leave
     // the notice up for days.
-    const future = { owner: 'priya@example.com', assignedAt: ago(-2) };
-    expect(showsAssignedNotice(future, 'priya@example.com', NOW)).toBe(false);
+    const future = { owner: 'jordan@example.com', assignedAt: ago(-2) };
+    expect(showsAssignedNotice(future, 'jordan@example.com', NOW)).toBe(false);
   });
 
   it('ignores a timestamp that is not a date', () => {
-    expect(showsAssignedNotice({ owner: 'priya@example.com', assignedAt: 'soon' }, 'priya@example.com', NOW)).toBe(false);
+    expect(showsAssignedNotice({ owner: 'jordan@example.com', assignedAt: 'soon' }, 'jordan@example.com', NOW)).toBe(false);
   });
 });

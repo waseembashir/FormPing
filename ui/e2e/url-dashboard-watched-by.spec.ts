@@ -24,6 +24,7 @@ const AT = '2026-10-05T10:00:00.000Z';
 function payload(over: {
   formOwner?: string;
   siteOwner?: string;
+  changeOwner?: string;
   formIntervalMs?: number | null;
   state?: string;
 }) {
@@ -48,6 +49,7 @@ function payload(over: {
         lastCheckedAt: AT,
         ...(over.formOwner ? { formOwner: over.formOwner } : {}),
         ...(over.siteOwner ? { siteOwner: over.siteOwner } : {}),
+        ...(over.changeOwner ? { changeOwner: over.changeOwner, changeTracked: true } : {}),
         tech: {
           url: 'https://ex.test/contact/',
           statusCode: 200,
@@ -82,19 +84,19 @@ test.describe('who watches this URL', () => {
   test('names one person once when they watch all of it', async ({ page }) => {
     // The common case. Saying it twice, qualified, would make the reader deduce
     // that it is one person.
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Priya Sharma' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Jordan Blake' }));
 
     await expect(page.getByText(/Watched by/)).toBeVisible();
-    await expect(page.getByText('Priya Sharma', { exact: true })).toBeVisible();
+    await expect(page.getByText('Jordan Blake', { exact: true })).toBeVisible();
     await expect(page.getByText(/\(form\)/)).toHaveCount(0);
   });
 
   test('names both, and says which is which, when they differ', async ({ page }) => {
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Tajamul Wani' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Avery Stone' }));
 
     const line = page.getByText(/Watched by/);
-    await expect(line).toContainText('Priya Sharma');
-    await expect(line).toContainText('Tajamul Wani');
+    await expect(line).toContainText('Jordan Blake');
+    await expect(line).toContainText('Avery Stone');
     await expect(line).toContainText('(form)');
     await expect(line).toContainText('(uptime)');
   });
@@ -110,20 +112,20 @@ test.describe('who watches this URL', () => {
   test('ignores the owner of a monitor that is no longer running', async ({ page }) => {
     // A stopped form monitor keeps its last result but nobody is watching it,
     // so its old owner must not be presented as responsible for the URL.
-    await open(page, payload({ formOwner: 'Priya Sharma', formIntervalMs: null, state: 'unknown' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', formIntervalMs: null, state: 'unknown' }));
 
     await expect(page.getByText(/Watched by/)).toHaveCount(0);
   });
 
   test('states the form monitor’s cadence beside its mode', async ({ page }) => {
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Priya Sharma' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Jordan Blake' }));
 
     await expect(page.getByText(/every 3d|every 3 days/)).toBeVisible();
   });
 
   test('reads on a phone without pushing the page sideways', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 800 });
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Tajamul Wani' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Avery Stone' }));
 
     await expect(page.getByText(/Watched by/)).toBeVisible();
     const overflows = await page.evaluate(
@@ -131,4 +133,22 @@ test.describe('who watches this URL', () => {
     );
     expect(overflows).toBe(false);
   });
+});
+
+test('names the content watcher too, like the project page does', async ({ page }) => {
+  /**
+   * This screen named two of a URL's three watchers while the project page a
+   * click away named all three — content tracking was simply absent from the
+   * payload here. The same URL reporting different amounts of knowledge on two
+   * screens is how people come to distrust both.
+   *
+   * It also pins the grouping: somebody holding two of the three is named once
+   * with both against them, not twice, or three monitors would read as three
+   * people.
+   */
+  await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Avery Stone', changeOwner: 'Jordan Blake' }));
+
+  const line = page.getByText(/Watched by/);
+  await expect(line).toContainText('Jordan Blake (form, content)');
+  await expect(line).toContainText('Avery Stone (uptime)');
 });
