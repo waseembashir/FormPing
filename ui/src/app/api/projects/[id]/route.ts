@@ -49,6 +49,25 @@ async function actorName(request: NextRequest): Promise<string | null> {
   return (await getUserName(actor.email).catch(() => null)) ?? actor.email;
 }
 
+/**
+ * A signal with its owner's name to read, and their address kept to compare on.
+ *
+ * Both, because they answer different questions and conflating them has already
+ * cost twice. `owner` is what a person reads; `ownerEmail` is WHO it is. The
+ * name is not an identity — two colleagues can share one, and the same person
+ * renders as a name in one place and an address in another the moment one
+ * lookup is missed. Code that asks "are these the same person?" or "is this
+ * me?" must use the address.
+ *
+ * Generic over the signal's shape so the form, uptime and content blocks share
+ * one implementation — three copies of this is what let one of them be
+ * forgotten.
+ */
+function withOwnerName<T extends { owner?: string }>(signal: T, label: (email?: string) => string | undefined): T {
+  if (!signal.owner) return signal;
+  return { ...signal, owner: label(signal.owner) ?? signal.owner, ownerEmail: signal.owner };
+}
+
 /** GET /api/projects/[id] — the project plus per-URL health (form + uptime/SSL). */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const project = await projectStore.get(params.id);
@@ -74,10 +93,20 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
    */
   const names = new Map((await listUsers()).map((u) => [u.email, u.name] as const));
   const label = (email?: string) => (email ? ownerLabel(names.get(email) ?? null, email) ?? undefined : undefined);
+  /**
+   * Every signal that carries an owner gets the same treatment.
+   *
+   * Through one helper rather than three inline expressions, because that is
+   * exactly how this broke: the content monitor's owner was added later and
+   * never joined the two above it, so it reached the screen as a raw email
+   * beside two display names. One resolver, applied per signal, makes adding a
+   * fourth a single line rather than a thing to remember.
+   */
   const named = health.map((h) => ({
     ...h,
-    form: { ...h.form, ...(h.form.owner ? { owner: label(h.form.owner) } : {}) },
-    site: { ...h.site, ...(h.site.owner ? { owner: label(h.site.owner) } : {}) },
+    form: withOwnerName(h.form, label),
+    site: withOwnerName(h.site, label),
+    ...(h.change ? { change: withOwnerName(h.change, label) } : {}),
   }));
 
   return NextResponse.json({ project: { ...project, health: named } });

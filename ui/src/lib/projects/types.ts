@@ -50,6 +50,9 @@ export interface UrlHealth {
      * Absent on work that predates per-user isolation. FR-74.
      */
     owner?: string;
+    /** The owner's ADDRESS — identity, for comparing. `owner` is the label to
+     *  read. A name is not an identity. FR-116. */
+    ownerEmail?: string;
     /** True when NOT actively monitored but a persisted last result exists
      *  (the monitor was stopped/deleted; the result stays until project delete). */
     stopped?: boolean;
@@ -75,6 +78,9 @@ export interface UrlHealth {
     monitored: boolean;
     /** Whose monitor this is — see `form.owner`. FR-74. */
     owner?: string;
+    /** The owner's ADDRESS — identity, for comparing. `owner` above is the
+     *  label to read. A name is not an identity. FR-116. */
+    ownerEmail?: string;
     /** True when NOT actively monitored but a persisted last result exists. */
     stopped?: boolean;
     upState?: SiteUpState;
@@ -106,6 +112,9 @@ export interface UrlHealth {
      * that predates per-user isolation. FR-74 / FR-116.
      */
     owner?: string;
+    /** The owner's ADDRESS — identity, for comparing. `owner` above is the
+     *  label to read. A name is not an identity. FR-116. */
+    ownerEmail?: string;
     /** How the most recent run was performed. */
     mode?: 'snapshot' | 'compare' | 'watch';
     lastCheckedAt?: string | null;
