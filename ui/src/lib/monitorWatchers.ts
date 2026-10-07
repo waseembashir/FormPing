@@ -30,6 +30,17 @@ export interface Watcher {
   /** Display label for its owner — name where known, email otherwise. Null for
    *  a monitor created before ownership was recorded. */
   owner: string | null;
+  /**
+   * The owner's address: who this is, as opposed to what to call them.
+   *
+   * Comparisons use this and fall back to the label only when it is absent.
+   * The distinction is not academic — a display name is not an identity. Two
+   * colleagues can share one, and one missed lookup renders the same person as
+   * a name here and an address there, at which point comparing labels decides
+   * they are two different people and splits a heading that should have
+   * collapsed. That happened.
+   */
+  id?: string | null;
 }
 
 const NOBODY: Watcher = { monitored: false, owner: null };
@@ -100,10 +111,16 @@ export type WatchPlacement =
   | { at: 'rows' };
 
 export function watchPlacement(watchers: Watcher[]): WatchPlacement {
-  const owners = watchers.filter((w) => w.monitored && w.owner).map((w) => w.owner as string);
+  const owned = watchers.filter((w) => w.monitored && w.owner);
+  if (owned.length === 0) return { at: 'nowhere' };
 
-  if (owners.length === 0) return { at: 'nowhere' };
+  // Compared by identity, shown by label. Falling back to the label keeps
+  // callers that have no address working, and is right for them: without an
+  // address the label is the only identity on offer.
+  const identity = (w: Watcher) => w.id ?? w.owner;
 
-  const first = owners[0]!;
-  return owners.every((o) => o === first) ? { at: 'header', label: first } : { at: 'rows' };
+  const first = owned[0]!;
+  return owned.every((w) => identity(w) === identity(first))
+    ? { at: 'header', label: first.owner as string }
+    : { at: 'rows' };
 }

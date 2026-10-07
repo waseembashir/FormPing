@@ -128,3 +128,31 @@ describe('where the name belongs', () => {
     });
   });
 });
+
+describe('identity, not the label', () => {
+  // A display name is not an identity. These pin that the placement decision
+  // asks WHO, because asking WHAT TO CALL THEM already went wrong once: a
+  // missed name lookup rendered one person as "Samiya Nisar" against one
+  // monitor and "samiya.nisar@…" against another, and the card concluded two
+  // different people watched the URL and split a heading that should have
+  // collapsed.
+  const asName = { monitored: true, owner: 'Samiya Nisar', id: 'samiya@example.com' };
+  const asEmail = { monitored: true, owner: 'samiya@example.com', id: 'samiya@example.com' };
+
+  it('treats one person as one person however they are labelled', () => {
+    expect(watchPlacement([asName, asEmail])).toEqual({ at: 'header', label: 'Samiya Nisar' });
+  });
+
+  it('still splits two people who happen to share a display name', () => {
+    const alexA = { monitored: true, owner: 'Alex Smith', id: 'alex.smith@example.com' };
+    const alexB = { monitored: true, owner: 'Alex Smith', id: 'a.smith@example.com' };
+    expect(watchPlacement([alexA, alexB])).toEqual({ at: 'rows' });
+  });
+
+  it('falls back to the label when no address is given', () => {
+    // Callers without an address are not broken by this — the label is then
+    // the only identity on offer, and comparing it is the old behaviour.
+    expect(watchPlacement([PRIYA, PRIYA])).toEqual({ at: 'header', label: 'Priya Sharma' });
+    expect(watchPlacement([PRIYA, TAJAMUL])).toEqual({ at: 'rows' });
+  });
+});
