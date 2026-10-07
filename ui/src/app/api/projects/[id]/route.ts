@@ -9,12 +9,13 @@ import { atLeast } from '@/lib/auth/roles';
 import { getUserName, listUsers } from '@/lib/auth/userStore';
 import { ownerLabel } from '@/lib/monitorCollision';
 import { urlHealthFor } from '@/lib/projects/health';
+import { teardownUrls, teardownHosts, purgeableHosts, type TeardownIO } from '@/lib/projects/teardown';
 import {
-  findScheduleByUrl as findFormByUrl,
+  listSchedules as listFormSchedules,
   removeSchedule as removeFormSchedule,
 } from '@/lib/formWatch/scheduleStore';
 import {
-  findScheduleByUrl as findSiteByUrl,
+  listSchedules as listSiteSchedules,
   removeSchedule as removeSiteSchedule,
 } from '@/lib/siteWatch/scheduleStore';
 import { removeRun } from '@/lib/onDemandRunStore';
@@ -291,43 +292,60 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const project = await projectStore.get(params.id);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
-  let monitorsRemoved = 0;
-  const hosts = new Set<string>();
-  for (const url of project.urls) {
-    const f = await findFormByUrl(url);
-    if (f) {
-      await removeFormSchedule(f.id);
-      monitorsRemoved++;
-    }
-    const s = await findSiteByUrl(url);
-    if (s) {
-      await removeSiteSchedule(s.id);
-      monitorsRemoved++;
-    }
-    // Clear every persisted result for this URL so nothing reappears as Unassigned.
-    await removeRun(url); // manual Form Tester run
-    await removeFormResult(url); // durable Form Watch result
-    await removeSiteResult(url); // durable Site Watch result
-    await removeDaily(url); // Site Watch daily rollups
-    hosts.add(siteKey(url));
-  }
+  /**
+   * The schedules are read ONCE for the whole delete, rather than looked up per
+   * URL. `findScheduleByUrl` downloads an entire table and matches in
+   * JavaScript — it must, because rows store the URL as typed while matching
+   * folds `www.`, case and a trailing slash. Per URL that was two full table
+   * scans, so a five-URL project read both tables ten times to learn ten ids.
+   *
+   * Fetched alongside the host check, which nothing here depends on either.
+   */
+  const [formSchedules, siteSchedules, hostsUsedElsewhere] = await Promise.all([
+    listFormSchedules(),
+    listSiteSchedules(),
+    hostsUsedByOtherProjects(params.id),
+  ]);
+  const byUrl = <T extends { url: string }>(rows: T[], url: string): T | undefined =>
+    rows.find((r) => matchKey(r.url) === matchKey(url));
 
-  // Per-host Change Monitor teardown. Order matters: STOP the watch first, so it
-  // cannot write new events/reports in between and resurrect what we delete.
-  // Change tracking is host-level, so skip any host that ANOTHER project still
-  // tracks — deleting this project must not wipe a host's history out from under
-  // a sibling project that shares the same site.
-  const hostsUsedElsewhere = await hostsUsedByOtherProjects(params.id);
-  let watchesStopped = 0;
-  for (const host of hosts) {
-    if (host === 'unknown' || hostsUsedElsewhere.has(host)) continue; // another project keeps this host alive
-    if (stopWatch(host)) watchesStopped++; // kill the running subprocess
-    await removeActiveWatch(host); // and don't let it resume after a redeploy
-    await removeReports(host);
-    await removeChangeEvents(host);
-    await removeAlertsForSite(host); // the alert delivery log
-    await removeSnapshotsForHost(host); // the baseline files on disk
-  }
+  /**
+   * The cascade lives in `lib/projects/teardown`, with the destructive calls
+   * passed in. Deleting a client is the one irreversible thing this app does,
+   * and inside a route handler it could not be tested — so the only thing
+   * checking it was somebody deleting a real project and looking.
+   *
+   * Its failure mode is omission, which nothing reports: a store that stops
+   * being cleared leaves rows that resurface as Unassigned weeks later. The
+   * tests there assert the whole SET of operations and the one ordering that
+   * matters, which is what makes the indirection worth it — this used to run
+   * one await at a time and took ten to fifteen seconds.
+   */
+  const io: TeardownIO = {
+    removeFormSchedule,
+    removeSiteSchedule,
+    removeRun,
+    removeFormResult,
+    removeSiteResult,
+    removeDaily,
+    stopWatch,
+    removeActiveWatch,
+    removeReports,
+    removeChangeEvents,
+    removeAlertsForSite,
+    removeSnapshotsForHost,
+  };
+
+  const monitorsRemoved = await teardownUrls(
+    project.urls,
+    (url) => ({ formId: byUrl(formSchedules, url)?.id, siteId: byUrl(siteSchedules, url)?.id }),
+    io,
+  );
+
+  const watchesStopped = await teardownHosts(
+    purgeableHosts(project.urls.map(siteKey), hostsUsedElsewhere),
+    io,
+  );
 
   await projectStore.remove(params.id);
   return NextResponse.json({ ok: true, monitorsRemoved, watchesStopped });

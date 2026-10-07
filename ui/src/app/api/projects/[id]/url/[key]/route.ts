@@ -14,6 +14,7 @@ import { findScheduleByUrl as findSiteByUrl, removeSchedule as removeSiteSchedul
 import { listUsers } from '@/lib/auth/userStore';
 import { ownerLabel } from '@/lib/monitorCollision';
 import { removeRun } from '@/lib/onDemandRunStore';
+import { teardownUrls, teardownHosts, purgeableHosts, type TeardownIO } from '@/lib/projects/teardown';
 import { removeResult as removeFormResult } from '@/lib/formWatch/resultStore';
 import { removeResult as removeSiteResult } from '@/lib/siteWatch/resultStore';
 import { removeDaily } from '@/lib/siteWatch/dailyStore';
@@ -136,33 +137,52 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const url = subset.urls[0]!;
   const host = siteKey(url);
 
-  // URL-level teardown — safe to purge for just this URL.
-  const f = await findFormByUrl(url);
-  if (f) await removeFormSchedule(f.id);
-  const s = await findSiteByUrl(url);
-  if (s) await removeSiteSchedule(s.id);
-  await removeRun(url);
-  await removeFormResult(url);
-  await removeSiteResult(url);
-  await removeDaily(url);
-  await removeUrlShareByKey(params.id, urlKey); // revoke its public link
-
-  // Host-level teardown ONLY if NOTHING still uses this host (change tracking is
-  // site-level — don't wipe another page's, or another project's, history). Check
-  // both this project's other URLs AND every other project.
   const remaining = project.urls.filter((u) => matchKey(u) !== urlKey);
-  const hostStillUsed =
-    remaining.some((u) => siteKey(u) === host) || (await hostUsedByOtherProject(host, project.id));
-  let hostPurged = false;
-  if (host && host !== 'unknown' && !hostStillUsed) {
-    stopWatch(host);
-    await removeActiveWatch(host);
-    await removeReports(host);
-    await removeChangeEvents(host);
-    await removeAlertsForSite(host);
-    await removeSnapshotsForHost(host);
-    hostPurged = true;
-  }
+
+  /**
+   * Both schedule lookups and the host question together — none of the three
+   * depends on the others. This whole teardown used to run one await at a
+   * time, thirteen deep, which is most of why deleting a URL felt slow.
+   */
+  const [f, s, hostUsedElsewhere] = await Promise.all([
+    findFormByUrl(url),
+    findSiteByUrl(url),
+    host && host !== 'unknown' ? hostUsedByOtherProject(host, project.id) : Promise.resolve(false),
+  ]);
+
+  const io: TeardownIO = {
+    removeFormSchedule,
+    removeSiteSchedule,
+    removeRun,
+    removeFormResult,
+    removeSiteResult,
+    removeDaily,
+    stopWatch,
+    removeActiveWatch,
+    removeReports,
+    removeChangeEvents,
+    removeAlertsForSite,
+    removeSnapshotsForHost,
+  };
+
+  // The same tested cascade the project delete uses, so one URL and a whole
+  // project cannot drift into clearing different things.
+  await Promise.all([
+    teardownUrls([url], () => ({ formId: f?.id, siteId: s?.id }), io),
+    removeUrlShareByKey(params.id, urlKey), // revoke its public link
+  ]);
+
+  /**
+   * Host-level teardown ONLY if nothing still uses this host — change tracking
+   * is site-level, so this must not wipe another page's, or another project's,
+   * history. Both this project's other URLs and every other project count.
+   */
+  const stillUsed = new Set(
+    remaining.some((u) => siteKey(u) === host) || hostUsedElsewhere ? [host] : [],
+  );
+  const purged = purgeableHosts([host], stillUsed);
+  await teardownHosts(purged, io);
+  const hostPurged = purged.length > 0;
 
   // If that was the project's ONLY URL, the project is now empty and useless —
   // remove it too (its data is already purged above). Otherwise just drop the URL.
