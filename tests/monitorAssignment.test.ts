@@ -20,7 +20,7 @@ const req = (over: Partial<Parameters<typeof canAssign>[0]> = {}) => ({
   actorRole: 'admin' as Role,
   actorEmail: 'admin@example.com',
   currentOwner: 'jordan@example.com',
-  targetEmail: 'tajamul@example.com',
+  targetEmail: 'avery@example.com',
   targetRole: 'member' as Role,
   ...over,
 });
@@ -104,7 +104,7 @@ describe('telling the new owner it is theirs', () => {
 
   it('shows it to nobody else', () => {
     // Somebody else's handover is not this reader's business.
-    expect(showsAssignedNotice(mine, 'tajamul@example.com', NOW)).toBe(false);
+    expect(showsAssignedNotice(mine, 'avery@example.com', NOW)).toBe(false);
     expect(showsAssignedNotice(mine, undefined, NOW)).toBe(false);
   });
 

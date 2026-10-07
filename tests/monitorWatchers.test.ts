@@ -138,7 +138,7 @@ describe('identity, not the label', () => {
   // A display name is not an identity. These pin that the placement decision
   // asks WHO, because asking WHAT TO CALL THEM already went wrong once: a
   // missed name lookup rendered one person as "Robin Vale" against one
-  // monitor and "samiya.nisar@…" against another, and the card concluded two
+  // monitor and "robin@example.com" against another, and the card concluded two
   // different people watched the URL and split a heading that should have
   // collapsed.
   const asName = { monitored: true, owner: 'Robin Vale', id: 'robin@example.com' };
