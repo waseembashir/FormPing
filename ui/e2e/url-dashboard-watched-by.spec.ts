@@ -84,19 +84,19 @@ test.describe('who watches this URL', () => {
   test('names one person once when they watch all of it', async ({ page }) => {
     // The common case. Saying it twice, qualified, would make the reader deduce
     // that it is one person.
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Priya Sharma' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Jordan Blake' }));
 
     await expect(page.getByText(/Watched by/)).toBeVisible();
-    await expect(page.getByText('Priya Sharma', { exact: true })).toBeVisible();
+    await expect(page.getByText('Jordan Blake', { exact: true })).toBeVisible();
     await expect(page.getByText(/\(form\)/)).toHaveCount(0);
   });
 
   test('names both, and says which is which, when they differ', async ({ page }) => {
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Tajamul Wani' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Avery Stone' }));
 
     const line = page.getByText(/Watched by/);
-    await expect(line).toContainText('Priya Sharma');
-    await expect(line).toContainText('Tajamul Wani');
+    await expect(line).toContainText('Jordan Blake');
+    await expect(line).toContainText('Avery Stone');
     await expect(line).toContainText('(form)');
     await expect(line).toContainText('(uptime)');
   });
@@ -112,20 +112,20 @@ test.describe('who watches this URL', () => {
   test('ignores the owner of a monitor that is no longer running', async ({ page }) => {
     // A stopped form monitor keeps its last result but nobody is watching it,
     // so its old owner must not be presented as responsible for the URL.
-    await open(page, payload({ formOwner: 'Priya Sharma', formIntervalMs: null, state: 'unknown' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', formIntervalMs: null, state: 'unknown' }));
 
     await expect(page.getByText(/Watched by/)).toHaveCount(0);
   });
 
   test('states the form monitor’s cadence beside its mode', async ({ page }) => {
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Priya Sharma' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Jordan Blake' }));
 
     await expect(page.getByText(/every 3d|every 3 days/)).toBeVisible();
   });
 
   test('reads on a phone without pushing the page sideways', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 800 });
-    await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Tajamul Wani' }));
+    await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Avery Stone' }));
 
     await expect(page.getByText(/Watched by/)).toBeVisible();
     const overflows = await page.evaluate(
@@ -146,9 +146,9 @@ test('names the content watcher too, like the project page does', async ({ page 
    * with both against them, not twice, or three monitors would read as three
    * people.
    */
-  await open(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Tajamul Wani', changeOwner: 'Priya Sharma' }));
+  await open(page, payload({ formOwner: 'Jordan Blake', siteOwner: 'Avery Stone', changeOwner: 'Jordan Blake' }));
 
   const line = page.getByText(/Watched by/);
-  await expect(line).toContainText('Priya Sharma (form, content)');
-  await expect(line).toContainText('Tajamul Wani (uptime)');
+  await expect(line).toContainText('Jordan Blake (form, content)');
+  await expect(line).toContainText('Avery Stone (uptime)');
 });

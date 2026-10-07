@@ -26,18 +26,18 @@ const PROJECT = {
     urls: ['https://www.apexure.com'],
     createdAt: AT,
     updatedAt: AT,
-    createdBy: 'Tajamul Wani',
-    updatedBy: 'Tajamul Wani',
+    createdBy: 'Avery Stone',
+    updatedBy: 'Avery Stone',
     shareToken: null,
     health: [
       {
         url: 'https://www.apexure.com',
         form: {
-          monitored: true, owner: 'Tajamul Wani', level: 'healthy', label: 'Form detected',
+          monitored: true, owner: 'Avery Stone', level: 'healthy', label: 'Form detected',
           mode: 'detect-only', intervalMs: 86_400_000, lastRunAt: AT,
         },
         site: {
-          monitored: true, owner: 'Tajamul Wani', upState: 'up', statusCode: 200,
+          monitored: true, owner: 'Avery Stone', upState: 'up', statusCode: 200,
           intervalMs: 300_000, lastCheckedAt: AT, ssl: { valid: true, daysRemaining: 60 },
         },
         change: { tracked: false },

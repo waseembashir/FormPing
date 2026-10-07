@@ -8,7 +8,7 @@
  * This inverts the old behaviour, which prompted unless it got confirmation to
  * suppress: the membership `fetch` fails-open there, so a hiccup (common while the
  * Change-tracking SSE stream is hammering the page) produced an "add to project?"
- * popup for a URL that was already assigned — the exact bug Tajamul kept hitting.
+ * popup for a URL that was already assigned — the exact bug this kept causing.
  *
  * Fails CLOSED: if we can't confirm the URL is unassigned we stay silent. The
  * cost of a false negative is tiny — the URL still sits in the Unassigned bucket,

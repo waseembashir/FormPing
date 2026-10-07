@@ -5,7 +5,7 @@
  * token, so a promotion/demotion takes effect on the user's very next request
  * instead of waiting for their session to expire.
  *
- * LOCKOUT SAFETY (FR-24, Tajamul's non-negotiable):
+ * LOCKOUT SAFETY (FR-24, a non-negotiable):
  *   - Exactly one owner at all times. The owner can't be demoted — only
  *     transferred. A `check`/unique index in the migration backs this, and the
  *     functions here enforce it before writing.
