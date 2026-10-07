@@ -80,11 +80,23 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
    */
   const names = new Map((await listUsers()).map((u) => [u.email, u.name] as const));
   const label = (email?: string) => (email ? ownerLabel(names.get(email) ?? null, email) ?? undefined : undefined);
-  const sites = base.sites.map((site) => ({
-    ...site,
-    ...(site.formOwner ? { formOwner: label(site.formOwner) } : {}),
-    ...(site.siteOwner ? { siteOwner: label(site.siteOwner) } : {}),
-  }));
+  /**
+   * Every owner field resolved by walking a list rather than naming each one.
+   *
+   * Naming them individually is exactly how the content watcher was missed on
+   * the project page: it was added after the other two and simply never joined
+   * them, so it reached the screen as a raw email beside two display names. A
+   * fourth owner added here is one entry, not a thing to remember. FR-118.
+   */
+  const OWNER_FIELDS = ['formOwner', 'siteOwner', 'changeOwner'] as const;
+  const sites = base.sites.map((site) => {
+    const named = { ...site };
+    for (const field of OWNER_FIELDS) {
+      const email = named[field];
+      if (email) named[field] = label(email);
+    }
+    return named;
+  });
 
   const shareToken = await getUrlShareToken(project.id, url);
   const data: InternalStatus & { sharedUrl: string; shareToken: string | null } = {

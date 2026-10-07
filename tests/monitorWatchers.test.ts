@@ -22,15 +22,20 @@ const TAJAMUL = { monitored: true, owner: 'Tajamul Wani' };
 const UNOWNED = { monitored: true, owner: null };
 const NONE = { monitored: false, owner: null };
 
+/** `watchedBy` takes a list, so each entry says which monitor it speaks for. */
+const form = (w: typeof PRIYA | typeof NONE) => ({ ...w, kind: 'form' });
+const uptime = (w: typeof PRIYA | typeof NONE) => ({ ...w, kind: 'uptime' });
+const content = (w: typeof PRIYA | typeof NONE) => ({ ...w, kind: 'content' });
+
 describe('when one person watches the whole URL', () => {
   it('says their name once', () => {
     // The common case. "Priya Sharma (form) · Priya Sharma (uptime)" is the
     // same fact twice, and makes the reader deduce that it is one person.
-    expect(watchedBy(PRIYA, PRIYA)).toBe('Priya Sharma');
+    expect(watchedBy([form(PRIYA), uptime(PRIYA)])).toBe('Priya Sharma');
   });
 
   it('needs no explaining', () => {
-    expect(watchedByNeedsContext(PRIYA, PRIYA)).toBe(false);
+    expect(watchedByNeedsContext([form(PRIYA), uptime(PRIYA)])).toBe(false);
   });
 });
 
@@ -38,14 +43,14 @@ describe('when only one kind of monitor exists', () => {
   it('names its owner, unqualified', () => {
     // Nothing to disambiguate from, so "(form)" would be answering a question
     // nobody asked.
-    expect(watchedBy(PRIYA, NONE)).toBe('Priya Sharma');
-    expect(watchedBy(NONE, TAJAMUL)).toBe('Tajamul Wani');
+    expect(watchedBy([form(PRIYA), uptime(NONE)])).toBe('Priya Sharma');
+    expect(watchedBy([form(NONE), uptime(TAJAMUL)])).toBe('Tajamul Wani');
   });
 });
 
 describe('when two people watch the same URL', () => {
   it('names both, and says which is which', () => {
-    const line = watchedBy(PRIYA, TAJAMUL);
+    const line = watchedBy([form(PRIYA), uptime(TAJAMUL)]);
     expect(line).toContain('Priya Sharma');
     expect(line).toContain('Tajamul Wani');
     expect(line).toMatch(/form/);
@@ -55,32 +60,32 @@ describe('when two people watch the same URL', () => {
   it('is the case that needs explaining', () => {
     // Two names only make sense once the reader knows a URL can carry two
     // separate monitors. That is not obvious, and otherwise reads as a bug.
-    expect(watchedByNeedsContext(PRIYA, TAJAMUL)).toBe(true);
+    expect(watchedByNeedsContext([form(PRIYA), uptime(TAJAMUL)])).toBe(true);
   });
 });
 
 describe('when there is nothing worth saying', () => {
   it('says nothing when the URL has no monitors', () => {
-    expect(watchedBy(NONE, NONE)).toBeNull();
+    expect(watchedBy([form(NONE), uptime(NONE)])).toBeNull();
   });
 
   it('says nothing when the monitors predate ownership', () => {
     // "Watched by —" teaches the reader nothing and costs a row.
-    expect(watchedBy(UNOWNED, UNOWNED)).toBeNull();
+    expect(watchedBy([form(UNOWNED), uptime(UNOWNED)])).toBeNull();
   });
 
   it('ignores an owner on a monitor that does not exist', () => {
     // A stale owner on a signal that is no longer monitored must not produce a
     // line claiming somebody watches this URL.
-    expect(watchedBy({ monitored: false, owner: 'Priya Sharma' }, NONE)).toBeNull();
+    expect(watchedBy([form({ monitored: false, owner: 'Priya Sharma' }), uptime(NONE)])).toBeNull();
   });
 
   it('names the one owner it has, without flagging the other as missing', () => {
     // Naming one person and marking the other "not recorded" reads like a fault
     // to investigate. The real situation is mundane: one monitor predates the
     // feature, and the useful half of the answer is still useful.
-    expect(watchedBy(PRIYA, UNOWNED)).toBe('Priya Sharma');
-    expect(watchedByNeedsContext(PRIYA, UNOWNED)).toBe(false);
+    expect(watchedBy([form(PRIYA), uptime(UNOWNED)])).toBe('Priya Sharma');
+    expect(watchedByNeedsContext([form(PRIYA), uptime(UNOWNED)])).toBe(false);
   });
 });
 
@@ -88,8 +93,8 @@ describe('defaults', () => {
   it('treats absent monitors as nothing to report', () => {
     // The caller builds these from an optional payload; a missing block must
     // not throw or invent a watcher.
-    expect(watchedBy()).toBeNull();
-    expect(watchedBy(PRIYA)).toBe('Priya Sharma');
+    expect(watchedBy([])).toBeNull();
+    expect(watchedBy([form(PRIYA)])).toBe('Priya Sharma');
   });
 });
 
@@ -154,5 +159,33 @@ describe('identity, not the label', () => {
     // the only identity on offer, and comparing it is the old behaviour.
     expect(watchPlacement([PRIYA, PRIYA])).toEqual({ at: 'header', label: 'Priya Sharma' });
     expect(watchPlacement([PRIYA, TAJAMUL])).toEqual({ at: 'rows' });
+  });
+});
+
+describe('a URL with three monitors', () => {
+  // `watchedBy` used to take exactly (form, uptime) — written when a URL
+  // carried two. Content tracking became a third the signature could not
+  // express, which is why the per-URL dashboard named two watchers while the
+  // project page named three, for the same URL.
+  const asForm = { kind: 'form', monitored: true, owner: 'Priya Sharma', id: 'priya@x.com' };
+  const asUptime = { kind: 'uptime', monitored: true, owner: 'Tajamul Wani', id: 'taj@x.com' };
+  const asContent = { kind: 'content', monitored: true, owner: 'Priya Sharma', id: 'priya@x.com' };
+
+  it('names all three when one person holds them', () => {
+    expect(watchedBy([asForm, { ...asUptime, owner: 'Priya Sharma', id: 'priya@x.com' }, asContent])).toBe(
+      'Priya Sharma',
+    );
+  });
+
+  it('names somebody once with both their monitors, not twice', () => {
+    // Priya holds the form and the content; Tajamul holds the uptime. Listing
+    // her twice would make three monitors look like three people.
+    const line = watchedBy([asForm, asUptime, asContent]);
+    expect(line).toBe('Priya Sharma (form, content) · Tajamul Wani (uptime)');
+  });
+
+  it('counts people, not monitors, when deciding it needs explaining', () => {
+    expect(watchedByNeedsContext([asForm, asContent])).toBe(false);
+    expect(watchedByNeedsContext([asForm, asUptime])).toBe(true);
   });
 });

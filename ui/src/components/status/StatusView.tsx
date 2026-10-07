@@ -608,16 +608,20 @@ function SiteCard({
    * A live form monitor is the one with a cadence — a stopped one keeps its
    * last result, and nobody is watching it.
    */
-  const watchLine = internal
-    ? watchedBy(
-        { monitored: tech?.form?.intervalMs != null, owner: s.formOwner ?? null },
-        { monitored: uptimeMonitored, owner: s.siteOwner ?? null },
-      )
-    : null;
-  const watchNeedsContext = internal && watchedByNeedsContext(
-    { monitored: tech?.form?.intervalMs != null, owner: s.formOwner ?? null },
-    { monitored: uptimeMonitored, owner: s.siteOwner ?? null },
-  );
+  /**
+   * All three monitors, built once. Content tracking was absent here while the
+   * project page named it, so the same URL reported two watchers on one screen
+   * and three on another. Every owner on this payload comes through one
+   * resolver in the route, so the labels cannot disagree about one person the
+   * way they did there. FR-118.
+   */
+  const watchers = [
+    { kind: 'form', monitored: tech?.form?.intervalMs != null, owner: s.formOwner ?? null },
+    { kind: 'uptime', monitored: uptimeMonitored, owner: s.siteOwner ?? null },
+    { kind: 'content', monitored: Boolean(s.changeTracked), owner: s.changeOwner ?? null },
+  ];
+  const watchLine = internal ? watchedBy(watchers) : null;
+  const watchNeedsContext = internal && watchedByNeedsContext(watchers);
   const ssl = s.ssl;
   // Full page URL (scheme stripped) so multiple URLs on one host are distinct.
   const displayUrl = s.url.replace(/^https?:\/\//, '').replace(/\/$/, '');

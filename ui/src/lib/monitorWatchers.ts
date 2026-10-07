@@ -43,10 +43,13 @@ export interface Watcher {
   id?: string | null;
 }
 
-const NOBODY: Watcher = { monitored: false, owner: null };
-
 /**
  * The sentence for a "watched by" line, or null when there is nothing to say.
+ *
+ * Takes a list rather than a fixed pair. It used to take exactly (form,
+ * uptime) — written when a URL carried two monitors — and content tracking
+ * then became a third that this simply could not express. A list cannot go
+ * stale the same way.
  *
  * Null rather than a placeholder in two cases, because both mean the line would
  * be noise: no monitor on this URL at all, and monitors that predate ownership.
@@ -58,31 +61,46 @@ const NOBODY: Watcher = { monitored: false, owner: null };
  * other "not recorded" reads like a fault to investigate, when the real
  * situation is mundane — one monitor predates the feature.
  */
-export function watchedBy(form: Watcher = NOBODY, uptime: Watcher = NOBODY): string | null {
-  const f = form.monitored ? form.owner : null;
-  const u = uptime.monitored ? uptime.owner : null;
+export interface NamedWatcher extends Watcher {
+  /** What this monitor is called when two owners have to be told apart. */
+  kind: string;
+}
 
-  if (!f && !u) return null;
-  if (f && !u) return f;
-  if (u && !f) return u;
-  // Both known. The common case by far is that they are the same person, and
-  // qualifying every name would make the reader work that out for themselves.
-  if (f === u) return f;
+export function watchedBy(watchers: NamedWatcher[]): string | null {
+  const owned = watchers.filter((w) => w.monitored && w.owner);
+  if (owned.length === 0) return null;
 
-  return `${f} (form) · ${u} (uptime)`;
+  const identity = (w: Watcher) => w.id ?? w.owner;
+  const first = owned[0]!;
+
+  // The common case by far: one person watches all of it. Qualifying every
+  // name would make the reader work that out for themselves.
+  if (owned.every((w) => identity(w) === identity(first))) return first.owner;
+
+  // Grouped, so a person who holds two of the three is named once with both
+  // against them rather than appearing twice.
+  const byPerson = new Map<string, { label: string; kinds: string[] }>();
+  for (const w of owned) {
+    const key = identity(w) as string;
+    const entry = byPerson.get(key) ?? { label: w.owner as string, kinds: [] };
+    entry.kinds.push(w.kind);
+    byPerson.set(key, entry);
+  }
+
+  return [...byPerson.values()].map((p) => `${p.label} (${p.kinds.join(', ')})`).join(' · ');
 }
 
 /**
  * Whether the line needs explaining.
  *
- * One name answers "who do I speak to" on its own. Two names only make sense
- * once the reader knows a URL can carry two separate monitors — which is not
+ * One name answers "who do I speak to" on its own. Several only make sense
+ * once the reader knows a URL can carry separate monitors — which is not
  * obvious, and is the kind of thing that otherwise reads as a bug.
  */
-export function watchedByNeedsContext(form: Watcher = NOBODY, uptime: Watcher = NOBODY): boolean {
-  const f = form.monitored ? form.owner : null;
-  const u = uptime.monitored ? uptime.owner : null;
-  return Boolean(f && u && f !== u);
+export function watchedByNeedsContext(watchers: NamedWatcher[]): boolean {
+  const owned = watchers.filter((w) => w.monitored && w.owner);
+  const identity = (w: Watcher) => w.id ?? w.owner;
+  return new Set(owned.map(identity)).size > 1;
 }
 
 /**
