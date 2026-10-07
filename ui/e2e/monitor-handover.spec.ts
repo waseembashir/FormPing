@@ -26,13 +26,17 @@ function payload(over: { formOwner?: string; siteOwner?: string; siteMonitored?:
       health: [{
         url: 'https://www.apexure.com',
         form: {
-          monitored: true, owner: over.formOwner ?? 'Tajamul Wani', level: 'healthy',
+          monitored: true, owner: over.formOwner ?? 'Tajamul Wani',
+          ownerEmail: over.formOwner === 'Priya Sharma' ? 'priya@apexure.com' : 'tajamul@apexure.com',
+          level: 'healthy',
           label: 'Form detected', mode: 'detect-only', intervalMs: 86_400_000, lastRunAt: AT,
         },
         site: over.siteMonitored === false
           ? { monitored: false }
           : {
-              monitored: true, owner: over.siteOwner ?? 'Tajamul Wani', upState: 'up',
+              monitored: true, owner: over.siteOwner ?? 'Tajamul Wani',
+              ownerEmail: over.siteOwner === 'Priya Sharma' ? 'priya@apexure.com' : 'tajamul@apexure.com',
+              upState: 'up',
               statusCode: 200, intervalMs: 300_000, lastCheckedAt: AT,
               ssl: { valid: true, daysRemaining: 60 },
             },
@@ -53,6 +57,10 @@ async function mockProject(page: import('@playwright/test').Page, body: unknown)
     r.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ users: [
+        // The current owner is deliberately present: the picker has to leave
+        // them out itself, and a list that never contained them would prove
+        // nothing.
+        { email: 'tajamul@apexure.com', name: 'Tajamul Wani' },
         { email: 'priya@apexure.com', name: 'Priya Sharma' },
         { email: 'noname@apexure.com', name: null },
       ] }),
@@ -102,9 +110,17 @@ test('hands over one monitor at a time when owners differ', async ({ page }) => 
   const sent = await mockProject(page, payload({ formOwner: 'Priya Sharma', siteOwner: 'Tajamul Wani' }));
 
   await page.getByRole('button', { name: 'Watched by Priya Sharma' }).click();
-  await page.getByRole('menuitem', { name: 'Priya Sharma' }).click();
 
-  await expect.poll(() => sent).toEqual([{ kind: 'form', to: 'priya@apexure.com' }]);
+  // Priya is not offered here — she already holds this one. Before the picker
+  // learned that, this test picked her, and "passed" by asserting a request
+  // the server would have refused.
+  await expect(page.getByRole('menuitem', { name: 'Priya Sharma' })).toHaveCount(0);
+
+  await page.getByRole('menuitem', { name: 'Tajamul Wani' }).click();
+
+  // Only the form monitor moves. The uptime monitor is somebody else's and has
+  // its own badge.
+  await expect.poll(() => sent).toEqual([{ kind: 'form', to: 'tajamul@apexure.com' }]);
 });
 
 test('falls back to the address for somebody with no name recorded', async ({ page }) => {
@@ -134,4 +150,25 @@ test('the menu opens without pushing the page sideways on a phone', async ({ pag
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(overflows).toBe(false);
+});
+
+test('never offers the monitor to whoever already has it', async ({ page }) => {
+  /**
+   * The server refuses this — "that person already watches this URL" — so
+   * offering it was presenting a choice that could only fail. Worse than
+   * useless: seeing your own name under "hand this monitor to" reads as though
+   * the app has not noticed the monitor is already yours, and invites the
+   * reasonable question of whether you are supposed to assign your own work to
+   * yourself.
+   *
+   * The rule was written down when this menu was built — a viewer is left out
+   * because the server would refuse them — and simply never applied to the
+   * owner.
+   */
+  await mockProject(page, payload());
+
+  await page.getByRole('button', { name: /Watched by/ }).click();
+
+  await expect(page.getByRole('menuitem', { name: 'Priya Sharma' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Tajamul Wani' })).toHaveCount(0);
 });
