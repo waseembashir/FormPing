@@ -283,16 +283,6 @@ export async function rollupsForUrlSets(urlSets: string[][]): Promise<ProjectRol
 // ── Unassigned (orphan) monitors ──────────────────────────────────────────────
 // "No orphans": every URL that has a monitor must be reachable from Projects.
 
-/** Every distinct URL that has a Form Watch or Site Watch monitor. */
-export async function listMonitoredUrls(): Promise<string[]> {
-  const [forms, sites] = await Promise.all([listFormSchedules(), listSiteSchedules()]);
-  const byKey = new Map<string, string>();
-  for (const s of [...forms, ...sites]) {
-    const k = key(s.url);
-    if (!byKey.has(k)) byKey.set(k, s.url); // keep first-seen original URL form
-  }
-  return [...byKey.values()];
-}
 
 /**
  * URLs that aren't in any project — the synthetic "Unassigned" bucket. Includes
@@ -302,21 +292,85 @@ export async function listMonitoredUrls(): Promise<string[]> {
  * explicitly dismissed ("No, don't track"), so a deliberate throwaway stays out.
  */
 export async function listUnassignedUrls(): Promise<string[]> {
-  const [monitored, runs, projects, dismissed, formResults, siteResults, tracked] = await Promise.all([
-    listMonitoredUrls(),
+  const [snapshot, projects] = await Promise.all([loadProjectsSnapshot(), projectStore.list()]);
+  return snapshot.unassigned(projects);
+}
+
+/**
+ * Everything the Projects page reads, loaded ONCE.
+ *
+ * The page needs two answers — a rollup per project, and which URLs belong to
+ * no project — and they draw on the same stores. They were computed by two
+ * functions that each loaded what they needed, so a single request read both
+ * schedule tables, both result tables and the project list **twice**: thirteen
+ * reads where eight distinct ones exist.
+ *
+ * The route even carried a comment claiming "one pass over the monitor stores
+ * for the projects AND the unassigned set". It was true of the half it sat
+ * above, and the other half had already made its own pass.
+ *
+ * So the loading happens here, once, and the two answers are derived from it
+ * synchronously. Deriving rather than fetching is the point: neither answer
+ * needs anything the other did not already bring back.
+ */
+export interface ProjectsSnapshot {
+  /** A rollup per set of URLs, in the order given. */
+  rollups(urlSets: string[][]): ProjectRollup[];
+  /** URLs with a monitor, a run or a result, that no project claims. */
+  unassigned(projects: { urls: string[] }[]): string[];
+}
+
+export async function loadProjectsSnapshot(): Promise<ProjectsSnapshot> {
+  const [{ forms, sites }, runs, dismissed, formResults, siteResults, tracked] = await Promise.all([
+    loadMaps(),
     loadRuns(),
-    projectStore.list(),
     listDismissed(),
     loadFormResults(),
     loadSiteResults(),
     listTrackedUrls(), // Change-tracked URLs (snapshot/compare/watch) — FR-21
   ]);
+
+  return {
+    rollups: (urlSets) =>
+      urlSets.map((urls) =>
+        rollupFromHealth(buildHealth(urls, forms, sites, undefined, undefined, formResults, siteResults)),
+      ),
+    unassigned: (projects) => unassignedFrom({ forms, sites, runs, dismissed, formResults, siteResults, tracked }, projects),
+  };
+}
+
+/**
+ * The unassigned rule, over data already in hand.
+ *
+ * Exported for its tests rather than for callers: it decides what appears in
+ * the Unassigned bucket, which is the app's promise that no URL with a monitor
+ * or a result can become invisible. That is worth pinning independently of the
+ * stores it used to be welded to.
+ */
+export function unassignedFrom(
+  d: {
+    forms: FormMap;
+    sites: SiteMap;
+    runs: RunMap;
+    dismissed: Set<string>;
+    formResults: FormResultMap;
+    siteResults: SiteResultMap;
+    tracked: string[];
+  },
+  projects: { urls: string[] }[],
+): string[] {
+  const { runs, dismissed, formResults, siteResults, tracked } = d;
+  const monitored = [...d.forms.values(), ...d.sites.values()].map((s) => s.url);
   const assigned = new Set(projects.flatMap((p) => p.urls).map(key));
   // Union of monitored + manually-tested + persisted-result URLs (the last covers
   // stopped monitors whose result we keep), de-duplicated by normalized key
   // (keep the first-seen original URL form for display).
   const byKey = new Map<string, string>();
-  for (const u of monitored) byKey.set(key(u), u);
+  // First-seen wins, matching the order the old `listMonitoredUrls` used:
+  // forms before sites. `byKey.set` unguarded would let the SITE schedule's
+  // spelling of a URL overwrite the FORM schedule's, changing which casing or
+  // trailing slash a person sees in Unassigned for no reason.
+  for (const u of monitored) if (!byKey.has(key(u))) byKey.set(key(u), u);
   for (const r of runs.values()) {
     if (!byKey.has(key(r.inputUrl))) byKey.set(key(r.inputUrl), r.inputUrl);
   }
