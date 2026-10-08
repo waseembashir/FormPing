@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Project } from '@/lib/projects/types';
+import type { ProjectListItem } from '@/lib/projects/projectList';
 import { monogram } from './uiKit';
 
 /**
@@ -27,7 +27,7 @@ export function ProjectChooser({
   /** Called after the URL is successfully added to a project. */
   onAssigned: () => void;
 }) {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -36,7 +36,7 @@ export function ProjectChooser({
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    fetch('/api/projects', { cache: 'no-store' })
+    fetch('/api/projects/list', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => setProjects(Array.isArray(d?.projects) ? d.projects : []))
       .catch(() => setProjects([]))

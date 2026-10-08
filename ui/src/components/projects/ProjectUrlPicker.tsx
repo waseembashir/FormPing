@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { Project } from '@/lib/projects/types';
+import type { ProjectListItem } from '@/lib/projects/projectList';
 
 /**
  * A small "Use a project" dropdown for the tester tabs: pick a saved project,
  * expand it to its URLs, and click a URL to fill the field — no re-typing.
- * Loads from GET /api/projects (auth-gated like the rest of the app).
+ *
+ * Loads from GET /api/projects/list, not /api/projects: the latter builds the
+ * Projects page — eight store reads, a health rollup per project and the whole
+ * Unassigned bucket — and this menu used three fields of it, on every open.
+ * Auth-gated like the rest of the app, by the middleware.
  */
 export function ProjectUrlPicker({
   onPick,
@@ -27,7 +31,7 @@ export function ProjectUrlPicker({
   align?: 'left' | 'right';
 }) {
   const [open, setOpen] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -35,7 +39,7 @@ export function ProjectUrlPicker({
 
   useEffect(() => {
     if (!open || loaded) return;
-    fetch('/api/projects', { cache: 'no-store' })
+    fetch('/api/projects/list', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => setProjects(Array.isArray(d?.projects) ? d.projects : []))
       .catch(() => setProjects([]))
