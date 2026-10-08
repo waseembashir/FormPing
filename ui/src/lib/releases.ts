@@ -106,6 +106,30 @@ export const RELEASES: Release[] = [
         detail:
           'Who opened a project, who added or removed a URL, who shared it, who handed a monitor on — and when. Readable by owners and admins, so a client\u2019s setup is never a mystery about how it came to be that way.',
       },
+      {
+        type: 'enhancement',
+        title: 'What’s new shows what is new to you',
+        detail:
+          'This page now marks the releases you have not read and puts a dot in the sidebar when something is waiting, so you can see what changed since you last looked instead of re-reading all of it.',
+      },
+      {
+        type: 'enhancement',
+        title: 'Tabs remember what they were showing',
+        detail:
+          'Moving between tabs no longer blanks the results you were reading, and a per-URL dashboard now carries the same depth of detail for a scheduled check as for a test you ran by hand.',
+      },
+      {
+        type: 'fix',
+        title: 'Form screenshots stay put',
+        detail:
+          'A screenshot taken by the Form Tester could be removed when a scheduled check ran on the same URL, leaving the report with its verdict but no picture. Both now keep their own evidence.',
+      },
+      {
+        type: 'fix',
+        title: 'A form is named properly, or not at all',
+        detail:
+          'Forms could be named after a required-field asterisk or a discount badge sitting above the first field. A name now has to be words — and where there is no name to be had, we say nothing rather than inventing one.',
+      },
     ],
   },
   {
