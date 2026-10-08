@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { forgetTab } from '@/lib/tabCache';
+import { prefetchHref } from '@/lib/tabPrefetch';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMe, canRole } from '@/lib/auth/useMe';
 import { RELEASES } from '@/lib/releases';
@@ -112,6 +113,7 @@ function NavLink({
     <Link
       href={href}
       onClick={onNavigate}
+      onPointerEnter={() => prefetchHref(href)}
       aria-current={active ? 'page' : undefined}
       className={cx(
         'group relative flex items-center gap-2.5 rounded-lg transition-colors',
@@ -139,6 +141,7 @@ function CollapsedArea({ group, pathname, onNavigate }: { group: NavGroup; pathn
       <Link
         href={href}
         onClick={onNavigate}
+        onPointerEnter={() => prefetchHref(href)}
         aria-current={active ? 'page' : undefined}
         aria-label={group.label}
         className={cx(
@@ -159,6 +162,7 @@ function CollapsedArea({ group, pathname, onNavigate }: { group: NavGroup; pathn
               key={leaf.href}
               href={leaf.href}
               onClick={onNavigate}
+              onPointerEnter={() => prefetchHref(leaf.href)}
               className={cx(
                 'block rounded-md px-2.5 py-1.5 text-xs font-medium',
                 isActive(pathname, leaf.href) ? 'bg-accent/15 text-accent-soft' : 'text-ink-muted hover:bg-panel hover:text-ink',
@@ -304,7 +308,7 @@ function UtilityItem({
     return (
       <div className="group relative flex justify-center">
         {href ? (
-          <Link href={href} onClick={onNavigate} aria-label={label}>{inner}</Link>
+          <Link href={href} onClick={onNavigate} onPointerEnter={() => prefetchHref(href)} aria-label={label}>{inner}</Link>
         ) : (
           <button type="button" onClick={activate} aria-label={label}>{inner}</button>
         )}
@@ -324,7 +328,7 @@ function UtilityItem({
     </>
   );
   return href ? (
-    <Link href={href} onClick={onNavigate} className={cls}>{inner}</Link>
+    <Link href={href} onClick={onNavigate} onPointerEnter={() => prefetchHref(href)} className={cls}>{inner}</Link>
   ) : (
     <button type="button" onClick={activate} className={cls}>{inner}</button>
   );

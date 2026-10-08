@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ProjectRollup, ProjectWithRollup } from '@/lib/projects/types';
-import { readTab, writeTab, TAB_KEYS } from '@/lib/tabCache';
+import type { ProjectWithRollup } from '@/lib/projects/types';
+import { readTab, writeTabIfCurrent, cacheEpoch } from '@/lib/tabCache';
+import { projectsTab, type ProjectsPayload, type Unassigned } from '@/lib/tabLoaders';
 import { ProjectsTable } from '@/components/projects/ProjectsTable';
 import { ProjectForm } from '@/components/projects/ProjectForm';
 import { UnassignedRow } from '@/components/projects/UnassignedRow';
@@ -10,11 +11,6 @@ import { fromProjectRollup } from '@/lib/design/status';
 import { useMe, canRole } from '@/lib/auth/useMe';
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner';
 import { PageHeader, Button, Input, Tabs, Modal, EmptyState, Skeleton, type TabItem } from '@/components/ui';
-
-interface Unassigned {
-  urls: string[];
-  rollup: ProjectRollup;
-}
 
 type ViewKey = 'all' | 'monitoring' | 'not' | 'attention' | 'mine' | 'unassigned';
 
@@ -58,31 +54,29 @@ export default function ProjectsPage() {
   const load = useCallback(async (q: string) => {
     // Render what this tab showed last time, immediately, then refresh behind
     // it. A revisit used to blank the page for a full round trip. FR-105.
-    const remembered = readTab<{ projects: ProjectWithRollup[]; unassigned: Unassigned | null }>(TAB_KEYS.projects(q));
+    const tab = projectsTab(q);
+    const remembered = readTab<ProjectsPayload>(tab.key);
     if (remembered) {
       setProjects(remembered.projects);
       setUnassigned(remembered.unassigned);
       setLoading(false);
     }
-    try {
-      const res = await fetch(`/api/projects?q=${encodeURIComponent(q)}`, { cache: 'no-store' }).then((r) => r.json());
-      const next = {
-        projects: Array.isArray(res?.projects) ? res.projects : [],
-        unassigned: res?.unassigned && Array.isArray(res.unassigned.urls) ? res.unassigned : null,
-      };
-      setProjects(next.projects);
-      setUnassigned(next.unassigned);
-      writeTab(TAB_KEYS.projects(q), next);
-    } catch {
+
+    // Captured before the request: a sign-out while it is in flight must not
+    // leave this answer behind for the next person at this browser.
+    const started = cacheEpoch();
+    const res = await tab.load();
+    if (res.ok) {
+      setProjects(res.data.projects);
+      setUnassigned(res.data.unassigned);
+      writeTabIfCurrent(tab.key, res.data, started);
+    } else if (!remembered) {
       // Keep whatever is on screen when a refresh fails: replacing a good list
       // with an empty one turns a transient blip into "you have no projects".
-      if (!remembered) {
-        setProjects([]);
-        setUnassigned(null);
-      }
-    } finally {
-      setLoading(false);
+      setProjects([]);
+      setUnassigned(null);
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {

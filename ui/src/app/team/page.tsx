@@ -1,22 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { readTab, writeTab, TAB_KEYS } from '@/lib/tabCache';
+import { readTab, writeTabIfCurrent, cacheEpoch } from '@/lib/tabCache';
+import { teamTab, type TeamPayload, type TeamUser, type TeamMe as Me } from '@/lib/tabLoaders';
 import { ROLE_LABEL, type Role } from '@/lib/auth/roles';
 import { refreshMe } from '@/lib/auth/useMe';
 import { BugInbox } from '@/components/team/BugInbox';
 import { Button, ConfirmDialog, PageHeader, Tabs } from '@/components/ui';
-
-interface TeamUser {
-  email: string;
-  role: Role;
-  name: string | null;
-  picture: string | null;
-}
-interface Me {
-  email: string;
-  role: Role;
-}
 
 const ROLE_HELP: Record<Role, string> = {
   owner: 'Full control, plus manages admins and can hand over ownership.',
@@ -37,27 +27,29 @@ export default function TeamPage() {
 
   const load = useCallback(async () => {
     // Render the roster this tab last held, then refresh behind it. FR-105.
-    const remembered = readTab<{ users: TeamUser[]; me: Me | null }>(TAB_KEYS.team);
+    const tab = teamTab();
+    const remembered = readTab<TeamPayload>(tab.key);
     if (remembered) {
       setUsers(remembered.users);
       setMe(remembered.me);
       setState('ready');
     }
-    try {
-      const res = await fetch('/api/users', { cache: 'no-store' });
-      // A refused request is never softened by the cache: losing access must
-      // show as losing access, not as the roster someone saw a minute ago.
-      if (res.status === 401 || res.status === 403) return setState('forbidden');
-      if (!res.ok) return setState(remembered ? 'ready' : 'error');
-      const data = await res.json();
-      const next = { users: Array.isArray(data?.users) ? data.users : [], me: data?.me ?? null };
-      setUsers(next.users);
-      setMe(next.me);
-      writeTab(TAB_KEYS.team, next);
+
+    // Captured before the request: a sign-out while it is in flight must not
+    // leave this roster behind for the next person at this browser.
+    const started = cacheEpoch();
+    const res = await tab.load();
+    if (res.ok) {
+      setUsers(res.data.users);
+      setMe(res.data.me);
+      writeTabIfCurrent(tab.key, res.data, started);
       setState('ready');
-    } catch {
-      if (!remembered) setState('error');
+      return;
     }
+    // A refused request is never softened by the cache: losing access must
+    // show as losing access, not as the roster someone saw a minute ago.
+    if (res.reason === 'forbidden') return setState('forbidden');
+    setState(remembered ? 'ready' : 'error');
   }, []);
 
   useEffect(() => {

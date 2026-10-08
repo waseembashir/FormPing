@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { readTab, writeTab, TAB_KEYS } from '@/lib/tabCache';
+import { readTab, writeTabIfCurrent, cacheEpoch } from '@/lib/tabCache';
+import { formWatchTab, type SchedulesPayload } from '@/lib/tabLoaders';
 import { ScheduleCard } from '@/components/formWatch/ScheduleCard';
 import { SchedulerCommandBar } from '@/components/formWatch/SchedulerCommandBar';
 import { AddToProjectModal } from '@/components/projects/AddToProjectModal';
@@ -44,33 +45,31 @@ export default function FormWatchPage() {
   const load = useCallback(async () => {
     // Show what this tab held last time straight away, then refresh behind it.
     // A revisit used to blank the list for a full round trip. FR-105.
-    const remembered = readTab<{ schedules: FormSchedule[]; saveFailures: Record<string, { at: string }> }>(TAB_KEYS.formWatch);
+    const tab = formWatchTab();
+    const remembered = readTab<SchedulesPayload<FormSchedule>>(tab.key);
     if (remembered) {
       setSchedules(remembered.schedules);
       setSaveFailures(remembered.saveFailures);
       setLoading(false);
     }
-    try {
-      const res = await fetch('/api/form-watch').then((r) => r.json());
-      const next = {
-        schedules: Array.isArray(res?.schedules) ? res.schedules : [],
+
+    // Captured before the request: a sign-out while it is in flight must not
+    // leave this answer behind for the next person at this browser.
+    const started = cacheEpoch();
+    const res = await tab.load();
+    if (res.ok) {
+      setSchedules(res.data.schedules);
       // Monitors whose last run could not be stored, so each card can say so
       // rather than showing an older summary as if it were current. FR-87.
-        saveFailures: res?.saveFailures && typeof res.saveFailures === 'object' ? res.saveFailures : {},
-      };
-      setSchedules(next.schedules);
-      setSaveFailures(next.saveFailures);
-      writeTab(TAB_KEYS.formWatch, next);
-    } catch {
+      setSaveFailures(res.data.saveFailures);
+      writeTabIfCurrent(tab.key, res.data, started);
+    } else if (!remembered) {
       // A failed refresh must not replace a good list with an empty one — that
       // turns a blip into "you have no monitors".
-      if (!remembered) {
-        setSchedules([]);
-        setSaveFailures({});
-      }
-    } finally {
-      setLoading(false);
+      setSchedules([]);
+      setSaveFailures({});
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {

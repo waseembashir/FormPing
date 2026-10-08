@@ -27,6 +27,31 @@
 const store = new Map<string, unknown>();
 
 /**
+ * How many times everything has been forgotten.
+ *
+ * Clearing the cache is not enough on its own, because a load that is already
+ * in flight will finish afterwards and write its answer into the cache that
+ * was just emptied. Signing out is exactly that situation: `forgetTab()` runs,
+ * then `router.push('/login')` navigates on the CLIENT, so this module is
+ * never torn down and a request started a moment earlier still lands.
+ *
+ * The result would be the previous person's projects sitting in the cache of
+ * a browser somebody else is now signing into — the precise thing clearing it
+ * exists to prevent, arriving a few hundred milliseconds late.
+ *
+ * So a caller records this number before it starts, and `writeTabIfCurrent`
+ * drops the write if everything has been forgotten since. Only a full clear
+ * counts: that is the security boundary. Forgetting one key is ordinary
+ * invalidation, and a fresh answer arriving after it is welcome.
+ */
+let epoch = 0;
+
+/** The current generation. Capture before a load, pass to the write. */
+export function cacheEpoch(): number {
+  return epoch;
+}
+
+/**
  * The last payload seen for a tab, or null.
  *
  * Returns `null` rather than `undefined` for a miss so a caller can write
@@ -49,8 +74,25 @@ export function writeTab<T>(key: string, value: T): void {
  * browser must not see the previous one's data for even one frame.
  */
 export function forgetTab(key?: string): void {
-  if (key === undefined) store.clear();
-  else store.delete(key);
+  if (key === undefined) {
+    store.clear();
+    // Anything already loading belongs to the session being left behind.
+    epoch += 1;
+  } else {
+    store.delete(key);
+  }
+}
+
+/**
+ * Remember this payload, unless everything was forgotten while it was loading.
+ *
+ * `started` is what `cacheEpoch()` returned before the request began. If the
+ * cache has been cleared since, the answer belongs to a session that has
+ * ended and is dropped on the floor.
+ */
+export function writeTabIfCurrent<T>(key: string, value: T, started: number): void {
+  if (started !== epoch) return;
+  store.set(key, value);
 }
 
 /** Keys are namespaced so a tab cannot read another's payload by accident. */
