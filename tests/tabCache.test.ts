@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readTab, writeTab, forgetTab, TAB_KEYS } from '@/lib/tabCache';
+import { readTab, writeTab, writeTabIfCurrent, cacheEpoch, forgetTab, TAB_KEYS } from '@/lib/tabCache';
 
 beforeEach(() => forgetTab());
 
@@ -81,5 +81,64 @@ describe('keys keep tabs apart', () => {
   it('separates an empty search from a populated one', () => {
     writeTab(TAB_KEYS.projects(''), { projects: ['all'] });
     expect(readTab(TAB_KEYS.projects('a'))).toBeNull();
+  });
+});
+
+describe('a cleared cache stays cleared', () => {
+  /**
+   * Clearing is not enough on its own. A load already in flight finishes
+   * afterwards and writes into the cache that was just emptied.
+   *
+   * Signing out is exactly that: `forgetTab()` runs, then the app navigates to
+   * /login on the CLIENT, so this module is never torn down and a request
+   * started a moment earlier still lands. The previous person's data would end
+   * up in the cache of a browser somebody else is now signing into — the thing
+   * clearing it exists to prevent, a few hundred milliseconds late.
+   */
+
+  it('drops a write whose load began before everything was forgotten', () => {
+    const started = cacheEpoch();
+    writeTab('a', 'original');
+
+    forgetTab(); // the sign-out
+
+    writeTabIfCurrent('a', 'late answer from the old session', started);
+    expect(readTab('a')).toBeNull();
+  });
+
+  it('keeps a write when nothing was forgotten meanwhile', () => {
+    // The guard must not be so eager it discards ordinary work — that would
+    // silently disable remembering, and nothing would report it.
+    const started = cacheEpoch();
+    writeTabIfCurrent('b', 'kept', started);
+    expect(readTab<string>('b')).toBe('kept');
+  });
+
+  it('is not tripped by forgetting a single key', () => {
+    // One key is ordinary invalidation, not a session ending. A fresh answer
+    // landing after it is welcome.
+    const started = cacheEpoch();
+    forgetTab('something:else');
+    writeTabIfCurrent('c', 'kept', started);
+    expect(readTab<string>('c')).toBe('kept');
+  });
+
+  it('moves on with each clear, so a stale write never becomes current again', () => {
+    // A counter that wrapped or reset could let an old answer match a later
+    // generation and be accepted long after its session ended.
+    const first = cacheEpoch();
+    forgetTab();
+    forgetTab();
+    expect(cacheEpoch()).not.toBe(first);
+
+    writeTabIfCurrent('d', 'from two sessions ago', first);
+    expect(readTab('d')).toBeNull();
+  });
+
+  it('accepts writes again from loads begun after the clear', () => {
+    forgetTab();
+    const started = cacheEpoch(); // a load started by the new session
+    writeTabIfCurrent('e', 'new session data', started);
+    expect(readTab<string>('e')).toBe('new session data');
   });
 });
