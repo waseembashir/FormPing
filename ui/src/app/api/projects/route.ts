@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { projectStore } from '@/lib/projects/projectStore';
 import { recordEvent } from '@/lib/projects/eventStore';
 import { firstUrlOwnedElsewhere, firstDuplicatePage } from '@/lib/projects/urlOwnership';
-import { rollupsForUrlSets, listUnassignedUrls } from '@/lib/projects/health';
+import { loadProjectsSnapshot } from '@/lib/projects/health';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { requireRole, currentUser } from '@/lib/auth/authorize';
 import { getUserName } from '@/lib/auth/userStore';
@@ -45,13 +45,26 @@ export async function GET(request: NextRequest) {
       )
     : all;
 
-  // Orphans = monitored URLs not in any project and not dismissed. Computed
-  // centrally (listUnassignedUrls) so the dismiss rule lives in one place.
-  let orphans = await listUnassignedUrls();
+  /**
+   * One read of each store, for BOTH answers this page needs.
+   *
+   * The rollups and the unassigned set draw on the same tables, and used to be
+   * computed by two functions that each loaded independently — so a single
+   * request read both schedule tables and both result tables twice. The line
+   * below used to claim "one pass over the monitor stores for the projects AND
+   * the unassigned set"; it was true of the rollups alone, and the unassigned
+   * set had already made its own pass above it.
+   */
+  const snapshot = await loadProjectsSnapshot();
+
+  // Orphans = monitored URLs not in any project and not dismissed. Derived
+  // centrally so the dismiss rule lives in one place. Note it is derived from
+  // ALL projects, never the filtered set — a URL must not look unassigned just
+  // because a search hid the project holding it.
+  let orphans = snapshot.unassigned(all);
   if (q) orphans = orphans.filter((u) => u.toLowerCase().includes(q));
 
-  // One pass over the monitor stores for the projects AND the unassigned set.
-  const rollups = await rollupsForUrlSets([...projects.map((p) => p.urls), orphans]);
+  const rollups = snapshot.rollups([...projects.map((p) => p.urls), orphans]);
   const orphanRollup = rollups[rollups.length - 1]!;
   const withRollup: ProjectWithRollup[] = projects.map((p, i) => ({ ...p, rollup: rollups[i]! }));
 
