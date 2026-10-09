@@ -7,8 +7,10 @@ import { test, expect } from '@playwright/test';
  * tester's localStorage cache and assert what the report actually renders.
  *
  * What these lock in:
- *  · a screenshot of the matched form is shown, and it is a HOSTED url — the
- *    heavy inline data: image must never reach the browser or its cache;
+ *  · a screenshot of the matched form is shown, served through the app's own
+ *    auth-gated route — the heavy inline data: image must never reach the
+ *    browser or its cache, and the object must never be fetched straight from
+ *    storage (FR-78);
  *  · the form's page link carries its anchor, so one link lands on the form;
  *  · page-wide bot protection is described as a page fact, NOT as a CAPTCHA
  *    chip on a form that has no widget (the original over-claim);
@@ -16,7 +18,21 @@ import { test, expect } from '@playwright/test';
  *  · a low-confidence match says so instead of reading as a pass.
  */
 
-const SHOT = 'https://cdn.test/form-shots/2026-09/abc.jpg';
+/**
+ * What a run stores for a screenshot: the object's KEY in the bucket.
+ *
+ * Not a URL. Since FR-78 the bucket is private and the image is served by
+ * /api/form-shot/<key>, so a stored row holds nothing directly fetchable.
+ */
+const SHOT = 'dev/ex.test/contact-1a2b3c4d/0-contact-9f8e7d6c5b4a.jpg';
+/** Where that key is actually fetched from — through the app, behind the gate. */
+const SHOT_SRC = `/api/form-shot/${SHOT}`;
+/**
+ * How a run stored BEFORE the gate existed spelled the same thing. Kept in the
+ * suite because old rows must keep rendering: if they stopped, flipping the
+ * bucket to private would silently empty every historical report.
+ */
+const LEGACY_SHOT = `https://abcdefgh.supabase.co/storage/v1/object/public/form-shots/${SHOT}`;
 
 const BASE = {
   inputUrl: 'https://ex.test',
@@ -89,9 +105,9 @@ const seed = (result: unknown) => JSON.stringify([result]);
 
 test.describe('FR-73 — evidence on the multi-form report', () => {
   test.beforeEach(async ({ page }) => {
-    // Screenshots point at a CDN the e2e env can't reach: serve a 1x1 so the
-    // <img> resolves without a real network dependency.
-    await page.route(SHOT, (route) =>
+    // The gated route needs a database and a session; serve a 1x1 so the <img>
+    // resolves without either.
+    await page.route('**/api/form-shot/**', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'image/gif',
@@ -109,9 +125,10 @@ test.describe('FR-73 — evidence on the multi-form report', () => {
     await expect(page.getByText('The form we matched')).toBeVisible();
     const shot = page.getByRole('img', { name: /Screenshot of the/i });
     await expect(shot).toBeVisible();
-    // The image must be a hosted URL. An inline data: image would mean the
-    // engine's bytes reached the browser — the thing FR-73 deliberately avoids.
-    await expect(shot).toHaveAttribute('src', SHOT);
+    // Served through the app, never straight at storage. An inline data: image
+    // would mean the engine's bytes reached the browser (FR-73); a direct
+    // storage URL would mean the image is fetchable without a session (FR-78).
+    await expect(shot).toHaveAttribute('src', SHOT_SRC);
 
     // The link READS as the clean page address — no machine id in the middle of
     // it — but it carries the form's anchor, so the click lands on the form.
@@ -122,6 +139,27 @@ test.describe('FR-73 — evidence on the multi-form report', () => {
     const link = page.locator('a[title*="scrolled to the form"]');
     await expect(link).toHaveAttribute('href', 'https://ex.test/contact/#contact-form');
     await expect(link).toHaveText('https://ex.test/contact/');
+  });
+
+  test('a screenshot stored before the gate existed still renders', async ({ page }) => {
+    /**
+     * Rows written before FR-78 hold a full public storage URL. They are
+     * resolved to the same gated route rather than migrated, because rewriting
+     * historical run rows would be a data migration performed for cosmetics.
+     *
+     * This is the property that lets the bucket be flipped to private as its
+     * own step, afterwards and safely. If it broke, the flip would silently
+     * empty every screenshot the app has ever taken, and the only symptom
+     * would be reports full of missing images.
+     */
+    await page.addInitScript((data) => {
+      window.localStorage.setItem('fp:tester:results', data);
+    }, seed({ ...MULTI, formShot: LEGACY_SHOT }));
+    await page.goto('/');
+
+    const shot = page.getByRole('img', { name: /Screenshot of the/i });
+    await expect(shot).toBeVisible();
+    await expect(shot).toHaveAttribute('src', SHOT_SRC);
   });
 
   test('page-wide protection is a page fact, not a CAPTCHA claim on the form', async ({ page }) => {
@@ -144,7 +182,7 @@ test.describe('FR-73 — evidence on the multi-form report', () => {
 
 test.describe('FR-73 — a weak match says so', () => {
   test('a single-field match is not sold as a pass', async ({ page }) => {
-    await page.route(SHOT, (route) =>
+    await page.route('**/api/form-shot/**', (route) =>
       route.fulfill({ status: 200, contentType: 'image/gif', body: Buffer.from('R0lGODlhAQABAAAAACw=', 'base64') }),
     );
     await page.addInitScript((data) => {

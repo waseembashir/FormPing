@@ -18,13 +18,18 @@
  * showing evidence is not worth making the app slow, and a missing screenshot is
  * an honest absence.
  *
- * ACCESS: the bucket is public-read, and each object's FILENAME carries a random
- * suffix — the same unguessable-URL model the public status pages use. The
- * folder is derived from the URL (so evidence can be found and swept), but the
- * leaf is not, so knowing a client's URL is not enough to fetch their
- * screenshots. Shots are never rendered on `/status/*`, so nothing here changes
- * what a client can see. Putting them behind an auth-gated route instead is the
- * stronger end state, tracked separately.
+ * ACCESS: the bucket is PRIVATE and the images are served by
+ * `/api/form-shot/<key>`, which the middleware gates like every other internal
+ * surface. What is stored in a result is therefore the object's KEY, not a
+ * fetchable URL — a stored row cannot leak anything on its own.
+ *
+ * FR-73 originally relied on an unguessable filename in a public bucket. That
+ * is a mitigation rather than access control: anyone holding a link could
+ * fetch the object with no session. The random leaf is kept anyway — defence
+ * in depth costs nothing here — but the gate is what protects the image now.
+ *
+ * Shots are never emitted into a `/status/*` payload, so none of this changes
+ * what a client can see. FR-78.
  *
  * The bucket creates itself on first use, so there is no setup step and no
  * migration — the service-role key the app already holds is enough.
@@ -70,8 +75,15 @@ function ensureBucket(): Promise<boolean> {
   bucketReady ??= (async () => {
     try {
       const storage = supabaseAdmin().storage;
+      // Private from here on. An existing bucket is NOT flipped by this call
+      // — `createBucket` is a no-op once it exists — because changing the
+      // visibility of live production storage is a deployment step with its
+      // own timing, not something a boot should do silently. It is flipped by
+      // hand after this code is deployed, which is the safe order: the code
+      // must stop depending on public URLs before the public URLs stop
+      // working. See FR-78.
       const { error } = await storage.createBucket(BUCKET, {
-        public: true,
+        public: false,
         fileSizeLimit: '1MB',
         allowedMimeTypes: ['image/jpeg'],
       });
@@ -205,7 +217,7 @@ async function clearFolder(folder: string): Promise<void> {
   }
 }
 
-/** Upload one `data:` URL, returning its public URL (or null — always optional). */
+/** Upload one `data:` URL, returning its storage KEY (or null — always optional). */
 async function upload(
   dataUrl: string,
   folder: string,
@@ -228,9 +240,10 @@ async function upload(
       console.warn(`[formShots] upload failed: ${error.message}`);
       return null;
     }
-    // Each run writes a new name, so the CDN can't serve a previous run's image
-    // and no cache-busting stamp is needed.
-    return storage.getPublicUrl(name).data.publicUrl;
+    // The KEY, not a URL. A result row that cannot be fetched from is a row
+    // that cannot leak, and `/api/form-shot` is the only thing that resolves
+    // one. Older rows still hold public URLs; `shotSrc` reads both. FR-78.
+    return name;
   } catch (err) {
     console.warn(`[formShots] upload error: ${String(err)}`);
     return null;
