@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { watchedFormLabel } from '@/lib/formWatch/pinnedPage';
 import type { FormSchedule, FormRunRecord } from '@/lib/formWatch/types';
 import { runVerdict, type VerdictLevel } from '@/lib/formWatch/verdict';
 import { TrendBar, type TrendTone } from '@/components/TrendBar';
@@ -417,7 +418,7 @@ export function ScheduleCard({
               <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                 <span className="inline-flex min-w-0 items-center gap-1.5 text-ink-faint">
                   <PinnedPageIcon />
-                  <span className="shrink-0">Watches one form on</span>
+                  <span className="shrink-0">{watchedFormLabel(schedule.pinnedForm)}</span>
                   <a
                     href={schedule.pinnedPage}
                     target="_blank"

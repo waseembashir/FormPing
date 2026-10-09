@@ -43,6 +43,7 @@ interface FormScheduleRow {
   last_form_found: boolean | null;
   /** FR-79 — the page this monitor watches. Absent until migration 0018. */
   pinned_page?: string | null;
+  pinned_form?: string | null;
   pinned_at?: string | null;
   /** FR-116 — the handover event. Absent until migration 0019. */
   assigned_at?: string | null;
@@ -56,7 +57,7 @@ interface FormScheduleRow {
  */
 const FS_BASE_COLS =
   'id, url, site, interval_ms, mode, landing_page, created_at, last_run_at, next_run_at, paused, last_status, last_reason_code, last_form_found, owner';
-const FS_COLS = `${FS_BASE_COLS}, pinned_page, pinned_at, assigned_at, assigned_by`;
+const FS_COLS = `${FS_BASE_COLS}, pinned_page, pinned_at, pinned_form, assigned_at, assigned_by`;
 
 function toSchedule(r: FormScheduleRow): FormSchedule {
   return {
@@ -75,6 +76,7 @@ function toSchedule(r: FormScheduleRow): FormSchedule {
     lastFormFound: r.last_form_found ?? undefined,
     ...(r.owner ? { owner: r.owner } : {}),
     ...(r.pinned_page ? { pinnedPage: r.pinned_page } : {}),
+    ...(r.pinned_form ? { pinnedForm: r.pinned_form } : {}),
     ...(r.pinned_at ? { pinnedAt: r.pinned_at } : {}),
     ...(r.assigned_at ? { assignedAt: r.assigned_at } : {}),
     ...(r.assigned_by ? { assignedBy: r.assigned_by } : {}),
@@ -84,6 +86,7 @@ function toRow(s: FormSchedule): FormScheduleRow {
   return {
     ...baseRow(s),
     pinned_page: s.pinnedPage ?? null,
+    pinned_form: s.pinnedForm ?? null,
     pinned_at: s.pinnedAt ?? null,
     assigned_at: s.assignedAt ?? null,
     assigned_by: s.assignedBy ?? null,
