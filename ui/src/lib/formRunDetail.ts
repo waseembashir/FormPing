@@ -63,6 +63,9 @@ export interface FormRunDetail {
   formKind?: string;
   /** The page the form was actually found on (may differ from the entered URL). */
   resolvedPage?: string | null;
+  /** What the tested form is called on its page. Carried so setting up a
+   *  monitor from an existing test can name the form it pins. FR-79. */
+  formAbout?: string;
   landingPageMode?: boolean;
   /** FR-79 — the run loaded a pinned page instead of searching the site. */
   pinnedPageMode?: boolean;
@@ -138,6 +141,7 @@ export function extractFormRunDetail(raw: unknown): FormRunDetail {
   }
   const kind = str(r.formKind); if (kind !== undefined) d.formKind = kind;
   if (typeof r.resolvedContactPage === 'string' || r.resolvedContactPage === null) d.resolvedPage = r.resolvedContactPage as string | null;
+  if (typeof r.formAbout === 'string' && r.formAbout.trim()) d.formAbout = r.formAbout.trim();
   const lp = bool(r.landingPageMode); if (lp !== undefined) d.landingPageMode = lp;
   const pin = bool(r.pinnedPageMode); if (pin !== undefined) d.pinnedPageMode = pin;
   const sa = bool(r.submissionAttempted); if (sa !== undefined) d.submissionAttempted = sa;

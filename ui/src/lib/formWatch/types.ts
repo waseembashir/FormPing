@@ -54,6 +54,20 @@ export interface FormSchedule {
    *  is before trusting it. FR-79. */
   pinnedAt?: string;
   /**
+   * What the pinned form is CALLED on its page — nearest heading, else submit
+   * text. Written at the same moment as `pinnedPage`, by the same rule.
+   *
+   * Here rather than read from run history because the list must draw without
+   * reading history per row, which is the same reason `lastStatus` and
+   * `lastFormFound` sit here.
+   *
+   * Absent in two honest cases: not pinned yet, or pinned on a page that
+   * offered no name worth repeating. FR-114 made the second a real state —
+   * a name has to be words, not a required-field asterisk — so the card says
+   * less rather than guessing. FR-79.
+   */
+  pinnedForm?: string;
+  /**
    * When this monitor was last handed to somebody else, and by whom.
    *
    * Records the EVENT, not the ownership — `owner` already holds that, and

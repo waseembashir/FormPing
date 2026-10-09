@@ -77,6 +77,9 @@ export interface ResolvedRun {
   resolvedPage: string | null | undefined;
   /** Whether that page actually turned out to have a form. */
   formFound: boolean;
+  /** What the engine called the form it settled on — `formAbout`. Optional:
+   *  callers that only decide the page need not supply it. FR-79. */
+  formAbout?: string;
 }
 
 /**
@@ -106,6 +109,24 @@ export function pinFor(schedule: FormSchedule, run: ResolvedRun): string | null 
   if (!run.formFound) return null;
 
   return usableUrl(run.resolvedPage);
+}
+
+/**
+ * The name to store beside a pin, or undefined to store none.
+ *
+ * Derived from `pinFor` rather than deciding for itself. Two functions
+ * applying "the same" rule is how a name ends up describing a page the monitor
+ * is not watching: the refusals in `pinFor` are subtle — no form found, an
+ * unusable URL, a pin already in place, landing-page mode — and any of them
+ * drifting out of step here would caption the wrong form with no symptom but
+ * a confusing card.
+ *
+ * Undefined where the page offered nothing worth repeating. FR-114 made that a
+ * real state rather than a bad guess, so there is nothing to fall back to.
+ */
+export function pinnedFormFor(schedule: FormSchedule, run: ResolvedRun): string | undefined {
+  if (!pinFor(schedule, run)) return undefined;
+  return (run.formAbout ?? '').trim() || undefined;
 }
 
 /**
@@ -189,4 +210,29 @@ export function samePage(a: string, b: string): boolean {
   const left = key(a);
   const right = key(b);
   return left !== null && left === right;
+}
+
+/**
+ * What to call the form a monitor watches.
+ *
+ * The card used to say "Watches one form on /contact", which answers the
+ * question only when the page holds one form. On a page with three it states
+ * the rule and withholds the answer — and "which form is it actually testing?"
+ * was the question that opened FR-79 in the first place.
+ *
+ * The engine has named forms since FR-73 and the Form Tester has always shown
+ * it; only the Scheduler never carried the name. So this is a phrase, not a
+ * lookup: given the name, say it; given none, say what we said before.
+ *
+ * No name is a real state, not a failure. FR-114 made it so: a name has to be
+ * words, not a required-field asterisk or a discount badge sitting above the
+ * first field. Where the page offers nothing worth repeating, the honest line
+ * is the quieter one — inventing "the Contact form" because the URL says
+ * /contact would be the app guessing out loud.
+ */
+export function watchedFormLabel(formAbout?: string | null): string {
+  const name = (formAbout ?? '').trim();
+  // Quoted, because it is the page's words rather than ours. Without the
+  // quotes "Watches Get in touch on /contact" reads as a broken sentence.
+  return name ? `Watches “${name}” on` : 'Watches one form on';
 }

@@ -21,7 +21,7 @@ import { recordResult } from './resultStore';
 import { hostFormShots } from '@/lib/formShots';
 import { runFormTest, type RawSiteResult } from './runner';
 import { onRunComplete } from './notify';
-import { planCheck, pinFor, shouldLookForMovedForm, movedFormNote } from './pinnedPage';
+import { planCheck, pinFor, pinnedFormFor, shouldLookForMovedForm, movedFormNote } from './pinnedPage';
 import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
 import { inheritedOwner } from '@/lib/ownership';
 
@@ -298,10 +298,15 @@ async function runScheduleOnce(
    * stored leaves the pin unwritten — a pin that pointed at a run nobody can
    * look up would be exactly the untraceable answer this avoids.
    */
-  const pin = pinFor(schedule, {
+  const resolved = {
     resolvedPage: record.fingerprint.contactPage,
     formFound: record.fingerprint.formFound,
-  });
+    // The engine's name for the form it settled on, so the card can say which
+    // form rather than only which page. FR-79.
+    formAbout: typeof raw?.formAbout === 'string' ? raw.formAbout : undefined,
+  };
+  const pin = pinFor(schedule, resolved);
+  const pinName = pinnedFormFor(schedule, resolved);
 
   // Reschedule from now so intervals don't drift if a run was slow.
   const now = Date.now();
@@ -312,7 +317,7 @@ async function runScheduleOnce(
     lastStatus: record.status,
     lastReasonCode: record.reasonCode,
     lastFormFound: record.fingerprint.formFound,
-    ...(pin ? { pinnedPage: pin, pinnedAt: ranAt } : {}),
+    ...(pin ? { pinnedPage: pin, pinnedAt: ranAt, ...(pinName ? { pinnedForm: pinName } : {}) } : {}),
   };
 
   if (savedRun.ok && savedResult.ok) {

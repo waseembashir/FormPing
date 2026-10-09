@@ -3,7 +3,7 @@ import { listSchedules, upsertSchedule, findScheduleByUrl } from '@/lib/formWatc
 import { kickFormWatchTicker } from '@/lib/formWatch/ticker';
 import { removeDismissed } from '@/lib/projects/dismissedStore';
 import { getRun } from '@/lib/onDemandRunStore';
-import { pinFor } from '@/lib/formWatch/pinnedPage';
+import { pinFor, pinnedFormFor } from '@/lib/formWatch/pinnedPage';
 import { requireRole, currentUser } from '@/lib/auth/authorize';
 import type { FormSchedule, FormWatchMode } from '@/lib/formWatch/types';
 import { saveFailuresForClient } from '@/lib/persistence';
@@ -187,12 +187,17 @@ export async function POST(request: NextRequest) {
    * it always has and pins itself from its own result.
    */
   const priorTest = await getRun(url);
-  const pin = priorTest
-    ? pinFor(schedule, { resolvedPage: priorTest.detail?.resolvedPage, formFound: priorTest.formFound })
-    : null;
+  const resolved = {
+    resolvedPage: priorTest?.detail?.resolvedPage,
+    formFound: Boolean(priorTest?.formFound),
+    formAbout: priorTest?.detail?.formAbout,
+  };
+  const pin = priorTest ? pinFor(schedule, resolved) : null;
   if (pin) {
     schedule.pinnedPage = pin;
     schedule.pinnedAt = priorTest?.ranAt ?? new Date(now).toISOString();
+    const pinName = pinnedFormFor(schedule, resolved);
+    if (pinName) schedule.pinnedForm = pinName;
   }
 
   await upsertSchedule(schedule);

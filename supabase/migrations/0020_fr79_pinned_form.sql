@@ -1,0 +1,42 @@
+-- FR-79 — the NAME of the form a monitor watches, beside the page it watches.
+--
+-- Migration 0018 stored `pinned_page`, and the monitor card began saying
+-- "Watches one form on /contact". That answers the question only on a page
+-- holding one form. On a page with three it states the rule and withholds the
+-- answer -- and "which form is it actually testing?" is the question that
+-- opened FR-79 in the first place.
+--
+-- The engine has named forms since FR-73: the nearest heading above the form,
+-- else its submit text when that reads like a label. The Form Tester has shown
+-- it all along. Only the Scheduler never carried it, so the one surface where
+-- a monitor explains itself was the one surface that could not say which form
+-- it meant.
+--
+-- The name lives on the SCHEDULE rather than being read from run history,
+-- because the list has to draw without reading history for every row -- that
+-- is the same denormalisation `last_status` and `last_form_found` already do,
+-- and reading per-row history on a list page is the cost FR-105 spent two
+-- weeks removing.
+--
+-- Written at the moment the pin is written, by the same rule: no pin, no name.
+-- That is enforced in code by deriving one from the other rather than by two
+-- functions agreeing, so the name cannot end up describing a page the monitor
+-- is not watching.
+--
+-- NULL has two honest meanings and neither is an error:
+--   * not pinned yet -- the next check pins itself and names what it found;
+--   * pinned, but the page offered no name worth repeating. FR-114 made that a
+--     real state rather than a bad guess: a name must be words, not a
+--     required-field asterisk or a discount badge above the first field. The
+--     card then says what it said before rather than inventing "the Contact
+--     form" because the URL happens to read /contact.
+--
+-- Additive and idempotent: one nullable column with no default does not
+-- rewrite the table and does not touch a single existing row. Every monitor
+-- keeps watching exactly the form it watches today; the column only lets the
+-- card say which one.
+--
+-- Run once per schema: `public` first, then `dev` -- see the README in this
+-- folder for why that order, and verify both afterwards.
+
+alter table form_watch_schedules add column if not exists pinned_form text;

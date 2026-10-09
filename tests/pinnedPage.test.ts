@@ -20,6 +20,8 @@ import { describe, it, expect } from 'vitest';
 import {
   planCheck,
   pinFor,
+  pinnedFormFor,
+  watchedFormLabel,
   shouldLookForMovedForm,
   movedFormNote,
   samePage,
@@ -228,5 +230,85 @@ describe('deciding whether two URLs are the same page', () => {
   it('is false when either side is not a URL', () => {
     expect(samePage('not a url', 'https://example.com/contact')).toBe(false);
     expect(samePage('https://example.com/contact', '')).toBe(false);
+  });
+});
+
+describe('naming the form a monitor watches', () => {
+  /**
+   * "Watches one form on /contact" answers the question only where the page
+   * holds one form. On a page with three it states the rule and withholds the
+   * answer — and "which form is it actually testing?" is the question that
+   * opened FR-79.
+   */
+
+  it('stores the name the check gave the form it pinned', () => {
+    expect(
+      pinnedFormFor(schedule(), {
+        resolvedPage: 'https://example.com/contact',
+        formFound: true,
+        formAbout: 'Get in touch',
+      }),
+    ).toBe('Get in touch');
+  });
+
+  it('stores no name when there is no pin to hang it on', () => {
+    /**
+     * The property that matters, and the reason this derives from `pinFor`
+     * rather than re-deciding. `pinFor` refuses for four separate reasons, and
+     * a name surviving any of them would caption a form the monitor is not
+     * watching — with no symptom except a card that reads wrong.
+     */
+    const run = { resolvedPage: 'https://example.com/contact', formAbout: 'Get in touch' };
+
+    // found nothing fillable
+    expect(pinnedFormFor(schedule(), { ...run, formFound: false })).toBeUndefined();
+    // already pinned — a pin moves only when a person asks
+    expect(
+      pinnedFormFor(schedule({ pinnedPage: 'https://example.com/contact-us' }), { ...run, formFound: true }),
+    ).toBeUndefined();
+    // landing-page mode has nothing to pin
+    expect(
+      pinnedFormFor(schedule({ landingPage: true }), { ...run, formFound: true }),
+    ).toBeUndefined();
+    // a page we could not navigate to
+    expect(
+      pinnedFormFor(schedule(), { resolvedPage: 'javascript:alert(1)', formFound: true, formAbout: 'X' }),
+    ).toBeUndefined();
+  });
+
+  it('stores no name when the page offered none', () => {
+    // FR-114 made "no trustworthy name" a real state rather than a bad guess:
+    // a name has to be words, not a required-field asterisk. The engine sends
+    // an empty string, and an empty string is not a name.
+    const run = { resolvedPage: 'https://example.com/contact', formFound: true };
+    expect(pinnedFormFor(schedule(), { ...run, formAbout: '' })).toBeUndefined();
+    expect(pinnedFormFor(schedule(), { ...run, formAbout: '   ' })).toBeUndefined();
+    expect(pinnedFormFor(schedule(), run)).toBeUndefined();
+  });
+
+  it('trims what the page gave us', () => {
+    expect(
+      pinnedFormFor(schedule(), {
+        resolvedPage: 'https://example.com/contact',
+        formFound: true,
+        formAbout: '  Contact us  ',
+      }),
+    ).toBe('Contact us');
+  });
+});
+
+describe('how the card says it', () => {
+  it('quotes the name, because they are the page’s words and not ours', () => {
+    // Without the quotes, "Watches Get in touch on /contact" reads as a broken
+    // sentence rather than a name.
+    expect(watchedFormLabel('Get in touch')).toBe('Watches “Get in touch” on');
+  });
+
+  it('falls back to what it said before when there is no name', () => {
+    // Quieter, not wrong. Inventing "the Contact form" because the URL reads
+    // /contact would be the app guessing out loud.
+    for (const none of [undefined, null, '', '   ']) {
+      expect(watchedFormLabel(none)).toBe('Watches one form on');
+    }
   });
 });
