@@ -1,5 +1,6 @@
 'use client';
 
+import { shotSrc } from '@/lib/formShotSrc';
 import { useState } from 'react';
 import type { ChangePoint, ClientStatus, OverallStatus, RespPoint, StatusSite, UptimeDay } from '@/lib/status/types';
 import type { PageChange } from '@/types';
@@ -419,10 +420,16 @@ function FormRow({ form }: { form: FormRunFormSummary }) {
           {form.utm?.length ? <Tag>{form.utm.length} UTM param{form.utm.length === 1 ? '' : 's'}</Tag> : null}
         </div>
         {/* The same evidence the tester showed — the form as we saw it. Lazy, so
-            a collapsed row costs nothing. FR-73. */}
-        {form.shot && (
+            a collapsed row costs nothing. FR-73.
+
+            Served through the app's gated route. This component also renders
+            the PUBLIC status page, where no shot ever arrives — the client-safe
+            builder never emits the field — so this block simply does not run
+            there. That is worth knowing rather than assuming: the protection
+            lives in the payload, not here, and a test now pins it. FR-78. */}
+        {shotSrc(form.shot) && (
           <a
-            href={form.shot}
+            href={shotSrc(form.shot)}
             target="_blank"
             rel="noreferrer"
             title="Open the full-size screenshot"
@@ -431,7 +438,7 @@ function FormRow({ form }: { form: FormRunFormSummary }) {
             {/* The whole form, scaled to fit — never cropped to its first field. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={form.shot}
+              src={shotSrc(form.shot)}
               alt={`Screenshot of the form on ${form.url}`}
               loading="lazy"
               decoding="async"

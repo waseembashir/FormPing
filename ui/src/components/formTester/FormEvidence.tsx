@@ -28,7 +28,10 @@ function CameraIcon() {
  * would imply we looked and saw nothing, which isn't what a missing shot means.
  */
 export function FormShot({ src, alt }: { src?: string; alt: string }) {
-  if (!src) return null;
+  // Through the app's gated route, never straight at storage. Takes either a
+  // stored object key or a legacy public URL and yields the same thing. FR-78.
+  const href = shotSrc(src);
+  if (!href) return null;
   return (
     <figure className="flex flex-col gap-2">
       <figcaption className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-faint">
@@ -36,7 +39,7 @@ export function FormShot({ src, alt }: { src?: string; alt: string }) {
         The form we matched
       </figcaption>
       <a
-        href={src}
+        href={href}
         target="_blank"
         rel="noreferrer"
         title="Open the full-size screenshot"
@@ -47,13 +50,13 @@ export function FormShot({ src, alt }: { src?: string; alt: string }) {
             two — a picture of half a form is not evidence of which form it is.
             Click through for it at full size. `loading=lazy` keeps a closed tab
             free of network cost.
-            A plain <img>, not next/image: the source is an arbitrary Supabase
-            Storage URL with unknown dimensions, so there is nothing for the
-            optimizer to pre-size, and routing it through /_next/image would add
-            a server hop to every screenshot. */}
+            A plain <img>, not next/image: the image has unknown dimensions, so
+            there is nothing for the optimizer to pre-size, and routing it
+            through /_next/image would add a second server hop on top of the
+            gated route it already goes through. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={src}
+          src={href}
           alt={alt}
           loading="lazy"
           decoding="async"
@@ -91,7 +94,11 @@ export function FormShot({ src, alt }: { src?: string; alt: string }) {
  * design, and an absent set is not the same as an empty one.
  */
 export function StepShots({ shots, formName }: { shots?: string[]; formName: string }) {
-  if (!shots?.length) return null;
+  // Resolved before rendering so a step whose image cannot be resolved drops
+  // out of the sequence rather than appearing as a gap in it — the order is
+  // the evidence here, and a hole in it reads as a step that failed. FR-78.
+  const steps = (shots ?? []).map(shotSrc).filter((s): s is string => Boolean(s));
+  if (!steps.length) return null;
 
   return (
     <figure className="flex flex-col gap-2">
@@ -100,7 +107,7 @@ export function StepShots({ shots, formName }: { shots?: string[]; formName: str
         Each step, as we filled it
       </figcaption>
       <ol className="grid gap-3 sm:grid-cols-2">
-        {shots.map((src, i) => (
+        {steps.map((src, i) => (
           <li key={src} className="flex flex-col gap-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
               Step {i + 1}
@@ -205,4 +212,5 @@ export function EmbedUnreadableNote({ provider }: { provider?: string }) {
       confirm it reaches you.
     </p>
   );
-}
+}import { shotSrc } from '@/lib/formShotSrc';
+
