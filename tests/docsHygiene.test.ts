@@ -3,7 +3,9 @@
  * have different audiences that must not blur into each other:
  *
  *   README  — for developers and collaborators. What the app is, how it works,
- *             how it's built, how to run it locally, how to contribute.
+ *             how it's built, how to run it locally, how to contribute. Its
+ *             companions — CONTRIBUTING, SECURITY and the architecture guide —
+ *             share that audience and are held to the same rules.
  *   /docs   — for users. What the product does and how to use it. Nothing
  *             developer-facing.
  *
@@ -28,6 +30,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const README = join(ROOT, 'README.md');
+const CONTRIBUTING = join(ROOT, 'CONTRIBUTING.md');
+
+/** Every document written for collaborators. Each is published, so each is held to the README's rules. */
+const COLLABORATOR_DOCS = ['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'docs/how-it-works.md'];
 const DOCS = join(ROOT, 'ui/src/app/docs/DocsContent.tsx');
 
 const read = (p: string) => readFileSync(p, 'utf8');
@@ -105,13 +111,16 @@ const BANNED: Array<{ what: string; why: string; re: RegExp }> = [
   },
 ];
 
-describe('README — for developers, and nothing else', () => {
+describe('README and its companions — for developers, and nothing else', () => {
   const text = read(README);
 
-  for (const { what, why, re } of BANNED) {
-    it(`carries no ${what} (${why})`, () => {
-      expect(offenders(text, re)).toEqual([]);
-    });
+  for (const doc of COLLABORATOR_DOCS) {
+    const docText = read(join(ROOT, doc));
+    for (const { what, why, re } of BANNED) {
+      it(`${doc} carries no ${what} (${why})`, () => {
+        expect(offenders(docText, re)).toEqual([]);
+      });
+    }
   }
 
   it('still covers what a collaborator needs to get started', () => {
@@ -128,11 +137,14 @@ describe('README — for developers, and nothing else', () => {
     }
   });
 
-  it('names the four checks that gate a commit, exactly as CI runs them', () => {
-    // A contributor following the README must run what CI runs. `next lint` is
-    // deliberately absent: the web app has no ESLint config, so that script
-    // opens an interactive prompt instead of checking anything.
-    const contributing = text.slice(text.indexOf('## Contributing'));
+  it('points a contributor at the contributing guide', () => {
+    const section = text.slice(text.indexOf('## Contributing'));
+    expect(section).toContain('(CONTRIBUTING.md)');
+  });
+
+  it('names the checks that gate a commit, exactly as CI runs them', () => {
+    // A contributor following the guide must run what CI runs.
+    const contributing = read(CONTRIBUTING);
     expect(contributing).toContain('npm run lint');
     expect(contributing).toContain('npm test');
     expect(contributing).toContain('npx tsc --noEmit');
