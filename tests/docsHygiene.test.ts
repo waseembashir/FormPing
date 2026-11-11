@@ -4,8 +4,8 @@
  *
  *   README  — for developers and collaborators. What the app is, how it works,
  *             how it's built, how to run it locally, how to contribute. Its
- *             companions — CONTRIBUTING and SECURITY — share that audience and
- *             are held to the same rules.
+ *             companions — CONTRIBUTING, SECURITY and the architecture guide —
+ *             share that audience and are held to the same rules.
  *   /docs   — for users. What the product does and how to use it. Nothing
  *             developer-facing.
  *
@@ -33,7 +33,7 @@ const README = join(ROOT, 'README.md');
 const CONTRIBUTING = join(ROOT, 'CONTRIBUTING.md');
 
 /** Every document written for collaborators. Each is published, so each is held to the README's rules. */
-const COLLABORATOR_DOCS = ['README.md', 'CONTRIBUTING.md', 'SECURITY.md'];
+const COLLABORATOR_DOCS = ['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'docs/how-it-works.md'];
 const DOCS = join(ROOT, 'ui/src/app/docs/DocsContent.tsx');
 
 const read = (p: string) => readFileSync(p, 'utf8');
