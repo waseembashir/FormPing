@@ -179,6 +179,8 @@ The "See the full detail" link resolves to the per-URL dashboard, built with the
 
 When a check can't produce an answer, the reason is carried as a *kind* — `unreachable`, `rate_limited`, `not_published`, and so on — from the moment it happens. The raw message (`fetch failed`, a TLS socket error, an RDAP status) stays on the result for the server log, and no user surface renders it: the dashboard, the monitor card and the Slack alert all phrase the kind instead.
 
+A 2xx/3xx answer is not taken as proof the site works. The uptime check also reads the page, and a short page carrying a known failure screen — a WordPress database or critical error, a PHP fatal error, a suspended hosting account, or a parked domain — is reported as down with the kind `broken_page`. The markers live in `ui/src/lib/siteWatch/brokenPage.ts` and only count on a page under 30,000 characters, so a full page that merely quotes one of the phrases stays up.
+
 That distinction also drives the retry. A domain expiry is re-read at most every 12 hours, because it changes once a year and public RDAP endpoints rate-limit. But a registry that was briefly unreachable is asked again in 30 minutes, while a registry that doesn't publish expiry dates at all — true of many country domains — keeps the long interval, since asking twice can't make the field appear. A transient failure also keeps showing the expiry we already know, marked as not refreshed, rather than replacing a good answer with an error.
 
 ### A result that couldn't be stored is reported, not painted over
