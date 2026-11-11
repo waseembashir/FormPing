@@ -29,6 +29,7 @@ const KINDS: CheckFailure[] = [
   'unreadable',
   'no_certificate',
   'challenged',
+  'broken_page',
 ];
 const SUBJECTS: CheckSubject[] = ['domain', 'ssl', 'uptime'];
 

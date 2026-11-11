@@ -249,7 +249,7 @@ export default function DocsContent() {
                 <Table
                   headers={['Check', 'What you get']}
                   rows={[
-                    [<b key="0">Uptime</b>, 'Up / down / reachable-but-challenged, with status code and response time.'],
+                    [<b key="0">Uptime</b>, 'Up / down / reachable-but-challenged, with status code and response time. A page that loads but shows a known error screen — a database or code error, a suspended hosting account, or a parked domain — counts as down.'],
                     [<b key="0">SSL</b>, 'Days until the certificate expires.'],
                     [<b key="0">Domain</b>, 'Days until the domain registration expires.'],
                   ]}
