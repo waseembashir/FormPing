@@ -382,8 +382,8 @@ function speedLabel(ms: number): string {
 function CheckRow({ check }: { check: SiteCheckRecord }) {
   const cls = check.uptime.classification;
   const u = UPTIME[cls] ?? UPTIME.down;
-  const { statusCode, responseMs, error } = check.uptime;
-  const meaning = httpMeaning(statusCode);
+  const { statusCode, responseMs, error, failure } = check.uptime;
+  const meaning = failure === 'broken_page' ? 'Loads, but shows an error page' : httpMeaning(statusCode);
   const httpValue = statusCode != null
     ? `${statusCode}${meaning ? ` · ${meaning}` : ''}${error ? ` — ${error}` : ''}`
     : error ?? 'No response';

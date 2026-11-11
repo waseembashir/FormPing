@@ -8,6 +8,7 @@
 
 import type { UptimeResult, SslResult, DomainResult, UptimeClass } from './types';
 import { failureForStatus, type CheckFailure } from './failures';
+import { isBrokenPage } from './brokenPage';
 
 // Node's `tls` is loaded via webpack's runtime require (not a static import).
 // Next compiles the instrumentation hook for the Edge runtime as well, and Edge
@@ -58,6 +59,11 @@ export async function checkUptime(url: string): Promise<UptimeResult> {
 
     let classification: UptimeClass;
     if (status >= 200 && status < 400) {
+      // A 200 can still be a crash or suspension page. See brokenPage.ts.
+      const body = await res.text().catch(() => '');
+      if (isBrokenPage(body)) {
+        return { classification: 'down', statusCode: status, responseMs, failure: 'broken_page' };
+      }
       classification = 'up';
     } else if (status === 403 || status === 429 || status === 503) {
       // Could be a bot challenge (reachable) rather than a real outage — peek.

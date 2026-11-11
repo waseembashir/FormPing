@@ -88,6 +88,23 @@ test.describe('a check that produced no answer', () => {
     await expect(note).toHaveClass(/text-danger/);
   });
 
+  test('a page that loads but shows an error screen is called out, loudly', async ({ page }) => {
+    await open(page, { uptimeFailure: 'broken_page' });
+
+    const note = page.getByText(/visitors see an error page instead of the site/i);
+    await expect(note).toBeVisible();
+    await expect(note).toHaveClass(/text-danger/);
+  });
+
+  test('the error-page reason reads on a phone without pushing the page sideways', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await open(page, { uptimeFailure: 'broken_page' });
+
+    await expect(page.getByText(/visitors see an error page instead of the site/i)).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
   test('a result stored before this change does not print its raw text', async ({ page }) => {
     // Pre-FR-86 rows carry the raw message and no kind at all.
     await open(page, { domainError: 'fetch failed', sslError: 'unable to verify the first certificate' });

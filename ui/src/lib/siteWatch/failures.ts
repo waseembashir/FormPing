@@ -40,7 +40,9 @@ export type CheckFailure =
   /** The host served no TLS certificate at all. */
   | 'no_certificate'
   /** The site answered, but refused us (bot challenge, WAF). */
-  | 'challenged';
+  | 'challenged'
+  /** The site answered 200, but with a crash, suspension or parking page. */
+  | 'broken_page';
 
 /** What a subject is, for phrasing: "the domain registry" vs "the site". */
 export type CheckSubject = 'domain' | 'ssl' | 'uptime';
@@ -91,6 +93,7 @@ const DOMAIN: Record<CheckFailure, FailureCopy> = {
     tone: 'info',
     permanent: false,
   },
+  broken_page: { text: 'The domain check did not complete. We will check again shortly.', tone: 'info', permanent: false },
 };
 
 const SSL: Record<CheckFailure, FailureCopy> = {
@@ -117,6 +120,7 @@ const SSL: Record<CheckFailure, FailureCopy> = {
   rate_limited: { text: 'The certificate check was throttled. We will try again shortly.', tone: 'info', permanent: false },
   registry_error: { text: 'The certificate check did not complete. We will try again shortly.', tone: 'warn', permanent: false },
   not_published: { text: 'No certificate information is available for this site.', tone: 'info', permanent: true },
+  broken_page: { text: 'The certificate check did not complete. We will try again at the next check.', tone: 'info', permanent: false },
 };
 
 const UPTIME: Record<CheckFailure, FailureCopy> = {
@@ -135,6 +139,11 @@ const UPTIME: Record<CheckFailure, FailureCopy> = {
   not_published: { text: 'No response information is available.', tone: 'info', permanent: true },
   unreadable: { text: 'The site’s response could not be read.', tone: 'warn', permanent: false },
   no_certificate: { text: 'No certificate was found.', tone: 'warn', permanent: false },
+  broken_page: {
+    text: 'The site responds, but visitors see an error page instead of the site — a database or code error, a suspended hosting account, or a parked domain.',
+    tone: 'danger',
+    permanent: false,
+  },
 };
 
 const TABLES: Record<CheckSubject, Record<CheckFailure, FailureCopy>> = {
