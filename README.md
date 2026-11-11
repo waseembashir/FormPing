@@ -530,13 +530,7 @@ npm run start -- --url https://yoursite.com --monitor watch --watch-interval 360
 
 ## Contributing
 
-1. Branch off `main`.
-2. Make your change; keep both halves clean and green before you commit — `npm run lint` and `npm test` at the root for the engine, and `npm run lint`, `npx tsc --noEmit` plus `npm run test:e2e` in `ui/` for the web app. These are the same five checks CI runs on every pull request.
-3. Open a pull request describing what changed and why.
-
-**CI runs on every push and PR** (GitHub Actions): the engine's typecheck + unit tests and the web app's typecheck + Playwright e2e must all be green before merge.
-
-The codebase leans on a shared component kit and a single set of design tokens for the UI, and deterministic, well-tested heuristics in the engine — please match the surrounding style rather than introducing parallel patterns.
+Branch off `main`, keep every check green, and open a pull request. **[CONTRIBUTING.md](CONTRIBUTING.md)** covers the whole flow: tracking, branching, the checks CI runs, commit rules, docs, production data, secrets and pull-request format. To report a security problem, follow **[SECURITY.md](SECURITY.md)** rather than opening an issue.
 
 ---
 
