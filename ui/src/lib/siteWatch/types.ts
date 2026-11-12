@@ -26,6 +26,8 @@ export interface UptimeResult {
   error?: string;
   /** Why it failed, in a form the UI can phrase for a person. FR-86. */
   failure?: CheckFailure;
+  /** Where the check landed, present only when it was redirected. See redirect.ts. */
+  finalUrl?: string;
 }
 
 /** Result of a single TLS-certificate check. */
