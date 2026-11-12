@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge, StatusPill, StatusText, cx, KeptNotice, RerunButton, RerunTag } from '@/components/ui';
 import { UnsavedResultNotice } from '@/components/UnsavedResultNotice';
 import { describeFailure } from '@/lib/siteWatch/failures';
+import { redirectVerdict } from '@/lib/siteWatch/redirect';
 import { showsAssignedNotice } from '@/lib/monitorAssignment';
 import { useMe } from '@/lib/auth/useMe';
 
@@ -390,6 +391,7 @@ function CheckRow({ check }: { check: SiteCheckRecord }) {
   const httpValue = statusCode != null
     ? `${statusCode}${meaning ? ` · ${meaning}` : ''}`
     : describeFailure('uptime', failure).text;
+  const redirect = redirectVerdict(check.url, check.uptime.finalUrl);
 
   const ssl = check.ssl;
   let sslValue = 'n/a — not served over HTTPS';
@@ -448,6 +450,17 @@ function CheckRow({ check }: { check: SiteCheckRecord }) {
       <div className="mt-3 grid grid-cols-1 gap-x-5 gap-y-2.5 pl-[34px] sm:grid-cols-2">
         <Field label="HTTP status" value={httpValue} />
         <Field label="Response time" value={`${responseMs} ms · ${speedLabel(responseMs)}`} />
+        {redirect && (
+          <Field
+            label="Redirect"
+            value={
+              redirect.kind === 'off-site'
+                ? `Sends visitors to another domain — ${redirect.finalDomain}`
+                : `Lands on ${redirect.finalUrl.replace(/^https?:\/\//, '')}`
+            }
+            valueClass={redirect.kind === 'off-site' ? 'text-warn' : 'text-ink-secondary'}
+          />
+        )}
         <Field label="SSL certificate" value={sslValue} valueClass={sslClass} />
         <Field label="Domain registration" value={domainValue} valueClass={domainClass} />
       </div>

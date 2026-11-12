@@ -52,6 +52,8 @@ export interface SiteCheckDetail {
   domainError?: string | null;
   /** Why the site was unreachable, when it was. */
   uptimeFailure?: CheckFailure | null;
+  /** Where the check landed, when it was redirected. Internal view only. */
+  uptimeFinalUrl?: string | null;
   /** @deprecated pre-FR-86 rows only; never rendered. */
   uptimeError?: string | null;
 }
@@ -99,6 +101,7 @@ function checkDetail(record: SiteCheckRecord): SiteCheckDetail | null {
   if (record.domain?.expiryDate) d.domainExpiry = record.domain.expiryDate;
   if (record.domain?.failure) d.domainFailure = record.domain.failure;
   if (record.uptime?.failure) d.uptimeFailure = record.uptime.failure;
+  if (record.uptime?.finalUrl) d.uptimeFinalUrl = record.uptime.finalUrl;
   return Object.keys(d).length ? d : null;
 }
 
