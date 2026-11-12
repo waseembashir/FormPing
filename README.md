@@ -41,7 +41,7 @@ The app is organized around **Projects** (a client and their URLs), with two too
 |---------|--------------|
 | **Form Tester** | Runs the engine on demand across a whole site: finds every form, works out what each is for, fills the lead forms, and in Live mode submits the contact form and watches for success. Every matched form is photographed with the heading above it. |
 | **Form Scheduler** | Watches one form on one page on a cadence, and alerts the person who set it up when its verdict changes. The page is resolved once and checked directly from then on. |
-| **Uptime & SSL** | Checks availability, response time, certificate expiry and domain expiry on its own ticker. A page that answers but shows a known failure screen — a database or code error, a suspended hosting account, a parked domain — counts as down. |
+| **Uptime & SSL** | Checks availability, response time, certificate expiry and domain expiry on its own ticker. A page that answers but shows a known failure screen — a database or code error, a suspended hosting account, a parked domain — counts as down, and a site that starts sending visitors to a different domain is flagged and alerts once. |
 | **Content Changes** | Snapshots a site's key pages and reports what changed over time — content, SEO, forms and scripts — graded by severity. |
 | **Projects** | A client and their URLs: the shared record. Every project, URL and result is visible to the whole team, and each URL names who watches it. A URL tested or monitored but not yet grouped lands in an **Unassigned** bucket rather than nowhere. |
 | **Client status pages** | A live, client-safe page per project or URL, shared by link, with uptime, SSL and form health. |

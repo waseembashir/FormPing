@@ -56,13 +56,15 @@ export async function checkUptime(url: string): Promise<UptimeResult> {
     });
     const responseMs = Date.now() - start;
     const status = res.status;
+    // Where the redirects (if any) landed. See redirect.ts for what it means.
+    const landed = res.redirected && res.url ? { finalUrl: res.url } : {};
 
     let classification: UptimeClass;
     if (status >= 200 && status < 400) {
       // A 200 can still be a crash or suspension page. See brokenPage.ts.
       const body = await res.text().catch(() => '');
       if (isBrokenPage(body)) {
-        return { classification: 'down', statusCode: status, responseMs, failure: 'broken_page' };
+        return { classification: 'down', statusCode: status, responseMs, failure: 'broken_page', ...landed };
       }
       classification = 'up';
     } else if (status === 403 || status === 429 || status === 503) {
@@ -73,7 +75,7 @@ export async function checkUptime(url: string): Promise<UptimeResult> {
       classification = 'down';
     }
 
-    return { classification, statusCode: status, responseMs };
+    return { classification, statusCode: status, responseMs, ...landed };
   } catch (err) {
     // Network error / timeout / refused → down. The message is kept for the
     // server log; the UI is told the KIND, never the text. FR-86.

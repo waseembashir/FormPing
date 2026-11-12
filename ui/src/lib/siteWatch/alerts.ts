@@ -22,6 +22,7 @@ import { dispatchAlert } from '@/lib/alerts/dispatch';
 import { lastAlertAt } from '@/lib/alerts/store';
 import { detailPathFor } from '@/lib/alerts/link';
 import type { AlertSeverity } from '@/lib/alerts/types';
+import { redirectVerdict, redirectAlertDecision } from './redirect';
 
 /** Events that count as "we already pinged about THIS ongoing outage", so a
  *  reminder is spaced from whichever fired most recently (FR-53). */
@@ -378,4 +379,45 @@ export async function evaluateAndAlert(
   }
 
   return { consecutiveDown, alertedDown, lastSslThresholdAlerted, lastDomainThresholdAlerted };
+}
+
+/**
+ * Announce a site that starts sending visitors to another domain, and announce
+ * its return. Separate from the uptime state machine above: the site is UP in
+ * both cases, so this never touches the down counters.
+ *
+ * The "already announced" state is read from the alert log rather than stored
+ * on the schedule, so it needs no column of its own. A failed delivery leaves
+ * no log entry, which means the next check simply tries again.
+ */
+export async function evaluateRedirect(record: SiteCheckRecord): Promise<void> {
+  const verdict = redirectVerdict(record.url, record.uptime.finalUrl);
+  const offsiteNow = record.uptime.classification === 'up' && verdict?.kind === 'off-site';
+  const decision = redirectAlertDecision(
+    offsiteNow,
+    await lastAlertAt(record.host, ['redirect_offsite']),
+    await lastAlertAt(record.host, ['redirect_returned']),
+  );
+  if (decision === 'started' && verdict) {
+    await postAlert({
+      color: COLOR.amber,
+      headerEmoji: '⚠️',
+      headerText: `Redirecting to another domain — ${record.host} → ${verdict.finalDomain}`,
+      event: 'redirect_offsite',
+      record,
+      suggestions: [
+        `Visitors to ${record.host} now land on ${verdict.finalDomain}. Confirm whether that move was intended.`,
+        'If it was not: check the domain’s registration and DNS records, and the site’s hosting and redirect rules — this is how a lapsed, hijacked or compromised domain looks from outside.',
+      ],
+    });
+  } else if (decision === 'returned') {
+    await postAlert({
+      color: COLOR.green,
+      headerEmoji: '✅',
+      headerText: `Back on its own domain — ${record.host}`,
+      event: 'redirect_returned',
+      record,
+      suggestions: ['Visitors land on the site’s own domain again.'],
+    });
+  }
 }

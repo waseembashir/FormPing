@@ -8,6 +8,7 @@ import { PageChangeCard } from '@/components/monitor/PageChangeCard';
 import { getReasonMessage } from '@/lib/reasonMessages';
 import type { FormRunFormSummary } from '@/lib/formRunDetail';
 import { describeFailure, type CheckFailure, type CheckSubject } from '@/lib/siteWatch/failures';
+import { redirectVerdict } from '@/lib/siteWatch/redirect';
 import { watchedBy, watchedByNeedsContext } from '@/lib/monitorWatchers';
 
 type StatusData = ClientStatus & { contact?: string | null; changes?: ChangePoint[] };
@@ -768,6 +769,20 @@ function SiteCard({
             <div className="grid gap-x-6 gap-y-1.5 text-[11px] sm:grid-cols-2">
               <Detail k="URL" v={<a href={tech.url} target="_blank" rel="noreferrer" className="truncate text-ink-secondary hover:text-accent" title={tech.url}>{tech.url.replace(/^https?:\/\//, '')}</a>} />
               <Detail k="HTTP status" v={tech.statusCode ?? '—'} />
+              {(() => {
+                const r = redirectVerdict(tech.url, tech.check?.uptimeFinalUrl);
+                if (!r) return null;
+                return (
+                  <Detail
+                    k="Redirects to"
+                    v={
+                      <span className={r.kind === 'off-site' ? 'text-warn' : undefined} title={r.finalUrl}>
+                        {r.kind === 'off-site' ? `Another domain — ${r.finalDomain}` : r.finalUrl.replace(/^https?:\/\//, '')}
+                      </span>
+                    }
+                  />
+                );
+              })()}
               <Detail k="Last response" v={tech.lastResponseMs != null ? `${tech.lastResponseMs}ms` : '—'} />
               <Detail k="Last checked" v={rel(tech.lastCheckedAt)} />
               <Detail k="Checked every" v={cadence(tech.intervalMs) ?? '—'} />

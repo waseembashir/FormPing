@@ -13,7 +13,7 @@ import { appendCheck, sweepExpiredManualChecks } from './historyStore';
 import { recordResult } from './resultStore';
 import { recordDaily } from './dailyStore';
 import { checkUptime, checkSsl, checkDomain } from './checks';
-import { evaluateAndAlert } from './alerts';
+import { evaluateAndAlert, evaluateRedirect } from './alerts';
 import { clearSaveFailure, failureReason, keepCadenceOnly, noteSaveFailure } from '@/lib/persistence';
 import { inheritedOwner } from '@/lib/ownership';
 import { isPermanent } from './failures';
@@ -160,6 +160,14 @@ async function checkSiteOnce(
       lastSslThresholdAlerted: schedule.lastSslThresholdAlerted,
       lastDomainThresholdAlerted: schedule.lastDomainThresholdAlerted,
     };
+  }
+
+  // A site answering from another domain is up, so this sits beside the
+  // uptime state machine rather than inside it. Best-effort, like every alert.
+  try {
+    await evaluateRedirect(record);
+  } catch (err) {
+    console.warn(`[siteWatch/ticker] redirect alert eval failed for ${schedule.url}: ${err}`);
   }
 
   const savedCheck = await appendCheck(record);

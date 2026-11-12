@@ -250,6 +250,7 @@ export default function DocsContent() {
                   headers={['Check', 'What you get']}
                   rows={[
                     [<b key="0">Uptime</b>, 'Up / down / reachable-but-challenged, with status code and response time. A page that loads but shows a known error screen — a database or code error, a suspended hosting account, or a parked domain — counts as down.'],
+                    [<b key="0">Redirect</b>, 'Where the site lands when it sends visitors on. Moving to https, adding or dropping www, or a page elsewhere on the same site is normal. Landing on a different domain is flagged in amber.'],
                     [<b key="0">SSL</b>, 'Days until the certificate expires.'],
                     [<b key="0">Domain</b>, 'Days until the domain registration expires.'],
                   ]}
@@ -365,6 +366,9 @@ export default function DocsContent() {
                 </Faq>
                 <Faq q="Why does a site say its domain expiry can’t be tracked?">
                   Some domain registries — many country domains, like .org.uk or .co.in — simply don’t publish an expiry date for anyone to read. When that’s the case FormPing says so plainly and stops trying, because no amount of checking will make the date appear. That’s different from “we couldn’t reach the registry just now”, which is temporary: nothing is wrong with the domain, and we check again a short while later rather than waiting for the next day.
+                </Faq>
+                <Faq q="Why does a site say it sends visitors to another domain?">
+                  The site still loads, but not on its own domain — someone visiting it ends up on a different website. Sometimes that is a planned move to a new domain. When it is not, it usually means the domain has lapsed and been parked, its settings have been changed, or the site has been tampered with, so it is worth a look straight away. You get one Slack alert when it starts and another when the site is back on its own domain.
                 </Faq>
                 <Faq q="A monitor says “The last check could not be saved”. What does that mean?">
                   The check ran, but FormPing couldn’t store what it found — usually a brief problem saving to our database. The figures on that card are from the last check we <em>did</em> save, so treat them as possibly out of date. Nothing is lost on your site’s end, and the monitor tries again at its next scheduled check. If the message stays up for more than a few checks, use <strong>Report a bug</strong> so the team can look.

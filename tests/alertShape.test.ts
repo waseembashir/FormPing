@@ -185,6 +185,20 @@ describe('Site Watch — facts, and an honest account of what was not checked', 
     expect(facts.join(' ')).toContain('not refreshed this check');
   });
 
+  it('names another domain the site now sends visitors to, right after reachability', () => {
+    const facts = siteCheckFacts(
+      check({ uptime: { classification: 'up', statusCode: 200, responseMs: 142, finalUrl: 'https://www.other-site.example/' } }),
+    );
+    expect(facts[1]).toBe('Redirects to another domain — other-site.example');
+  });
+
+  it('keeps a same-site redirect out of the facts — it is housekeeping, not news', () => {
+    const facts = siteCheckFacts(
+      check({ uptime: { classification: 'up', statusCode: 200, responseMs: 142, finalUrl: 'https://www.acme.example/' } }),
+    );
+    expect(facts.join(' ')).not.toMatch(/redirect/i);
+  });
+
   it('states what an uptime check does NOT cover', () => {
     // A green uptime alert is not proof the forms or checkout work.
     expect(siteCheckScope(check())).toMatch(/not the pages, forms or content/i);

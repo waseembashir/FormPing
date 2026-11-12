@@ -15,6 +15,7 @@
 
 import type { SiteCheckRecord } from './types';
 import { describeFailure } from './failures';
+import { redirectVerdict } from './redirect';
 
 const MAX_FACTS = 5;
 
@@ -48,6 +49,10 @@ export function siteCheckFacts(record: SiteCheckRecord): string[] {
   } else if (uptime) {
     facts.push(describeFailure('uptime', uptime.failure).text);
   }
+
+  // Up, but answering from somewhere else entirely.
+  const redirect = uptime ? redirectVerdict(record.url, uptime.finalUrl) : null;
+  if (redirect?.kind === 'off-site') facts.push(`Redirects to another domain — ${redirect.finalDomain}`);
 
   // 2. Then the two clocks that can take a site off the internet without warning.
   const ssl = sslFact(record);
