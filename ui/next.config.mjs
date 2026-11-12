@@ -17,6 +17,17 @@ const nextConfig = {
    * Set by playwright.config.ts, so only the test server sees it.
    */
   distDir: process.env.NEXT_TEST_BUILD ? '.next-e2e' : '.next',
+  /**
+   * The built-in image optimizer is switched off.
+   *
+   * It serves `/_next/image`, which the sign-in gate cannot cover: Next handles
+   * that route before middleware runs. Nothing in the app renders through it
+   * (no `next/image` imports), and it is where Next 14's most severe advisories
+   * live. With `unoptimized` set, Next answers 404 on that route before reading
+   * the request at all. Brand and social images are served from their own
+   * metadata routes and are unaffected.
+   */
+  images: { unoptimized: true },
   experimental: {
     // Keep playwright/cheerio out of the webpack bundle — Node.js-only packages
     serverComponentsExternalPackages: ['playwright', 'cheerio'],
