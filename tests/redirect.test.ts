@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mainDomain, redirectVerdict } from '@/lib/siteWatch/redirect';
+import { mainDomain, redirectVerdict, redirectAlertDecision } from '@/lib/siteWatch/redirect';
 import { checkUptime } from '@/lib/siteWatch/checks';
 
 describe('mainDomain', () => {
@@ -57,6 +57,32 @@ describe('redirectVerdict', () => {
 
   it('is null rather than guessing when an address cannot be read', () => {
     expect(redirectVerdict('not a url', 'https://example.com/')).toBeNull();
+  });
+});
+
+describe('redirectAlertDecision — once when it starts, once when it returns', () => {
+  const T1 = '2026-11-12T09:00:00.000Z';
+  const T2 = '2026-11-12T10:00:00.000Z';
+
+  it('announces an off-site redirect the first time it is seen', () => {
+    expect(redirectAlertDecision(true, null, null)).toBe('started');
+  });
+
+  it('stays quiet while it continues', () => {
+    expect(redirectAlertDecision(true, T1, null)).toBeNull();
+  });
+
+  it('announces the return, once', () => {
+    expect(redirectAlertDecision(false, T1, null)).toBe('returned');
+    expect(redirectAlertDecision(false, T1, T2)).toBeNull();
+  });
+
+  it('announces it again if it starts again after returning', () => {
+    expect(redirectAlertDecision(true, T1, T2)).toBe('started');
+  });
+
+  it('says nothing for a site that has never redirected off-site', () => {
+    expect(redirectAlertDecision(false, null, null)).toBeNull();
   });
 });
 

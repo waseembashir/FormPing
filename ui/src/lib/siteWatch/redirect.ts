@@ -62,3 +62,24 @@ export function redirectVerdict(requestedUrl: string, finalUrl: string | undefin
   const kind: RedirectKind = mainDomain(from.hostname) === finalDomain ? 'same-site' : 'off-site';
   return { kind, finalUrl: to.href, finalDomain };
 }
+
+/**
+ * Whether an off-site redirect needs announcing, read from the alert log rather
+ * than a stored flag. `lastOffsiteAt` / `lastReturnedAt` are when the two alerts
+ * were last sent for this host (null if never).
+ *
+ *   'started'  — off-site now, and not announced since it last came back
+ *   'returned' — back on its own domain after an announced off-site redirect
+ *   null       — nothing new to say
+ */
+export function redirectAlertDecision(
+  offsiteNow: boolean,
+  lastOffsiteAt: string | null,
+  lastReturnedAt: string | null,
+): 'started' | 'returned' | null {
+  const offsite = lastOffsiteAt ? Date.parse(lastOffsiteAt) : null;
+  const returned = lastReturnedAt ? Date.parse(lastReturnedAt) : null;
+  const announcedAndOpen = offsite != null && (returned == null || offsite > returned);
+  if (offsiteNow) return announcedAndOpen ? null : 'started';
+  return announcedAndOpen ? 'returned' : null;
+}
