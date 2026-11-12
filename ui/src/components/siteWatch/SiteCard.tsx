@@ -382,11 +382,14 @@ function speedLabel(ms: number): string {
 function CheckRow({ check }: { check: SiteCheckRecord }) {
   const cls = check.uptime.classification;
   const u = UPTIME[cls] ?? UPTIME.down;
-  const { statusCode, responseMs, error, failure } = check.uptime;
+  // `uptime.error` is the raw network message (e.g. "fetch failed") and is for
+  // the server log only. A person reads the failure kind, phrased the same way
+  // the URL dashboard and the Slack alert phrase it.
+  const { statusCode, responseMs, failure } = check.uptime;
   const meaning = failure === 'broken_page' ? 'Loads, but shows an error page' : httpMeaning(statusCode);
   const httpValue = statusCode != null
-    ? `${statusCode}${meaning ? ` · ${meaning}` : ''}${error ? ` — ${error}` : ''}`
-    : error ?? 'No response';
+    ? `${statusCode}${meaning ? ` · ${meaning}` : ''}`
+    : describeFailure('uptime', failure).text;
 
   const ssl = check.ssl;
   let sslValue = 'n/a — not served over HTTPS';
